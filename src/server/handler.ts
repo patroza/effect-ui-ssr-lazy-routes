@@ -105,16 +105,23 @@ const serveStaticEffect = Effect.fn("serveStatic")(function* (
   return HttpServerResponse.uint8Array(bytes, { status: 200, headers })
 })
 
+const parseRequestUrl = (target: string): URL | undefined => {
+  if (target.startsWith("//") || target.startsWith("/\\") || !URL.canParse(target, "http://localhost")) {
+    return undefined
+  }
+  const url = new URL(target, "http://localhost")
+  return url.origin === "http://localhost" ? url : undefined
+}
+
+const isRpcPathname = (pathname: string): boolean => pathname === "/rpc" || pathname === "/rpc/"
+
 /**
- * Handles static assets and SSR page routes (everything other than `POST /rpc`),
+ * Handles static assets and SSR page routes (everything other than `/rpc`),
  * preserving all URL validation, open-redirect blocking, method checks, and
  * security headers.
  */
-const handlePageOrStatic = (options: AppHandlerOptions) =>
+const handlePageOrStatic = (url: URL, method: string, security: Record<string, string>, options: AppHandlerOptions) =>
   Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest
-    const security = securityHeaders(options.clientDir)
-    const method = request.method
     if (method !== "GET" && method !== "HEAD") {
       return textReply(
         method,
@@ -122,15 +129,6 @@ const handlePageOrStatic = (options: AppHandlerOptions) =>
         { allow: "GET, HEAD", "content-type": "text/plain", ...security },
         "Method Not Allowed"
       )
-    }
-
-    const target = request.url
-    if (target.startsWith("//") || target.startsWith("/\\") || !URL.canParse(target, "http://localhost")) {
-      return textReply(method, 400, { "content-type": "text/plain", ...security }, "Bad Request")
-    }
-    const url = new URL(target, "http://localhost")
-    if (url.origin !== "http://localhost") {
-      return textReply(method, 400, { "content-type": "text/plain", ...security }, "Bad Request")
     }
 
     if (options.clientDir !== undefined) {
@@ -172,7 +170,6 @@ const handlePageOrStatic = (options: AppHandlerOptions) =>
  *   through `Rpc.InProcessProtocolLayer` (zero TCP round-trip during SSR)
  */
 export const makeHttpAppEffect = (options: AppHandlerOptions) => {
-  const pageOrStatic = handlePageOrStatic(options)
   const security = securityHeaders(options.clientDir)
 
   return Effect.map(
@@ -182,11 +179,24 @@ export const makeHttpAppEffect = (options: AppHandlerOptions) => {
     (rpcEffect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
-        if (request.method === "POST" && (request.url === "/rpc" || request.url === "/rpc/")) {
+        const method = request.method
+        const url = parseRequestUrl(request.url)
+        if (url === undefined) {
+          return textReply(method, 400, { "content-type": "text/plain", ...security }, "Bad Request")
+        }
+        if (isRpcPathname(url.pathname)) {
+          if (method !== "POST") {
+            return textReply(
+              method,
+              405,
+              { allow: "POST", "content-type": "text/plain", ...security },
+              "Method Not Allowed"
+            )
+          }
           const response = yield* rpcEffect
           return HttpServerResponse.setHeaders(response, security)
         }
-        return yield* pageOrStatic
+        return yield* handlePageOrStatic(url, method, security, options)
       }).pipe(
         Effect.catchCause((cause) =>
           Effect.logError("Unhandled server error", cause).pipe(

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { createServer, request, type Server as HttpServer } from "node:http"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { Effect, Exit, Layer, Option } from "effect"
+import { Deferred, Effect, Exit, Layer, Option, Ref } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { RpcClient, type RpcClientError, RpcSerialization } from "effect/rpc"
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test"
@@ -311,8 +311,8 @@ describe("Effect RPC over HTTP (POST /rpc)", () => {
     }
   })
 
-  it("applies security headers to POST /rpc responses", async () => {
-    const response = await fetch(`http://127.0.0.1:${port}/rpc`, {
+  it("applies security headers to POST /rpc responses and handles query strings and non-POST methods cleanly", async () => {
+    const response = await fetch(`http://127.0.0.1:${port}/rpc?x=1`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ _tag: "Request", id: "1", tag: "getProduct", payload: { id: "42" }, headers: [] })
@@ -320,5 +320,48 @@ describe("Effect RPC over HTTP (POST /rpc)", () => {
     expect(response.status).toBe(200)
     expect(response.headers.get("x-content-type-options")).toBe("nosniff")
     expect(response.headers.get("content-security-policy")).toBe(Handler.contentSecurityPolicy)
+    expect(await response.text()).toContain("Field notebook")
+
+    for (const method of ["GET", "HEAD", "PUT"]) {
+      const disallowed = await raw("/rpc", method)
+      expect(disallowed.status, `${method} /rpc`).toBe(405)
+      expect(disallowed.headers["allow"], `${method} /rpc`).toBe("POST")
+    }
+  })
+
+  it("evicts closed in-process RPC clients via disconnects so repeated SSR renders do not leak", async () => {
+    const clientCount = 20
+    const disconnected = await Effect.gen(function* () {
+      const disconnectedIds = yield* Ref.make<ReadonlyArray<number>>([])
+      const allDisconnected = yield* Deferred.make<void>()
+
+      const protocolLayer = Layer.effect(
+        RpcClient.Protocol,
+        Rpc.makeInProcessProtocol({
+          onDisconnect: (clientId) =>
+            Ref.updateAndGet(disconnectedIds, (ids) => [...ids, clientId]).pipe(
+              Effect.flatMap((ids) =>
+                ids.length === clientCount ? Deferred.succeed(allDisconnected, undefined) : Effect.void
+              )
+            )
+        })
+      ).pipe(Layer.provide(Rpc.HandlersLayer.pipe(Layer.provide(Layer.fresh(Rpc.ServerStoresLayer)))))
+
+      yield* Effect.gen(function* () {
+        for (let index = 0; index < clientCount; index++) {
+          yield* Effect.gen(function* () {
+            const client = yield* RpcClient.make(Rpc.AppRpcs)
+            const product = yield* client.getProduct({ id: "42" })
+            expect(Option.isSome(product)).toBe(true)
+          }).pipe(Effect.scoped)
+        }
+        yield* Deferred.await(allDisconnected).pipe(Effect.timeout("2 seconds"))
+      }).pipe(Effect.provide(protocolLayer))
+
+      return yield* Ref.get(disconnectedIds)
+    }).pipe(Effect.runPromise)
+
+    expect(disconnected).toHaveLength(clientCount)
+    expect(new Set(disconnected).size).toBe(clientCount)
   })
 })

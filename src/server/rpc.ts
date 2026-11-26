@@ -50,45 +50,65 @@ export const RpcHttpLayer = RpcServer.layerHttp({
 }).pipe(Layer.provide(RpcSerialization.layerJson))
 
 /**
+ * Builds an in-process `RpcClient.Protocol` wired directly to `RpcServer.make(AppRpcs)`.
+ *
+ * When a scoped `RpcClient` closes, its `run` fiber exits and offers its `clientId`
+ * to `disconnects` so `RpcServer.make` evicts the `ServerClient` entry immediately
+ * (preventing memory leaks across long-lived SSR processes).
+ */
+export const makeInProcessProtocol = (options?: {
+  readonly onDisconnect?: ((clientId: number) => Effect.Effect<void>) | undefined
+}) =>
+  Effect.gen(function* () {
+    const disconnects = yield* Queue.unbounded<number>()
+    yield* Effect.addFinalizer(() => Queue.shutdown(disconnects))
+
+    const protocol = yield* RpcClient.Protocol.make((writeToClient, clientIds) =>
+      Effect.gen(function* () {
+        const writeToServerDeferred =
+          yield* Deferred.make<(clientId: number, data: RpcMessage.FromClientEncoded) => Effect.Effect<void>>()
+        const serverProtocol = yield* RpcServer.Protocol.make((writeToServer) =>
+          Effect.gen(function* () {
+            yield* Deferred.succeed(writeToServerDeferred, writeToServer)
+            return {
+              disconnects,
+              send: (clientId, response) => writeToClient(clientId, response),
+              end: () => Effect.void,
+              clientIds: Effect.succeed(clientIds),
+              initialMessage: Effect.succeedNone,
+              supportsAck: false,
+              supportsTransferables: false,
+              supportsSpanPropagation: true,
+              supportsNotifications: false,
+              codecFor: RpcSerialization.json.codecFor
+            }
+          })
+        )
+        const writeToServer = yield* Deferred.await(writeToServerDeferred)
+        yield* RpcServer.make(AppRpcs, { onDisconnect: options?.onDisconnect }).pipe(
+          Effect.provideService(RpcServer.Protocol, serverProtocol),
+          Effect.forkScoped
+        )
+
+        return {
+          send: (clientId, request) => writeToServer(clientId, request),
+          supportsAck: false,
+          supportsTransferables: false,
+          codecFor: RpcSerialization.json.codecFor
+        }
+      })
+    )
+
+    return RpcClient.Protocol.of({
+      ...protocol,
+      run: (clientId, f) => protocol.run(clientId, f).pipe(Effect.onExit(() => Queue.offer(disconnects, clientId)))
+    })
+  })
+
+/**
  * In-process `RpcClient.Protocol` wired directly to `RpcServer.make(AppRpcs)`.
  *
  * Used by SSR and tests: zero TCP sockets, runs the real `AppRpcs` handlers and
  * JSON codecs against the same server store `Layer` instance as `POST /rpc`.
  */
-export const InProcessProtocolLayer = Layer.effect(
-  RpcClient.Protocol,
-  RpcClient.Protocol.make((writeToClient, clientIds) =>
-    Effect.gen(function* () {
-      const writeToServerDeferred =
-        yield* Deferred.make<(clientId: number, data: RpcMessage.FromClientEncoded) => Effect.Effect<void>>()
-      const serverProtocol = yield* RpcServer.Protocol.make((writeToServer) =>
-        Effect.gen(function* () {
-          yield* Deferred.succeed(writeToServerDeferred, writeToServer)
-          const disconnects = yield* Queue.unbounded<number>()
-          yield* Effect.addFinalizer(() => Queue.shutdown(disconnects))
-          return {
-            disconnects,
-            send: (clientId, response) => writeToClient(clientId, response),
-            end: () => Effect.void,
-            clientIds: Effect.succeed(clientIds),
-            initialMessage: Effect.succeedNone,
-            supportsAck: false,
-            supportsTransferables: false,
-            supportsSpanPropagation: true,
-            supportsNotifications: false,
-            codecFor: RpcSerialization.json.codecFor
-          }
-        })
-      )
-      const writeToServer = yield* Deferred.await(writeToServerDeferred)
-      yield* RpcServer.make(AppRpcs).pipe(Effect.provideService(RpcServer.Protocol, serverProtocol), Effect.forkScoped)
-
-      return {
-        send: (clientId, request) => writeToServer(clientId, request),
-        supportsAck: false,
-        supportsTransferables: false,
-        codecFor: RpcSerialization.json.codecFor
-      }
-    })
-  )
-)
+export const InProcessProtocolLayer = Layer.effect(RpcClient.Protocol, makeInProcessProtocol())
