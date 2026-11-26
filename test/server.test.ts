@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { createServer, request, type Server as HttpServer } from "node:http"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test"
+import * as Pages from "../src/pages.ts"
 import * as Handler from "../src/server/handler.ts"
 
 interface Reply {
@@ -42,6 +43,8 @@ beforeAll(async () => {
   writeFileSync(join(root, "secret.txt"), secret)
   ;[server, port] = await listen(Handler.createAppHandler({ clientDir, assetsFor }))
   ;[dev, devPort] = await listen(Handler.createAppHandler({ assetsFor }))
+  // Preload lazy page modules so Vitest's cold on-demand transform does not race the 1s SSR budget on the first GET.
+  await Promise.all(Object.values(Pages.pages).map((page) => page.preload()))
 })
 
 afterAll(async () => {

@@ -9,20 +9,20 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "dev": "node scripts/dev.ts",
-    "build": "pnpm build:client && pnpm build:server",
-    "build:client": "vite build",
-    "build:server": "vite build --ssr src/server/serve.ts --outDir dist/server",
-    "start": "node dist/server/serve.js",
-    "typecheck": "node scripts/tsrs.mjs --noEmit",
-    "lint": "node scripts/oxlint.mjs --type-aware .",
-    "lint:fix": "node scripts/oxlint.mjs --type-aware --fix . && pnpm format",
-    "format": "oxfmt .",
-    "format:check": "oxfmt --check .",
-    "test": "vitest run",
+    "dev": "vp run dev:server",
+    "build": "vp run build:client && vp run build:server",
+    "build:client": "vp build",
+    "build:server": "vp build --ssr src/server/serve.ts --outDir dist/server",
+    "start": "vp run start:server",
+    "typecheck": "effect-tsgo tsrs --noEmit",
+    "lint": "effect-tsgo vp lint",
+    "lint:fix": "vp run lint:autofix",
+    "format": "vp run format:write",
+    "format:check": "vp fmt --check",
+    "test": "vp test run",
     "verify:bundles": "node scripts/verify-bundles.ts",
     "smoke": "node scripts/smoke.ts",
-    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm build && pnpm verify:bundles && pnpm test && pnpm smoke"
+    "check": "vp run format:check && vp run lint && vp run typecheck && vp run build:client && vp run build:server && vp run verify:bundles && vp run test && vp run smoke"
   },
   "dependencies": {
     "@effect/ui": "https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234",
@@ -40,13 +40,9 @@
     "@tailwindcss/vite": "4.3.5",
     "@types/node": "25.9.1",
     "happy-dom": "21.0.4",
-    "oxfmt": "0.80.0",
-    "oxlint": "1.95.0",
     "tailwindcss": "4.3.5",
-    "tsrs": "7.1.0-beta.tsrs5",
     "typescript": "6.0.3",
-    "vite": "8.0.15",
-    "vitest": "5.1.1"
+    "vite-plus": "1.8.0"
   },
   "packageManager": "pnpm@12.17.0"
 }

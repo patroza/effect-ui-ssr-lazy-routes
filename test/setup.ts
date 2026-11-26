@@ -1,4 +1,4 @@
-import { afterEach } from "vitest"
+import { afterEach } from "vite-plus/test"
 import * as Frames from "./support/frames.ts"
 
 /**

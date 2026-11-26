@@ -7,3 +7,10 @@ minimumReleaseAgeExclude:
   - "@effect/tsgo-win32-arm64@0.73.7"
   - "@effect/tsgo-win32-x64@0.73.7"
   - "@effect/tsgo@0.73.7"
+
+overrides:
+  "vite@*": npm:@voidzero-dev/vite-plus-core@8.3.8001
+  "vitest@*": 5.1.1
+  oxlint: 1.95.0
+  tsrs: 7.1.0-beta.tsrs5
+  oxfmt: 0.80.0

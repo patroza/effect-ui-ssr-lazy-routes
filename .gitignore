@@ -6,4 +6,3 @@ dist/
 .env.*
 coverage/
 *.tsbuildinfo
-.oxlintrc.effect.generated.json
