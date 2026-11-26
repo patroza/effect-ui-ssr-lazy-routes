@@ -8,7 +8,7 @@ A small, strict-TypeScript sample of **[`@effect/ui`](https://github.com/Effect-
 - **Per-page Vite bundle splitting** that you can check in `dist/` (`pnpm verify:bundles`).
 - **No entry → page request waterfall** on direct visits: the server reads Vite's manifest and emits `<link rel="modulepreload">` for the matched route's chunk (and its imports) only.
 
-It works around upstream [Effect-TS/ui#263](https://github.com/Effect-TS/ui/issues/263) (hydrating an unloaded `Component.lazy`), and says exactly how it simplifies once that lands.
+It works around upstream [Effect-TS/ui#263](https://github.com/Effect-TS/ui/issues/263) (hydrating a preloaded `Component.lazy`), and says exactly how it simplifies once that lands.
 
 | | |
 |---|---|
@@ -75,7 +75,7 @@ GET /products/42
 
 > The client doesn't load the module before it hydrates, so it replaces the server's nodes with the fallback, then with the page once the module has loaded.
 
-and in practice ([#263](https://github.com/Effect-TS/ui/issues/263)) `HtmlHydrate` decodes each child's serialized state with the child's **component**. A not-yet-loaded `Component.lazy` has no Model schema, so `stateCodecOf(lazy)` throws `TypeError: Cannot read properties of undefined (reading 'ast')`, the server's page DOM is dropped and rebuilt, and the user sees the fallback. `test/hydration.test.ts` keeps a **canary test** that reproduces exactly this.
+and in practice ([#263](https://github.com/Effect-TS/ui/issues/263)), if you try to avoid that flash by awaiting `Component.lazy(...).preload()` before `HtmlHydrate.hydrate`, `hydrateRun` still passes the lazy wrapper (not the resolved component) into `stateCodecOf`, which reads `component.model.ast`, throws `TypeError: Cannot read properties of undefined (reading 'ast')`, fails the root view, and discards the server's page DOM. `test/hydration.test.ts` keeps a **canary test** that reproduces exactly this.
 
 **The workaround is `makeLazyRoutePage(name, load)` in [`src/lazyPage.ts`](src/lazyPage.ts):**
 

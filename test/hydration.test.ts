@@ -92,17 +92,20 @@ describe("hydration after preloadInitialRoute", () => {
   })
 })
 
-// Effect-TS/ui#263: while the upstream bug is open, hydrating with an
-// unloaded `Component.lazy` throws inside the runtime (`stateCodecOf` reads
-// `.model.ast` of the lazy wrapper) and the server DOM is thrown away. This is
-// the CANARY for the workaround: once it fails, #263 is fixed upstream and
-// `preloadInitial` can shrink to `lazy.preload()` (see README).
+// Effect-TS/ui#263: while the upstream bug is open, awaiting `Component.lazy.preload()`
+// (via `prefetch()`) before `HtmlHydrate` throws inside the runtime (`stateCodecOf` reads
+// `.model.ast` of the lazy wrapper instead of the resolved component), failing the root
+// view and discarding the server DOM. This is the CANARY for the workaround: once it
+// fails, #263 is fixed upstream and `preloadInitial` can shrink to `lazy.preload()` (see README).
 describe("Effect-TS/ui#263 canary", () => {
-  it("naive hydrate (no preloadInitial) drops the page: why makeLazyRoutePage preloads first", async () => {
+  it("hydrating a preloaded Component.lazy (via prefetch) drops the server DOM due to #263", async () => {
     const server = await serverRender("/products?q=mug")
     const app = await loadApp()
     const { App } = await import("../src/App.ts")
     const { Effect, Exit, Logger, Scope, Router, BrowserRouter, HtmlHydrate } = app.lib
+
+    // Preload via Component.lazy.preload() (without makeLazyRoutePage's direct-component swap).
+    await app.pages.Products.prefetch()
 
     window.history.replaceState(null, "", "/products?q=mug")
     document.body.innerHTML = `<div id="app">${server.appHtml}</div>`
@@ -115,13 +118,13 @@ describe("Effect-TS/ui#263 canary", () => {
     await Effect.runPromise(
       HtmlHydrate.hydrateEffect(App, Router.props(app.AppRoute), container, server.state).pipe(
         Effect.tap((root) => root.adopted),
-        // The runtime logs the TypeError; keep the test output quiet.
+        // The runtime logs the TypeError from stateCodecOf; keep test output quiet.
         Effect.provide([BrowserRouter.layer({ routes: app.AppRoute }), Logger.layer([])]),
         Effect.provideService(Scope.Scope, scope)
       )
     )
     await new Promise((resolve) => setTimeout(resolve, 100))
-    // The server's page node was NOT adopted: it was discarded (the flash this repo removes).
+    // Due to #263, the root view fails and the server's page node is discarded.
     expect(serverSection?.isConnected).toBe(false)
     expect(container.querySelector("section")).not.toBe(serverSection)
     await Effect.runPromise(Scope.close(scope, Exit.void))
