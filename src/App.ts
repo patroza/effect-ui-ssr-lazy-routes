@@ -11,8 +11,9 @@ export const AppMessage = UiSchema.TaggedEnum({
 
 /**
  * The root. It holds the route and picks the page. It imports no page module
- * statically: `pages.X.render` is a lazy child (or, for the page the browser
- * landed on, the real component that `preloadInitialRoute` already loaded).
+ * statically: every page is a `Component.lazy` child. The browser awaits
+ * `preloadRoute` for its landing page before hydrating, so that child adopts
+ * the server's DOM instead of showing its fallback.
  */
 export const App = Html.component({
   name: "App",
@@ -43,17 +44,17 @@ export const App = Html.component({
         // Key by `printPath` (no search): a new path mounts a fresh page, while
         // a search change updates the live page in place with new props.
         AppRoute.match(route, {
-          Home: (r) => pages.Home.render(h, { key: AppRoute.printPath(r), fallback }),
-          Products: (r) => pages.Products.render(h, { key: AppRoute.printPath(r), props: { route: r }, fallback }),
+          Home: (r) => pages.Home(h, { key: AppRoute.printPath(r), fallback }),
+          Products: (r) => pages.Products(h, { key: AppRoute.printPath(r), props: { route: r }, fallback }),
           ProductDetail: (r) =>
-            pages.ProductDetail.render(h, {
+            pages.ProductDetail(h, {
               key: AppRoute.printPath(r),
               props: { id: r.params.id },
               fallback
             }),
-          Analytics: (r) => pages.Analytics.render(h, { key: AppRoute.printPath(r), fallback }),
+          Analytics: (r) => pages.Analytics(h, { key: AppRoute.printPath(r), fallback }),
           NotFound: (r) =>
-            pages.NotFound.render(h, {
+            pages.NotFound(h, {
               key: AppRoute.printPath(r),
               props: { path: AppRoute.printPath(r) },
               fallback

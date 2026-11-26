@@ -4,7 +4,8 @@ import { BrowserHost, HtmlHydrate } from "@effect/ui/html"
 import { Effect, Layer, Option } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { App } from "./App.ts"
-import { preloadInitialRoute } from "./pages.ts"
+import { preloadRoute } from "./pages.ts"
+import { installLinkPrefetch, installPreloadErrorReload } from "./prefetch.ts"
 import { AppRoute, type AppRouteValue } from "./routes.ts"
 
 export interface BootOptions {
@@ -31,25 +32,33 @@ export const parseLocation = (location: string): AppRouteValue =>
 export const platformLayer = (router: Layer.Layer<Router.Services>) => Layer.mergeAll(router, FetchHttpClient.layer)
 
 /**
- * Boots the app in the browser:
+ * Boots the app in the browser, inside the caller's scope:
  *
  * 1. parse the URL with the same route union the server used,
- * 2. await the matched route's chunk (`preloadInitialRoute`), so the first
- *    render gets the REAL page component, never the lazy wrapper,
- * 3. hydrate the server DOM + state (or mount fresh if there is none).
+ * 2. await `preloadRoute` for the matched route: the native
+ *    `Component.lazy(...).preload()` of its page,
+ * 3. install the `vite:preloadError` reload guard and the link prefetch (both
+ *    released with the scope),
+ * 4. hydrate the server DOM + state (or mount fresh if there is none).
  *
- * Step 2 must come before step 3. That is the whole zero-flash trick.
+ * Step 2 must come before step 4: the lazy child then hydrates like a direct
+ * one (same DOM nodes, Model and `~query` entries, no fallback).
  */
-export const boot = (options: BootOptions) =>
-  Effect.gen(function*() {
-    const route = parseLocation(options.location)
-    yield* Effect.promise(() => preloadInitialRoute(route))
+export const boot = Effect.fn("boot")(function*(options: BootOptions) {
+  const route = parseLocation(options.location)
+  yield* Effect.promise(() => preloadRoute(route))
 
-    const root = options.state === undefined
-      ? yield* BrowserHost.mountEffect(App, Router.props(AppRoute), options.container)
-      : yield* HtmlHydrate.hydrateEffect(App, Router.props(AppRoute), options.container, options.state)
+  // After the initial preload, so a failed first load surfaces as itself.
+  const doc = options.container.ownerDocument
+  const win = doc.defaultView
+  if (win !== null) yield* installPreloadErrorReload(win)
+  yield* installLinkPrefetch(doc)
 
-    // Completes once every instance that adopts server state is live.
-    yield* root.adopted
-    return root
-  })
+  const root = options.state === undefined
+    ? yield* BrowserHost.mountEffect(App, Router.props(AppRoute), options.container)
+    : yield* HtmlHydrate.hydrateEffect(App, Router.props(AppRoute), options.container, options.state)
+
+  // Completes once every instance that adopts server state is live.
+  yield* root.adopted
+  return root
+})

@@ -1,14 +1,24 @@
+import { Schema } from "effect"
+
 /**
  * A tiny in-memory catalog. It is imported by the Products and ProductDetail
- * pages only, so the bundler puts it in a chunk shared by those two pages
- * (never in the entry chunk).
+ * query services only, so the bundler puts it in a chunk shared by those two
+ * pages (never in the entry chunk).
  */
-export interface Product {
-  readonly id: string
-  readonly name: string
-  readonly priceCents: number
-  readonly blurb: string
-}
+export const Product = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  priceCents: Schema.Number,
+  blurb: Schema.String
+})
+export type Product = typeof Product.Type
+
+/**
+ * How many times the catalog was actually read by a query fetcher. Production
+ * code never reads it; the tests assert it stays 0 on the client while a
+ * server-rendered page hydrates from the state's `~query` entries.
+ */
+export const catalogReads = { searchProducts: 0, getProduct: 0 }
 
 /** Marker proving which chunk the catalog landed in (see scripts/verify-bundles.mjs). */
 export const CATALOG_CHUNK = "SENTINEL:catalog-data"

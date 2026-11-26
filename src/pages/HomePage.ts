@@ -33,7 +33,7 @@ export const HomePage = Html.component({
       h.button
         .attr("type", "button")
         .attr("data-testid", "home-counter")
-        .onClick(HomePageMessage.ClickedCounter())
+        .on("click", HomePageMessage.ClickedCounter())
         .children(`Clicked ${model.clicks} times`)
     )
 })

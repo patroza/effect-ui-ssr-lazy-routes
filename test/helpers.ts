@@ -2,6 +2,14 @@ import type { Renderer } from "@effect/ui"
 import { afterEach, vi } from "vitest"
 import type { PageAssets } from "../src/assets.ts"
 
+/**
+ * Which page modules have been imported since the latest `loadApp()`. The mock
+ * factory below runs exactly when a page module is first imported, so this
+ * observes the real `import()` that `Component.lazy` does.
+ */
+export const loadedPages = new Set<string>()
+const pageModules = ["Home", "Products", "ProductDetail", "Analytics", "NotFound"] as const
+
 export const noAssets: PageAssets = { scripts: [], modulePreloads: [], stylesheets: [] }
 
 /**
@@ -11,9 +19,16 @@ export const noAssets: PageAssets = { scripts: [], modulePreloads: [], styleshee
  */
 export const loadApp = async () => {
   vi.resetModules()
+  loadedPages.clear()
+  for (const name of pageModules) {
+    vi.doMock(`../src/pages/${name}Page.ts`, async (importOriginal) => {
+      loadedPages.add(name)
+      return await importOriginal()
+    })
+  }
   // `effect` and `@effect/ui` keep per-module registries (the Router's engine, service keys, ...), so the
   // test must use the SAME copies as the app, never ones imported statically by the test file.
-  const [effect, ui, uiHtml, render, bootstrap, pages, routes, loading, prefetch] = await Promise.all([
+  const [effect, ui, uiHtml, render, bootstrap, pages, routes, loading, prefetch, products, state] = await Promise.all([
     import("effect"),
     import("@effect/ui"),
     import("@effect/ui/html"),
@@ -22,7 +37,9 @@ export const loadApp = async () => {
     import("../src/pages.ts"),
     import("../src/routes.ts"),
     import("../src/loading.ts"),
-    import("../src/prefetch.ts")
+    import("../src/prefetch.ts"),
+    import("../src/data/products.ts"),
+    import("../src/state.ts")
   ])
   return {
     ...render,
@@ -31,6 +48,8 @@ export const loadApp = async () => {
     ...routes,
     ...loading,
     ...prefetch,
+    ...state,
+    catalogReads: products.catalogReads,
     lib: {
       Effect: effect.Effect,
       Exit: effect.Exit,
@@ -56,13 +75,13 @@ export const serverRender = async (url: string): Promise<ServerDocument> => {
   const server = await loadApp()
   const page = await server.renderPage(url, () => noAssets)
   const parsed = new DOMParser().parseFromString(page.html, "text/html")
-  const stateText = parsed.getElementById("state")?.textContent
-  if (stateText === null || stateText === undefined) throw new Error("server HTML has no #state")
+  const state = server.readState(parsed.getElementById("state")?.textContent)
+  if (state === undefined) throw new Error("server HTML has no #state")
   return {
     status: page.status,
     html: page.html,
     appHtml: parsed.getElementById("app")?.innerHTML ?? "",
-    state: JSON.parse(stateText)
+    state
   }
 }
 
@@ -72,6 +91,8 @@ export interface Browser<Before> {
   /** The app root: `root.model()` is the root component's Model. */
   readonly root: { readonly model: () => unknown }
   readonly container: Element
+  /** The state the server serialized, after `editState` (what the client hydrated from). */
+  readonly serverState: Renderer.State
   /** What `beforeBoot` returned: typically the server-rendered nodes, captured before the client boots. */
   readonly before: Before
   /** Every element with `data-fallback` that was ever inserted under the container. */
@@ -144,7 +165,7 @@ export async function hydrateFromServer(
     await Effect.runPromise(Scope.close(scope, Exit.void))
   }
   open.push(close)
-  return { app, root, container, before, fallbacksSeen, close }
+  return { app, root, container, before, serverState: state, fallbacksSeen, close }
 }
 
 export const click = (element: Element): void => {

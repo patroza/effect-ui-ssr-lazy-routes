@@ -41,7 +41,7 @@ export const AnalyticsPage = Html.component({
               .key(metric)
               .attr("type", "button")
               .attr("aria-pressed", String(metric === model.metric))
-              .onClick(AnalyticsPageMessage.SelectedMetric({ metric }))
+              .on("click", AnalyticsPageMessage.SelectedMetric({ metric }))
               .children(metricTitle(metric))
           )
         ),

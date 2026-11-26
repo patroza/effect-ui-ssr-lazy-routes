@@ -24,6 +24,8 @@ const walk = (dir) =>
 const sentinelOwners = {
   "SENTINEL:home-page": "Home",
   "SENTINEL:products-page": "Products",
+  "SENTINEL:search-products-query": "Products",
+  "SENTINEL:get-product-query": "ProductDetail",
   "SENTINEL:product-detail-page": "ProductDetail",
   "SENTINEL:analytics-page": "Analytics",
   "SENTINEL:analytics-chart": "Analytics",
@@ -60,6 +62,12 @@ check(entryCode.length > 0, `entry chunk ${entry.file} not found in assets/`)
 for (const sentinel of [...Object.keys(sentinelOwners), ...sharedSentinels]) {
   check(!entryCode.includes(sentinel), `ENTRY chunk ${entry.file} contains page marker ${sentinel}`)
 }
+// A `Query.Service` carries its name into the build as a string literal. Each page-only query (and its
+// Layer, provided with `Component.provide`) must therefore sit in its page's chunk, never in the entry.
+const queryOwners = { "catalog/SearchProducts": "Products", "catalog/GetProduct": "ProductDetail" }
+for (const name of Object.keys(queryOwners)) {
+  check(!entryCode.includes(name), `ENTRY chunk ${entry.file} contains page-only query "${name}"`)
+}
 const pageSources = Object.values(routeSources)
 for (const imported of entry.imports ?? []) {
   check(!pageSources.includes(imported), `entry statically imports page module ${imported}`)
@@ -87,6 +95,10 @@ for (const { route, chunk } of pageChunks) {
   for (const [sentinel, owner] of Object.entries(sentinelOwners)) {
     if (owner === route) check(own.includes(sentinel), `${route} chunk ${chunk?.file} is missing its own marker ${sentinel}`)
     else check(!own.includes(sentinel), `${route} chunk ${chunk?.file} contains ${owner}'s marker ${sentinel}`)
+  }
+  for (const [name, owner] of Object.entries(queryOwners)) {
+    if (owner === route) check(own.includes(name), `${route} chunk ${chunk?.file} is missing its own query "${name}"`)
+    else check(!own.includes(name), `${route} chunk ${chunk?.file} contains ${owner}'s query "${name}"`)
   }
 }
 
@@ -140,5 +152,5 @@ if (failures.length > 0) {
 }
 console.log(
   `\n✓ entry carries no page code; ${pageChunks.length} pages are ${pageChunks.length} separate chunks; ` +
-    `${declared.size} markers each live in exactly their owner chunk.`
+    `${declared.size} markers and ${Object.keys(queryOwners).length} page-only queries each live in exactly their owner chunk.`
 )
