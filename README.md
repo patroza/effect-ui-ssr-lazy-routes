@@ -6,8 +6,9 @@ A small, strict-TypeScript reference for **[`@effect/ui`](https://github.com/Eff
 - **Server-side rendering** with `HtmlServer.renderToHtml`, `HtmlServer.serializeState` and `Router.static`.
 - **Zero-flash hydration**: the browser adopts the _exact_ server DOM nodes, the server's serialized Model and its `~query` cache, for pages code-split with plain `Component.lazy` (`await preloadRoute` before `HtmlHydrate.hydrateEffect`).
 - **Per-page Vite splitting**, `@effect/ui-kit` included: `Tabs`, `Collapsible` and `Dialog` ship **only** in the page chunk that uses them, never in the entry (`pnpm verify:bundles`).
-- **Page-local data and writes behind ports**: `Query.Service` / `Command.Service` read and write through `Context.Reference` ports (`CatalogPort`, `BookmarkPort`, `AnalyticsPort`, each operation an `Effect.fn` span, defaulting to `live`), while each page provides its query/Command layers with `Component.provide`, so each page's queries, Command, ports and Layers live in that page's chunk.
-- **Deterministic tests**: `@effect/vitest` `it.effect` on the `TestClock`, `TestHost.layer()` / `TestHost.settle`, `Ssr.ssr`, and `Ref`-backed port counters. No `vi.resetModules()`, no `setTimeout`, no wall-clock waits, no module-level port counters.
+- **Real Effect HTTP + RPC API server** (`effect/rpc` + `effect/http`), modeled on [`tim-smart/bunnings-lite`](https://github.com/tim-smart/bunnings-lite): feature-scoped `RpcGroup`s (`SearchRpcs`, `ProductRpcs`, `AnalyticsRpcs`) keep each page's schemas and RPC definitions strictly in its lazy route chunk, while the server merges them (`AppRpcs`), serves `POST /rpc` via `RpcServer.layerHttp` (`RpcSerialization.layerJson`) alongside SSR and static assets, and keeps all server stores/datasets strictly under `src/server/` (0 bytes in `dist/client/`).
+- **Required `RpcClient.Protocol` at composition roots**: `Query.Service` and `Command.Service` call `RpcClient.make(FeatureRpcs)` directly, so `RpcClient.Protocol` flows to each entry root as a compile-time requirement — `RpcClient.layerProtocolHttp({ url: "/rpc" })` in the browser, and an in-process `RpcClient.Protocol` wired to the same `AppRpcs` handlers and server stores during SSR (zero TCP round-trip).
+- **Deterministic tests**: `@effect/vitest` `it.effect` on the `TestClock`, `TestHost.layer()` / `TestHost.settle`, `Ssr.ssr`, and `Ref`-backed in-process RPC call counters. No `vi.resetModules()`, no `setTimeout`, no wall-clock waits, no module-level counters.
 - **No entry → page waterfall** on direct visits: `<link rel="modulepreload">` for the matched route's chunks only, and a page's own `<link rel="stylesheet">` only on that page.
 - **Dev-only DevTools**: `@effect/ui-devtools` inspector overlay + Time Travel (`DevTools.layer`) and Vite MCP server (`DevToolsVite.plugin({ dispatch: true })` at `http://127.0.0.1:4774/mcp`) in `pnpm dev`, tree-shaken to **0 bytes** in production (`pnpm verify:bundles`).
 - **Tailwind v4** (`@tailwindcss/vite`) with a neutral light/dark palette (`prefers-color-scheme`, no JS), focus rings and `data-*` / `aria-*` variants on the kit's attributes.
@@ -72,19 +73,19 @@ Vite+ (`vite-plus`) unifies Vite, Vitest, Oxlint, Oxfmt, and `tsrs` into a singl
 
 ## The pages
 
-| Route           | Page chunk contains                                                                         | `@effect/ui-kit`            |
-| --------------- | ------------------------------------------------------------------------------------------- | --------------------------- |
-| `/`             | counter                                                                                     | `Button`                    |
-| `/products?q=`  | `SearchProducts` query + Layer, compare list (`CatalogPort` is shared)                      | `Input`, `Button`           |
-| `/products/:id` | `GetProduct` query, **`BookmarkProduct` Command** + `BookmarkPort`, quantity, inquiry modal | `Dialog`, `Input`, `Button` |
-| `/analytics`    | `GetAnalytics` query + `AnalyticsPort`, dataset, SVG chart, **its own CSS**                 | `Tabs`, `Collapsible`       |
-| `/*`            | not-found (404)                                                                             | none                        |
+| Route           | Page chunk contains                                                                        | `@effect/ui-kit`            |
+| --------------- | ------------------------------------------------------------------------------------------ | --------------------------- |
+| `/`             | counter                                                                                    | `Button`                    |
+| `/products?q=`  | `SearchProducts` query + `SearchRpcs`, compare list (`Product` schema is shared)           | `Input`, `Button`           |
+| `/products/:id` | `GetProduct` query, **`BookmarkProduct` Command** + `ProductRpcs`, quantity, inquiry modal | `Dialog`, `Input`, `Button` |
+| `/analytics`    | `GetAnalytics` query + `AnalyticsRpcs`, schemas, SVG chart, **its own CSS**                | `Tabs`, `Collapsible`       |
+| `/*`            | not-found (404)                                                                            | none                        |
 
-`Button` and `Input` are used by several pages, so Rollup puts them in small shared chunks: `Button` in its own `Button-*.js`, `Input` in the `CatalogPort-*.js` chunk next to the catalog data and `CatalogPort` (only Products and ProductDetail use it). `Tabs`, `Collapsible` and `Dialog` each have exactly one user, so they land in that page's chunk. `App.ts` and `Shell.ts` import no kit primitive, so the shell never pays for them.
+`Button`, `Input` and `Product` schema are used by several pages, so Rollup puts them in small shared chunks (`Product-*.js` is shared only by Products and ProductDetail). `Tabs`, `Collapsible` and `Dialog` each have exactly one user, so they land in that page's chunk. `App.ts` and `Shell.ts` import no kit primitive, so the shell never pays for them.
 
 ```
 src/
-  main.ts                  browser entry: decode #state (`JsonString.jsonString`; unreadable → warn + mount fresh), run boot in the app scope, wire dev-only `DevTools.layer`
+  main.ts                  browser entry: decode #state (`JsonString.jsonString`; unreadable → warn + mount fresh), run boot in the app scope, wire `BrowserRouter`, `RpcClient.layerProtocolHttp({ url: "/rpc" })`, and dev-only `DevTools.layer`
   index.css                @import "tailwindcss" + a tiny base layer (the entry's only global CSS)
   App.ts                   createApp(pages), createAppBundle() + the production `App`/`productionApp`: holds the route, Head.titleTemplate, Router subscription; delegates the layout to the shell
   Shell.ts                 createShell(pages): primary nav + the lazy page outlet (a plain view function, so state paths stay `/App/<page>[<path>]`)
@@ -93,18 +94,20 @@ src/
   pages/                   one component per route; each ends up in its own chunk
     HomePage.ts · NotFoundPage.ts · ProductsPage.ts · AnalyticsPage.ts
     product/ProductDetailPage.ts   the inquiry Dialog; maps BookmarkProduct's result/error into its own messages with Command.match
+  rpc/
+    domain/ApiError.ts     shared `Schema.TaggedError` returned by all feature RPCs and queries/commands
   product/
-    domain/Product.ts      Product schema + catalog + find/format helpers, shared by Products + ProductDetail (a small shared chunk)
-    services/CatalogPort.ts   Context.Reference port: search / find (Effect.fn spans), defaulting to `live`
-    services/BookmarkPort.ts  Context.Reference port: bookmark (Effect.fn span), defaulting to `live`
-    commands/BookmarkProduct.ts   Command.Service over BookmarkPort, success Void / error String (no import of the page: no cycle)
-    queries/GetProduct.ts  ProductDetail Query.Service over CatalogPort
+    domain/Product.ts      lightweight `Product` schema + `formatPrice`, shared only by Products + ProductDetail
+    domain/ProductRpcs.ts  `ProductRpcs` (`getProduct`, `bookmarkProduct`) — ProductDetail chunk only
+    commands/BookmarkProduct.ts   Command.Service over `RpcClient.make(ProductRpcs)`, success Void / error ApiError
+    queries/GetProduct.ts  ProductDetail Query.Service over `RpcClient.make(ProductRpcs)`
   search/
-    queries/SearchProducts.ts   Products Query.Service over CatalogPort
+    domain/SearchRpcs.ts   `SearchRpcs` (`searchProducts`) — Products chunk only
+    queries/SearchProducts.ts   Products Query.Service over `RpcClient.make(SearchRpcs)`
   analytics/               Analytics-only
-    domain/Analytics.ts    dataset + metric types
-    services/AnalyticsPort.ts   Context.Reference port: series (Effect.fn span), defaulting to `live`
-    queries/GetAnalytics.ts     Query.Service over AnalyticsPort
+    domain/Analytics.ts    `Metric` / `SeriesPoint` schemas + title helper (no dataset in client bundle)
+    domain/AnalyticsRpcs.ts     `AnalyticsRpcs` (`getAnalytics`) — Analytics chunk only
+    queries/GetAnalytics.ts     Query.Service over `RpcClient.make(AnalyticsRpcs)`
     components/Chart.ts    pure SVG chart (+ chart.css, the only page-specific stylesheet)
   browser/
     bootstrap.ts           boot({ …, bundle? }): resolve URL → await preloadRoute → install guards → hydrate / mount
@@ -117,13 +120,15 @@ src/
     jsonString.ts          the central Schema.fromJsonString(Schema.toCodecJson(...))
     status.ts              the `data-http-status="404"` marker a page sets when its record is missing; the server reads it back
   server/
+    services/              server-only `Context.Service` stores (0 bytes in dist/client/): CatalogStore, BookmarkStore (`Ref`), AnalyticsStore
+    rpc.ts                 merged `AppRpcs`, `HandlersLayer`, `RpcHttpLayer` (`POST /rpc`), and `InProcessProtocolLayer` (zero-TCP SSR transport)
     assets.ts              manifest → per-route <link rel="modulepreload"> / stylesheet tags
-    render.ts              renderPageEffect / renderPage(url, assetsFor, { app? }) → Page | Redirect | BadRequest (AppRoute.resolve first, like HtmlServerHttp)
-    handler.ts             node:http handler (static files, redirects, 400/405, security headers, SSR)
-    serve.ts               production server entry
+    render.ts              renderPageEffect(url, assetsFor, { app? }) → Page | Redirect | BadRequest (requires `RpcClient.Protocol`)
+    handler.ts             Effect HTTP application (`POST /rpc` + static files + redirects + 400/405 + security headers + in-process SSR)
+    serve.ts               production server entry (`NodeHttpServer.layer` + `NodeRuntime.runMain`)
 config/            oxlint.strict.json (the strict type-aware rules vite.config.ts extends)
 scripts/           verify-bundles.ts · smoke.ts · dev.ts
-test/              ssr · hydration · ui-kit · navigation · prefetch · assets · server · pages · chart (+ setup.ts, helpers.ts, support/ports.ts, support/frames.ts)
+test/              ssr · hydration · ui-kit · navigation · prefetch · assets · server · pages · chart (+ setup.ts, helpers.ts, support/rpc.ts, support/frames.ts)
 ```
 
 ### Request lifecycle
@@ -175,48 +180,44 @@ yield * HtmlHydrate.hydrateEffect(bundle.app, props, options.container, options.
 
 The lazy name **must equal** the component's `name` (state paths look like `/App/ProductsPage[/products]`). Only the matched route's chunk is imported before hydration. `test/hydration.test.ts` has a **negative control**: hydrating _without_ `await preloadRoute(route)` renders the fallback and replaces the server's `<section>`.
 
-## Ports, Queries and Commands: `Context.Reference` + `Query.Service` / `Command.Service` + `Component.provide`
+## Effect HTTP + RPC API, Queries and Commands (`effect/rpc` + `effect/http`)
 
-All of a feature's I/O goes through a `Context.Reference` port whose default is `live`. Queries and Commands capture the port at Layer build, so a fetcher never names its data source, and each page provides only its own query/Command layers with `Component.provide`:
+Modeled on [`tim-smart/bunnings-lite`](https://github.com/tim-smart/bunnings-lite), every query and command talks to a real Effect RPC API (`POST /rpc`) instead of client-side stubs, while **feature-scoped `RpcGroup` definitions** preserve per-page Vite chunk splitting:
 
 ```ts
-// src/analytics/services/AnalyticsPort.ts: every port operation is an Effect.fn, so each call is a span
-export const live: AnalyticsPortService = {
-  series: Effect.fn("AnalyticsPort.series")(function* (metric) { /* fetch */ })
-}
-export const AnalyticsPort = Context.Reference<AnalyticsPortService>("analytics/AnalyticsPort", {
-  defaultValue: () => live
-})
+// src/analytics/domain/AnalyticsRpcs.ts: feature-scoped RPC group (Analytics chunk only)
+export class AnalyticsRpcs extends RpcGroup.make(
+  Rpc.make("getAnalytics", {
+    payload: { metric: Analytics.Metric },
+    success: Schema.Array(Analytics.SeriesPoint),
+    error: ApiError.ApiError
+  })
+) {}
 
-// src/analytics/queries/GetAnalytics.ts: a page-only query over the port
+// src/analytics/queries/GetAnalytics.ts: page-only query over RpcClient.make(AnalyticsRpcs)
 static readonly layer = this.toLayer(Effect.gen(function* () {
-  const port = yield* AnalyticsPort.AnalyticsPort
-  return ({ metric }) => port.series(metric)
+  const client = yield* RpcClient.make(AnalyticsRpcs.AnalyticsRpcs)
+  return ({ metric }) =>
+    client.getAnalytics({ metric }).pipe(
+      Effect.catchTag("RpcClientError", (error) => Effect.fail(new ApiError.ApiError({ message: error.message })))
+    )
 }))
 
-// src/product/commands/BookmarkProduct.ts: a domain result, no import of the page (so no cycle)
-export class BookmarkProduct extends Command.Service<BookmarkProduct>()("product/BookmarkProduct", {
-  args: { id: Schema.String },
-  success: Schema.Void,
-  error: Schema.String
-}) { /* toLayer: a plain arrow over BookmarkPort: no span of its own, @effect/ui already spans every Command run */ }
-
-// src/pages/product/ProductDetailPage.ts: the page maps success & failure into its own messages
-//   ClickedBookmark: () => $.evolve({ bookmark: "Saving" }).run(
-//     BookmarkProduct.make({ id: $.props.id }).pipe(
-//       Command.match({ onSuccess: () => Message.CompletedBookmarkProduct(), onFailure: () => Message.FailedBookmarkProduct() })
-//     ))
-export const ProductDetailPage = ProductDetailPageNoDeps.pipe(
-  Component.provide(Layer.mergeAll(GetProduct.layer, BookmarkProduct.layer))
+// src/server/rpc.ts: server-only merge + handlers + HTTP route + in-process SSR protocol
+export const AppRpcs = SearchRpcs.SearchRpcs.merge(ProductRpcs.ProductRpcs, AnalyticsRpcs.AnalyticsRpcs)
+export const RpcHttpLayer = RpcServer.layerHttp({ group: AppRpcs, path: "/rpc", protocol: "http" }).pipe(
+  Layer.provide(RpcSerialization.layerJson)
 )
 ```
 
 What that buys, each proven by a test or by `verify:bundles`:
 
-- **Chunking:** the ports, service classes, Layers and fetchers live in the page's chunk (`CatalogPort` in the one chunk Products and ProductDetail share); the entry contains none of their names.
-- **SSR + hydration:** `renderToHtml` waits for the query and serializes the settled entry under `~query`; the client seeds its cache from it, adopts the server's nodes and the ports run **0** times on the client (`root.fetches()` is empty, and the `Ref`-backed port counters stay 0). Strip `~query` from the state and it fetches once, so the assertion can fail.
+- **Zero server data in the browser:** `CatalogStore`, `BookmarkStore` (`Ref`), `AnalyticsStore`, seed datasets, and `RpcServer` live strictly under `src/server/` (`verify:bundles` asserts 0 bytes in `dist/client/`).
+- **Per-route RPC isolation:** `SearchRpcs` ships only in `ProductsPage`, `ProductRpcs` only in `ProductDetailPage`, and `AnalyticsRpcs` only in `AnalyticsPage`; the entry chunk holds only the shared `RpcClient.Protocol` HTTP transport (`RpcClient.layerProtocolHttp({ url: "/rpc" })`).
+- **Required transport at every composition root:** `RpcClient.Protocol` propagates through `Component.lazy` to `App`, so forgetting to provide it at the browser entry (`src/main.ts`), SSR (`src/server/handler.ts`), or a test (`test/support/rpc.ts`) is a compile-time type error.
+- **Zero-TCP SSR sharing live server state:** SSR provides `Rpc.InProcessProtocolLayer` wired directly to the same `AppRpcs` handlers and server store `Layer` instance as `POST /rpc`, so mutations via `POST /rpc` (such as `bookmarkProduct`) are immediately visible to subsequent SSR renders without a network round-trip.
+- **SSR + hydration:** `renderToHtml` waits for the query and serializes the settled entry under `~query`; the client seeds its cache from it, adopts the server's nodes and the client makes **0** RPC calls (`root.fetches()` is empty, and the `Ref`-backed `RpcCalls` counters stay 0). Strip `~query` from the state and it fetches once, so the assertion can fail.
 - **Navigation:** a page the server didn't render fetches on the client; a `?q=` change re-keys the query on the live instance (same nodes, last results stay up).
-- **Clean test overrides in any layer build order.** Because pages only provide their query/Command layers and never provide the ports themselves, an outer test layer overriding `CatalogPort`, `BookmarkPort` or `AnalyticsPort` is never shadowed by `Component.provide`. (In an app backed by a shared HTTP/RPC transport, the transport itself would be a required `Context.Service` provided once at the root; here the in-memory ports are the leaf boundary, and `Context.Reference` keeps them out of the entry chunk while staying overridable.)
 
 Other Effect UI practices used: `Effect.fn` for `boot` and the ports; `UiSchema.TaggedEnum` messages named for the fact (`SelectedMetricTab`, `CompletedBookmarkProduct`); `Router.patchSearch` with a `Route.subset` prop for the search box, whose query is `debounce: "300 millis"` so typing doesn't fetch per keystroke (the first fetch is immediate; the tests move the `TestClock` across the 300 ms); `Head.titleTemplate`; link prefetch and the `vite:preloadError` reload guard as `Effect.acquireRelease` resources in the app scope (the guard calls `preventDefault()` only when it actually reloads); `#state` decoded with `JsonString.jsonString` (`Schema.fromJsonString` over `Schema.toCodecJson`); and no `manualChunks`.
 
@@ -227,11 +228,11 @@ Other Effect UI practices used: `Effect.fn` for `boot` and the ports; `UiSchema.
 - the **entry contains none** of the page markers, page-only query/Command names, or page-only `@effect/ui-kit` primitives (`Tabs`, `Collapsible`, `Dialog`, found by data attributes only their modules write);
 - the entry reaches every page through a **dynamic `import()`** and statically imports none;
 - the **`Query.Service` runtime** (`Query-*.js`) and the kit's `Button` and `Input` exist in the build but in no chunk the entry holds or statically imports;
-- each of the 5 pages is its **own** chunk, holds its own markers, queries, Command and kit primitives, and none of another page's (`Tabs` + `Collapsible` in Analytics, `Dialog` in ProductDetail);
+- each of the 5 pages is its **own** chunk, holds its own markers, queries, Command, feature RPC group and kit primitives, and none of another page's (`Tabs` + `Collapsible` in Analytics, `Dialog` in ProductDetail);
 - every page-only needle is found in **every** chunk of the build (shared chunks included) and that set is exactly its owner's chunk;
-- the shared catalog data and `CatalogPort` are in exactly one shared chunk, reached (through static imports, transitively) by the two product pages and by no other page or the entry; `BookmarkPort` lives only in ProductDetail's chunk and `AnalyticsPort` only in Analytics';
+- the shared `Product` schema is in exactly one shared chunk, reached (through static imports, transitively) by the two product pages and by no other page or the entry;
 - `Home` and `NotFound` do not statically or transitively import `Query-*.js` or `transition-*.js`;
-- production `dist/client/` contains **0 bytes** of `@effect/ui-devtools`;
+- production `dist/client/` contains **0 bytes** of server stores, seed datasets, `RpcServer`, or `@effect/ui-devtools`;
 - the entry owns exactly one stylesheet (Tailwind), and only Analytics owns a second one;
 - every JS file in `assets/` is accounted for by the manifest.
 
@@ -241,21 +242,21 @@ Output (hashes vary):
 
 ```
 chunk               file                                    raw (B)   gzip (B)  page-only code
-------------------  ------------------------------------  ---------  ---------  ---------------------------------------------------------------------------
-entry               assets/main-2bxCHxTq.js                   92711      34529
-page:Home           assets/HomePage-WFy3gUdI.js                 997        542
-page:Products       assets/ProductsPage-DNa4V0k8.js            2510       1267  SearchProducts query
-page:ProductDetail  assets/ProductDetailPage-CGXPoCAD.js      23245       8692  GetProduct query, BookmarkProduct command, BookmarkPort port, ui-kit Dialog
-page:Analytics      assets/AnalyticsPage-kQCnga-w.js          21904       8859  GetAnalytics query, AnalyticsPort port, ui-kit Tabs, ui-kit Collapsible
-page:NotFound       assets/NotFoundPage-Due3V8CU.js             570        361
+------------------  ------------------------------------  ---------  ---------  ---------------------------------------------------------------------------------------------------------------------
+entry               assets/main-BVr9j2Zx.js                   94771      35448
+page:Home           assets/HomePage-haRG-j9N.js                 997        544
+page:Products       assets/ProductsPage-Bxx76Zyb.js            2737       1351  SearchProducts query, SearchRpcs rpc
+page:ProductDetail  assets/ProductDetailPage-BueEcxpi.js      23451       8725  GetProduct query, BookmarkProduct command, ProductRpcs getProduct rpc, ProductRpcs bookmarkProduct rpc, ui-kit Dialog
+page:Analytics      assets/AnalyticsPage-rDGBeZn6.js          21681       8670  GetAnalytics query, AnalyticsRpcs rpc, ui-kit Tabs, ui-kit Collapsible
+page:NotFound       assets/NotFoundPage-B5wuQilA.js             570        365
+shared              assets/ApiError-DVfWrDI1.js               50882      17475
 shared              assets/Button-1z9k8cO3.js                   592        384
-shared              assets/CatalogPort-DatLY2VF.js             1554        866
-shared              assets/Query-BCbHjrAa.js                  48794      16905
-shared              assets/Subscription-CkJCaYNN.js            3972       1856
+shared              assets/Product-tH4GV-MY.js                  673        445
+shared              assets/RpcClient-BAdLVFpL.js              32573      11271
 shared              assets/attributes-BNllm5bX.js               484        306
-shared              assets/classes-CO1xBsvr.js               213237      71257
-shared              assets/transition-DVzTqHnK.js              6173       2851
-css                 assets/main-V5nomNgp.css                  15812       3912
+shared              assets/classes-BwIPgA2Y.js               241352      80513
+shared              assets/transition-C8GLlmZl.js              6173       2854
+css                 assets/main-XHuNYSfM.css                  16286       3986
 css                 assets/AnalyticsPage-BZFaGk-P.css            91        104
 ```
 
@@ -283,12 +284,13 @@ GET /analytics   → css: main.css + AnalyticsPage.css · modulepreload: Analyti
 
 ## HTTP behaviour
 
-`src/server/handler.ts` is a plain `node:http` handler. [`test/server.test.ts`](test/server.test.ts) drives it against a temporary client directory.
+`src/server/handler.ts` composes `RpcServer.layerHttp` (`POST /rpc` with `RpcSerialization.layerJson`) with static asset serving and SSR (`NodeHttpServer` in `src/server/serve.ts`, also loaded through Vite in `scripts/dev.ts`). [`test/server.test.ts`](test/server.test.ts) drives it against a temporary client directory.
 
+- **Effect RPC (`POST /rpc`):** serves `searchProducts`, `getProduct`, `bookmarkProduct`, and `getAnalytics` over JSON HTTP, sharing the same server store `Layer` instance as in-process SSR.
 - **URLs** are resolved with `AppRoute.resolve` first, as `HtmlServerHttp.layerHttp` does: an undecodable URL (`/%E0%A4%A`), a protocol-relative target (`//evil.com/`), or any canonical redirect whose `Location` would start with `//` or `/\` (`/%2F%2Fevil.com/`, `/.//evil.com/`, `/a/..//evil.com/`) is rejected with `400`; a safe non-canonical path is a permanent `301` (`/products/` → `/products`), or a temporary `302` when search params were dropped as invalid (`/products?q=a&q=b` → `/products`), with `Location: AppRoute.print(route)`.
 - **Status** is `404` for the catch-all route and for a page that rendered a missing record (an unknown product marks its root with `data-http-status="404"`), so it cannot drift from what the document shows.
-- **Static files** come from `dist/client` only: `..` segments, malformed escapes and any dotfile segment (`/.vite/manifest.json`, in any letter case) are never served. `/assets/*` is `immutable`; a real `favicon.ico` in `dist/client` is served before falling back to `204`; files stream through `stream.pipeline`, so a file that vanishes mid-request never raises an unhandled stream error.
-- **Methods:** `GET` and `HEAD` only (`405` otherwise). `HEAD` carries the GET's real `content-length` and no body.
+- **Static files** come from `dist/client` only: `..` segments, malformed escapes and any dotfile segment (`/.vite/manifest.json`, in any letter case) are never served. `/assets/*` is `immutable`; a real `favicon.ico` in `dist/client` is served before falling back to `204`.
+- **Methods:** `POST` on `/rpc`, `GET` and `HEAD` on page/static routes (`405` otherwise). `HEAD` carries the GET's real `content-length` and no body.
 - **Headers:** `x-content-type-options: nosniff` always. The production server (the one with a `clientDir`) also sends `content-security-policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'`. The dev server doesn't, because Vite's HMR client and injected styles need more.
 - **Errors never show internals:** failed queries on `ProductsPage`, `ProductDetailPage`, and `AnalyticsPage` render a plain message, never `Cause.pretty`.
 
@@ -321,7 +323,7 @@ GET /analytics   → css: main.css + AnalyticsPage.css · modulepreload: Analyti
 
 - **Layer lifetime.** `BrowserRouter.layer` installs the document's click/hover listeners and removes them when its layer closes. Provide the platform layers _around_ the scope that keeps the app alive (`main.ts`), not inside `boot()`.
 - **One module graph, two sides.** `effect` and `@effect/ui` keep per-module registries, so the server and the browser of a test must share them. They do: each side is its own `createAppBundle()`, so lazy caches are separate while the libraries are the same copy.
-- **Ports and per-route splitting.** `Component.provide` lets the inner provide win, so if a lazy page provided a required `Context.Service` port directly, outer test layers would be shadowed — while providing all ports at the composition root (`main.ts`) would pull every feature port and dataset into the entry chunk. Using `Context.Reference` (defaulting to `live`) lets pages provide only their query/Command layers so ports stay in their route chunks and tests can override them in any layer order. (In a larger app backed by a shared HTTP/RPC client, that transport would be a required `Context.Service` at the root.)
+- **Feature-scoped RPC groups and per-route splitting.** Putting all RPCs in one shared client group would pull every page's schemas into the entry chunk. Splitting them into per-feature `RpcGroup`s (`SearchRpcs`, `ProductRpcs`, `AnalyticsRpcs`) and merging them only on the server (`src/server/rpc.ts`) keeps each feature's schemas in its lazy route chunk while `RpcClient.Protocol` remains a single required `Context.Service` provided once at each composition root.
 - **Component name = lazy name**, because state paths are built from it.
 - **Kit primitives are code-split by use, not by config.** Import `Tabs`/`Dialog` only inside the page that draws them; the barrel `@effect/ui-kit` tree-shakes (`sideEffects: []`).
 - **Tailwind scans source files**, so class recipes in `design/classes.ts` must stay whole string literals. The per-route stylesheet (`chart.css`) is plain CSS so it keeps its own `<link>`.

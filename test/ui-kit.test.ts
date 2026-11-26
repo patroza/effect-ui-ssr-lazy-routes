@@ -2,8 +2,9 @@ import { TestHost } from "@effect/ui/testing"
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { TestClock } from "effect/testing"
-import * as BookmarkPort from "../src/product/services/BookmarkPort.ts"
+import * as ApiError from "../src/rpc/domain/ApiError.ts"
 import * as Helpers from "./helpers.ts"
+import * as TestRpc from "./support/rpc.ts"
 
 const analyticsPath = "/App/AnalyticsPage[/analytics]"
 
@@ -220,17 +221,10 @@ describe("@effect/ui-kit primitives: interactive after hydration", () => {
       })
     )
 
-    it.effect("Command.Service: BookmarkProduct handles failure and allows retry", () =>
-      Effect.gen(function* () {
-        let attempts = 0
-        const browser = yield* Helpers.hydrateFromServer("/products/42").pipe(
-          Effect.provideService(BookmarkPort.BookmarkPort, {
-            bookmark: () => {
-              attempts++
-              return attempts === 1 ? Effect.fail("offline") : Effect.void
-            }
-          })
-        )
+    it.effect("Command.Service: BookmarkProduct handles failure and allows retry", () => {
+      let attempts = 0
+      return Effect.gen(function* () {
+        const browser = yield* Helpers.hydrateFromServer("/products/42")
         const button = Helpers.byTestId(browser.container, "detail-bookmark")
         Helpers.click(button)
         yield* Helpers.settleFrames
@@ -241,8 +235,17 @@ describe("@effect/ui-kit primitives: interactive after hydration", () => {
         yield* Helpers.settleFrames
         expect(button.textContent).toBe("Bookmarked ✓")
         expect(attempts).toBe(2)
-      })
-    )
+      }).pipe(
+        Effect.provide(
+          TestRpc.makeCountingRpcProtocol({
+            bookmarkProduct: () => {
+              attempts++
+              return attempts === 1 ? Effect.fail(new ApiError.ApiError({ message: "offline" })) : Effect.void
+            }
+          })
+        )
+      )
+    })
 
     it.effect("Button + Input on Products: compare toggles in place, typing updates the URL", () =>
       Effect.gen(function* () {

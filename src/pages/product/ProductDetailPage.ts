@@ -112,7 +112,8 @@ const ProductDetailPageNoDeps = Html.component({
           back
         )
     }
-    return shell.attr("data-catalog", Product.CATALOG_CHUNK).children(
+    const bookmarked = model.bookmark === "Saved" || product.bookmarked
+    return shell.attr("data-product-schema", Product.PRODUCT_SCHEMA_CHUNK).children(
       h.h1.class(Design.ui.title).children(product.name),
       h.p.class(Design.ui.muted).children(product.blurb),
       h.p
@@ -132,19 +133,19 @@ const ProductDetailPageNoDeps = Html.component({
           .attr("data-testid", "detail-more")
           .children("+"),
         Button(h, {
-          props: { disabled: model.bookmark === "Saving" || model.bookmark === "Saved" },
+          props: { disabled: model.bookmark === "Saving" || bookmarked },
           onPress: ProductDetailPageMessage.ClickedBookmark()
         })
           .class(Design.ui.button)
           .attr("data-testid", "detail-bookmark")
           .children(
-            model.bookmark === "Idle"
-              ? "Bookmark"
+            bookmarked
+              ? "Bookmarked ✓"
               : model.bookmark === "Saving"
                 ? "Saving…"
                 : model.bookmark === "Failed"
                   ? "Bookmark failed — retry"
-                  : "Bookmarked ✓"
+                  : "Bookmark"
           ),
         Dialog(h, {
           props: { open: model.inquiryOpen },
@@ -210,9 +211,9 @@ const ProductDetailPageNoDeps = Html.component({
 })
 
 /**
- * The page with its own Layers: `GetProduct` (over `CatalogPort`) and `BookmarkProduct`
- * (over `BookmarkPort`). Both ports are `Context.Reference`s defaulting to `live`, so
- * all four stay inside their page/shared chunks without shadowing outer test overrides.
+ * The page with its own Layers: `GetProduct` and `BookmarkProduct` call
+ * `ProductRpcs` over the root-provided `RpcClient.Protocol`, keeping the
+ * feature's RPC definitions and query/command layers in the ProductDetail chunk.
  */
 export const ProductDetailPage = ProductDetailPageNoDeps.pipe(
   Component.provide(Layer.mergeAll(GetProduct.GetProduct.layer, BookmarkProduct.BookmarkProduct.layer))

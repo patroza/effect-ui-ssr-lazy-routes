@@ -67,7 +67,7 @@ const AnalyticsPageNoDeps = Html.component({
     return h.section
       .attr("data-page-chunk", ANALYTICS_PAGE_CHUNK)
       .attr("data-chart", Chart.ANALYTICS_CHART_CHUNK)
-      .attr("data-dataset", Analytics.ANALYTICS_DATASET_CHUNK)
+      .attr("data-analytics-schema", Analytics.ANALYTICS_SCHEMA_CHUNK)
       .attr("data-query", GetAnalytics.GET_ANALYTICS_QUERY_CHUNK)
       .class(Design.ui.stack)
       .children(
@@ -117,5 +117,5 @@ const AnalyticsPageNoDeps = Html.component({
   }
 })
 
-/** The page with its own Layer: `GetAnalytics` reads `AnalyticsPort` (a `Context.Reference` defaulting to `live`). */
+/** The page with its own Layer: `GetAnalytics` calls `AnalyticsRpcs` over the root-provided `RpcClient.Protocol`. */
 export const AnalyticsPage = AnalyticsPageNoDeps.pipe(Component.provide(GetAnalytics.GetAnalytics.layer))

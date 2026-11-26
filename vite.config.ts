@@ -47,7 +47,8 @@ export default defineConfig(({ isSsrBuild, mode }) => ({
       },
   // Bundle every dependency into dist/server so it runs without node_modules
   // and resolves @effect/ui's `production` export condition (`#dev` -> devOff).
-  ssr: { noExternal: true },
+  // In dev (`isSsrBuild === false`), keep Node CJS deps like `ws` external for Vite's ESM module runner.
+  ssr: isSsrBuild ? { noExternal: true } : { external: ["@effect/platform-node", "ws"] },
   test: {
     environment: "happy-dom",
     include: ["test/**/*.test.ts"],

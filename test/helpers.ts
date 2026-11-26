@@ -12,28 +12,28 @@ import * as Routes from "../src/routes.ts"
 import type * as Assets from "../src/server/assets.ts"
 import * as Render from "../src/server/render.ts"
 import * as Frames from "./support/frames.ts"
-import * as Ports from "./support/ports.ts"
+import * as TestRpc from "./support/rpc.ts"
 
 export const noAssets: Assets.PageAssets = { scripts: [], modulePreloads: [], stylesheets: [] }
 
 /**
  * What every test of the app runs on: the Router at `url` (`Router.memory`, no `window`), the `TestHost` (test
- * scheduler, `TestClock`), and the counting ports. Provide it around the test body with `Effect.provide`.
+ * scheduler, `TestClock`), and the counting in-process RPC protocol. Provide it around the test body with `Effect.provide`.
  */
 export const appAt = (url: string) =>
   Layer.mergeAll(Router.memory({ routes: Routes.AppRoute, url }), TestHost.layer()).pipe(
-    Layer.provideMerge(Ports.countingPorts)
+    Layer.provideMerge(TestRpc.makeCountingRpcProtocol())
   )
 
 /**
  * What a test that boots the real browser entry (`hydrateFromServer`) runs on: the `TestHost` and the counting
- * ports. The Router is `BrowserRouter` (happy-dom's `window`), which `hydrateFromServer` builds itself.
+ * in-process RPC protocol. The Router is `BrowserRouter` (happy-dom's `window`), which `hydrateFromServer` builds itself.
  */
-export const browserEnv = TestHost.layer().pipe(Layer.provideMerge(Ports.countingPorts))
+export const browserEnv = TestHost.layer().pipe(Layer.provideMerge(TestRpc.countingRpcProtocol))
 
-/** How many port operations ran in this test's Env (the server's and the client's together). */
+/** How many RPC operations ran in this test's Env (the server's and the client's together). */
 export const portCounts = Effect.gen(function* () {
-  const calls = yield* Ports.PortCalls
+  const calls = yield* TestRpc.RpcCalls
   return yield* calls.counts
 })
 
@@ -131,18 +131,18 @@ export interface ServerDocument {
   readonly html: string
   readonly appHtml: string
   readonly state: Renderer.State
-  /** The port operations the server ran for this render (its own counters, apart from the browser's). */
-  readonly serverCalls: Ports.PortCounts
+  /** The RPC operations the server ran for this render (its own counters, apart from the browser's). */
+  readonly serverCalls: TestRpc.RpcCounts
 }
 
 /** Server-renders `url` with its own pages and app, and splits the document the way a browser would see it. */
 export const serverRender = Effect.fn("serverRender")(function* (url: string) {
-  const ports = yield* Layer.build(Layer.fresh(Ports.countingPorts))
-  const page = yield* renderDocument(url).pipe(Effect.provideContext(ports))
+  const rpc = yield* Layer.build(TestRpc.makeCountingRpcProtocol())
+  const page = yield* renderDocument(url).pipe(Effect.provideContext(rpc))
   const parsed = new DOMParser().parseFromString(page.html, "text/html")
   const state = State.readState(parsed.getElementById("state")?.textContent)
   if (state === undefined) throw new Error("server HTML has no #state")
-  const serverCalls = yield* Context.get(ports, Ports.PortCalls).counts
+  const serverCalls = yield* Context.get(rpc, TestRpc.RpcCalls).counts
   return {
     status: page.status,
     html: page.html,

@@ -3,9 +3,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { createServer, request, type Server as HttpServer } from "node:http"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { Effect, Exit, Layer, Option } from "effect"
+import { FetchHttpClient } from "effect/http"
+import { RpcClient, type RpcClientError, RpcSerialization } from "effect/rpc"
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test"
 import * as Pages from "../src/pages.ts"
 import * as Handler from "../src/server/handler.ts"
+import * as Rpc from "../src/server/rpc.ts"
 
 interface Reply {
   readonly status: number
@@ -19,11 +23,13 @@ const scriptText = "export const chunk = 1\n"
 let root: string
 let server: HttpServer
 let dev: HttpServer
+let appServer: Handler.ManagedNodeHandler
+let devAppServer: Handler.ManagedNodeHandler
 let port: number
 let devPort: number
 
-const listen = async (handler: ReturnType<typeof Handler.createAppHandler>): Promise<[HttpServer, number]> => {
-  const instance = createServer(handler)
+const listen = async (managed: Handler.ManagedNodeHandler): Promise<[HttpServer, number]> => {
+  const instance = createServer(managed.handler)
   await new Promise<void>((resolve) => instance.listen(0, "127.0.0.1", resolve))
   const address = instance.address()
   if (typeof address !== "object" || address === null) throw new Error("no address")
@@ -41,14 +47,20 @@ beforeAll(async () => {
   writeFileSync(join(clientDir, "robots.txt"), "User-agent: *\n")
   writeFileSync(join(clientDir, ".vite", "manifest.json"), '{"manifest":"private"}')
   writeFileSync(join(root, "secret.txt"), secret)
-  ;[server, port] = await listen(Handler.createAppHandler({ clientDir, assetsFor }))
-  ;[dev, devPort] = await listen(Handler.createAppHandler({ assetsFor }))
+  appServer = await Handler.createAppServer({ clientDir, assetsFor })
+  devAppServer = await Handler.createAppServer({ assetsFor })
+  ;[server, port] = await listen(appServer)
+  ;[dev, devPort] = await listen(devAppServer)
   // Preload lazy page modules so Vitest's cold on-demand transform does not race the 1s SSR budget on the first GET.
   await Promise.all(Object.values(Pages.pages).map((page) => page.preload()))
 })
 
 afterAll(async () => {
-  await Promise.all([server, dev].map((s) => new Promise<void>((resolve) => s.close(() => resolve()))))
+  await Promise.all([
+    ...[server, dev].map((s) => new Promise<void>((resolve) => s.close(() => resolve()))),
+    appServer.dispose(),
+    devAppServer.dispose()
+  ])
   rmSync(root, { recursive: true, force: true })
 })
 
@@ -65,6 +77,24 @@ const raw = (path: string, method = "GET", target = port): Promise<Reply> =>
     req.on("error", reject)
     req.end()
   })
+
+const runRpc = <A, E>(
+  fn: (client: RpcClient.FromGroup<typeof Rpc.AppRpcs, RpcClientError.RpcClientError>) => Effect.Effect<A, E>,
+  target = port
+) =>
+  Effect.gen(function* () {
+    const client = yield* RpcClient.make(Rpc.AppRpcs)
+    return yield* fn(client)
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(
+      RpcClient.layerProtocolHttp({ url: `http://127.0.0.1:${target}/rpc` }).pipe(
+        Layer.provide(RpcSerialization.layerJson),
+        Layer.provide(FetchHttpClient.layer)
+      )
+    ),
+    Effect.runPromise
+  )
 
 describe("static files", () => {
   it("serves a hashed asset with an immutable cache header and the security headers", async () => {
@@ -139,7 +169,7 @@ describe("malformed URLs are the client's fault, never a 500", () => {
 })
 
 describe("methods", () => {
-  it("answers 405 with Allow for POST", async () => {
+  it("answers 405 with Allow for POST on non-RPC routes", async () => {
     const reply = await raw("/", "POST")
     expect(reply.status).toBe(405)
     expect(reply.headers["allow"]).toBe("GET, HEAD")
@@ -211,7 +241,8 @@ describe("pages", () => {
     const withFavicon = join(root, "client-with-favicon")
     mkdirSync(withFavicon, { recursive: true })
     writeFileSync(join(withFavicon, "favicon.ico"), "ICO")
-    const [faviconServer, faviconPort] = await listen(Handler.createAppHandler({ clientDir: withFavicon, assetsFor }))
+    const faviconApp = await Handler.createAppServer({ clientDir: withFavicon, assetsFor })
+    const [faviconServer, faviconPort] = await listen(faviconApp)
     try {
       const reply = await raw("/favicon.ico", "GET", faviconPort)
       expect(reply.status).toBe(200)
@@ -220,6 +251,7 @@ describe("pages", () => {
     } finally {
       faviconServer.closeAllConnections()
       await new Promise<void>((resolve) => faviconServer.close(() => resolve()))
+      await faviconApp.dispose()
     }
   })
 
@@ -228,5 +260,65 @@ describe("pages", () => {
     expect(reply.status).toBe(200)
     expect(reply.headers["x-content-type-options"]).toBe("nosniff")
     expect(reply.headers["content-security-policy"]).toBeUndefined()
+  })
+})
+
+describe("Effect RPC over HTTP (POST /rpc)", () => {
+  it("serves searchProducts and getAnalytics over POST /rpc", async () => {
+    const products = await runRpc((client) => client.searchProducts({ q: "mug" }))
+    expect(products).toHaveLength(1)
+    expect(products[0]?.name).toBe("Enamel camp mug")
+    expect(products[0]?.bookmarked).toBe(false)
+
+    const revenue = await runRpc((client) => client.getAnalytics({ metric: "revenue" }))
+    expect(revenue).toHaveLength(12)
+    expect(revenue.reduce((sum, point) => sum + point.value, 0)).toBe(237500)
+
+    const orders = await runRpc((client) => client.getAnalytics({ metric: "orders" }))
+    expect(orders.reduce((sum, point) => sum + point.value, 0)).toBe(5664)
+  })
+
+  it("persists bookmarkProduct mutations across subsequent RPC reads and in-process SSR renders", async () => {
+    const before = await runRpc((client) => client.getProduct({ id: "42" }))
+    expect(Option.isSome(before)).toBe(true)
+    if (Option.isSome(before)) {
+      expect(before.value.name).toBe("Field notebook")
+      expect(before.value.bookmarked).toBe(false)
+    }
+
+    await runRpc((client) => client.bookmarkProduct({ id: "42" }))
+
+    const after = await runRpc((client) => client.getProduct({ id: "42" }))
+    expect(Option.isSome(after)).toBe(true)
+    if (Option.isSome(after)) {
+      expect(after.value.bookmarked).toBe(true)
+    }
+
+    // In-process SSR reads from the same server store layer instance.
+    const ssrAfter = await raw("/products/42")
+    expect(ssrAfter.status).toBe(200)
+    expect(ssrAfter.body).toContain("Bookmarked ✓")
+  })
+
+  it("returns None for an unknown product and fails bookmarkProduct with typed ApiError", async () => {
+    const missing = await runRpc((client) => client.getProduct({ id: "999" }))
+    expect(Option.isNone(missing)).toBe(true)
+
+    const exit = await runRpc((client) => Effect.exit(client.bookmarkProduct({ id: "999" })))
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) {
+      expect(String(exit.cause)).toContain('Product "999" not found')
+    }
+  })
+
+  it("applies security headers to POST /rpc responses", async () => {
+    const response = await fetch(`http://127.0.0.1:${port}/rpc`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ _tag: "Request", id: "1", tag: "getProduct", payload: { id: "42" }, headers: [] })
+    })
+    expect(response.status).toBe(200)
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff")
+    expect(response.headers.get("content-security-policy")).toBe(Handler.contentSecurityPolicy)
   })
 })
