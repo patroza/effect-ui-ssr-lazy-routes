@@ -113,7 +113,10 @@ const parseRequestUrl = (target: string): URL | undefined => {
   return url.origin === "http://localhost" ? url : undefined
 }
 
-const isRpcPathname = (pathname: string): boolean => pathname === "/rpc" || pathname === "/rpc/"
+const isRpcRawPath = (target: string): boolean => {
+  const rawPath = target.split(/[?#]/, 1)[0]
+  return rawPath === "/rpc" || rawPath === "/rpc/"
+}
 
 /**
  * Handles static assets and SSR page routes (everything other than `/rpc`),
@@ -184,7 +187,7 @@ export const makeHttpAppEffect = (options: AppHandlerOptions) => {
         if (url === undefined) {
           return textReply(method, 400, { "content-type": "text/plain", ...security }, "Bad Request")
         }
-        if (isRpcPathname(url.pathname)) {
+        if (isRpcRawPath(request.url)) {
           if (method !== "POST") {
             return textReply(
               method,

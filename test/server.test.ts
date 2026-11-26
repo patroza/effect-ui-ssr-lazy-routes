@@ -327,6 +327,12 @@ describe("Effect RPC over HTTP (POST /rpc)", () => {
       expect(disallowed.status, `${method} /rpc`).toBe(405)
       expect(disallowed.headers["allow"], `${method} /rpc`).toBe("POST")
     }
+
+    for (const path of ["/./rpc", "/a/../rpc", "/rpc/.", "/%2e/rpc"]) {
+      const nonCanonical = await raw(path, "POST")
+      expect(nonCanonical.status, `POST ${path}`).toBe(405)
+      expect(nonCanonical.headers["allow"], `POST ${path}`).toBe("GET, HEAD")
+    }
   })
 
   it("evicts closed in-process RPC clients via disconnects so repeated SSR renders do not leak", async () => {
