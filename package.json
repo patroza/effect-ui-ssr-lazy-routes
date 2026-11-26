@@ -9,20 +9,20 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "dev": "node scripts/dev.ts",
-    "build": "pnpm build:client && pnpm build:server",
+    "dev": "vp run dev:server",
+    "build": "vp run build:client && vp run build:server",
     "build:client": "vp build",
     "build:server": "vp build --ssr src/server/serve.ts --outDir dist/server",
-    "start": "node dist/server/serve.js",
+    "start": "vp run start:server",
     "typecheck": "effect-tsgo tsrs --noEmit",
     "lint": "effect-tsgo vp lint",
-    "lint:fix": "effect-tsgo vp check --fix",
-    "format": "vp fmt",
+    "lint:fix": "vp run lint:autofix",
+    "format": "vp run format:write",
     "format:check": "vp fmt --check",
     "test": "vp test run",
     "verify:bundles": "node scripts/verify-bundles.ts",
     "smoke": "node scripts/smoke.ts",
-    "check": "effect-tsgo vp check && pnpm typecheck && pnpm build && pnpm verify:bundles && pnpm test && pnpm smoke"
+    "check": "vp run format:check && vp run lint && vp run typecheck && vp run build:client && vp run build:server && vp run verify:bundles && vp run test && vp run smoke"
   },
   "dependencies": {
     "@effect/ui": "https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234",

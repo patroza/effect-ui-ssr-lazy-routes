@@ -13,6 +13,20 @@ const sharedOxlintConfig = EffectDiagnostics.loadOxlintJsonConfig(
 const strictOxlintConfig = EffectDiagnostics.loadOxlintJsonConfig(join(root, "config/oxlint.strict.json"))
 
 export default defineConfig(({ isSsrBuild, mode }) => ({
+  run: {
+    cache: {
+      scripts: true,
+      tasks: true
+    },
+    tasks: {
+      // Interactive / in-place mutating commands must never be cached (non-overlapping names
+      // referenced by the matching package.json scripts so both `pnpm <name>` and `vp run <name>` stay safe).
+      "dev:server": { command: "node scripts/dev.ts", cache: false },
+      "start:server": { command: "node dist/server/serve.js", cache: false },
+      "format:write": { command: "vp fmt", cache: false },
+      "lint:autofix": { command: "effect-tsgo vp check --fix", cache: false }
+    }
+  },
   // DevToolsVite.plugin only applies during `vite dev` (never during `vp build`, preview, or Vitest).
   // Skip Tailwind & DevTools during `vp test` (matching the former standalone `vitest.config.ts`),
   // and use `lazyPlugins` to skip plugin initialization during `vp check` / `vp lint` / `vp fmt`.

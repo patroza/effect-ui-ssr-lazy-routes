@@ -32,7 +32,7 @@ pnpm install
 pnpm typecheck        # effect-tsgo tsrs --noEmit (strict; no `any`, no `@ts-ignore`)
 pnpm lint             # effect-tsgo vp lint (type-aware Oxlint + embedded effecttsgo/* diagnostics, warnings denied)
 pnpm format:check     # vp fmt --check (pnpm format writes)
-pnpm check            # effect-tsgo vp check (fmt + lint + type-check) + typecheck + build + verify:bundles + test + smoke
+pnpm check            # cached via vp run: format:check + lint + typecheck + build:client + build:server + verify:bundles + test + smoke
 pnpm build            # vp build (dist/client + .vite/manifest.json) and dist/server
 pnpm verify:bundles   # prints the chunk table and proves the per-page split from the built output
 pnpm test             # vp test run (@effect/vitest + happy-dom, on the TestClock)
@@ -45,15 +45,16 @@ pnpm dev              # Vite+ middleware + the same SSR handler, with HMR (PORT=
 
 Vite+ (`vite-plus`) unifies Vite, Vitest, Oxlint, Oxfmt, and `tsrs` into a single `vite.config.ts` and local `vp` CLI (no global `vp` install required; `pnpm-workspace.yaml` overrides pin `vite`/`vitest` to the bundled versions and keep `oxlint@1.95.0`, `oxfmt@0.80.0`, and `tsrs@7.1.0-beta.tsrs5` so no lint rule is lost). Always invoke `vp lint` and `vp check` through `effect-tsgo` (as `pnpm lint` and `pnpm check` do); plain `vp lint` without `effect-tsgo` fails safe on the `effecttsgo` plugin.
 
-| Command          | Runs                                                                                                           |
-| ---------------- | -------------------------------------------------------------------------------------------------------------- |
-| `pnpm typecheck` | `effect-tsgo tsrs --noEmit` (Effect-patched `tsrs` with `@effect/language-service`)                            |
-| `pnpm lint`      | `effect-tsgo vp lint` (type-aware Oxlint + type-checking + all 99 `effecttsgo/*` error rules, warnings denied) |
-| `pnpm lint:fix`  | `effect-tsgo vp check --fix` (formats and applies lint autofixes in one pass)                                  |
-| `pnpm format`    | `vp fmt` (`pnpm format:check` runs `vp fmt --check` for CI)                                                    |
-| `pnpm check`     | `effect-tsgo vp check`, `pnpm typecheck`, `pnpm build`, `pnpm verify:bundles`, `pnpm test`, and `pnpm smoke`   |
+| Command          | Runs                                                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm typecheck` | `effect-tsgo tsrs --noEmit` (Effect-patched `tsrs` with `@effect/language-service`)                                      |
+| `pnpm lint`      | `effect-tsgo vp lint` (type-aware Oxlint + type-checking + all 99 `effecttsgo/*` error rules, warnings denied)           |
+| `pnpm lint:fix`  | `effect-tsgo vp check --fix` (formats and applies lint autofixes in one pass)                                            |
+| `pnpm format`    | `vp fmt` (`pnpm format:check` runs `vp fmt --check` for CI)                                                              |
+| `pnpm check`     | `vp run` over `format:check`, `lint`, `typecheck`, `build:client`, `build:server`, `verify:bundles`, `test`, and `smoke` |
 
-- **Unified `vite.config.ts`.** Build (`build`, `ssr`), tests (`test`), formatting (`fmt`), and linting (`lint`) all live in `vite.config.ts` via `defineConfig` from `vite-plus` (with `lazyPlugins` so `vp check` / `vp lint` / `vp fmt` skip Vite plugin startup, and `mode === "test"` skipping Tailwind and DevTools during Vitest).
+- **Unified `vite.config.ts`.** Build (`build`, `ssr`), tests (`test`), formatting (`fmt`), linting (`lint`), and task caching (`run`) all live in `vite.config.ts` via `defineConfig` from `vite-plus` (with `lazyPlugins` so `vp check` / `vp lint` / `vp fmt` skip Vite plugin startup, and `mode === "test"` skipping Tailwind and DevTools during Vitest).
+- **Automatic task caching & CI.** `vite.config.ts` enables `run.cache: { scripts: true, tasks: true }`, so Vite Task (`vp run`) automatically tracks file reads, directory listings, and written outputs for every cacheable `package.json` script (including `pnpm check` and `pnpm build`) and restores `dist/` on cache hits. Interactive and in-place mutating commands (`dev`, `start`, `format`, `lint:fix`) delegate to non-overlapping `cache: false` tasks so they are never cached. `.github/workflows/ci.yml` restores and saves `node_modules/.vite/task-cache` around `pnpm check` with `actions/cache`.
 - **Effect diagnostics fail the build.** `tsconfig.plugins.json` holds the `@effect/language-service` severity table (every rule `"error"`;
   `unstableApiUsage` and `experimentalApiUsage` are `"off"` because `@effect/ui` is `@stability experimental`). `scripts/lib/effect-diagnostics.mjs`
   derives every enabled rule as an `effecttsgo/*` oxlint rule directly for `vite.config.ts` (extending `@effect/tsgo/oxlint-presets` to register the
