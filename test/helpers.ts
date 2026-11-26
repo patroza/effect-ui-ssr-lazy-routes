@@ -1,6 +1,6 @@
 import type { Renderer } from "@effect/ui"
 import { afterEach, vi } from "vitest"
-import type * as Assets from "../src/assets.ts"
+import type * as Assets from "../src/server/assets.ts"
 import type * as Routes from "../src/routes.ts"
 
 /**
@@ -9,7 +9,13 @@ import type * as Routes from "../src/routes.ts"
  * observes the real `import()` that `Component.lazy` does.
  */
 export const loadedPages = new Set<string>()
-const pageModules = ["Home", "Products", "ProductDetail", "Analytics", "NotFound"] as const
+const pageModules = {
+  Home: "../src/pages/HomePage.ts",
+  Products: "../src/pages/ProductsPage.ts",
+  ProductDetail: "../src/pages/product/ProductDetailPage.ts",
+  Analytics: "../src/pages/AnalyticsPage.ts",
+  NotFound: "../src/pages/NotFoundPage.ts"
+} as const
 
 export const noAssets: Assets.PageAssets = { scripts: [], modulePreloads: [], stylesheets: [] }
 
@@ -21,8 +27,8 @@ export const noAssets: Assets.PageAssets = { scripts: [], modulePreloads: [], st
 export const loadApp = async () => {
   vi.resetModules()
   loadedPages.clear()
-  for (const name of pageModules) {
-    vi.doMock(`../src/pages/${name}Page.ts`, async (importOriginal) => {
+  for (const [name, modulePath] of Object.entries(pageModules)) {
+    vi.doMock(modulePath, async (importOriginal) => {
       loadedPages.add(name)
       return await importOriginal()
     })
@@ -52,15 +58,15 @@ export const loadApp = async () => {
     ]),
     import("@effect/ui/Router"),
     import("@effect/ui/html"),
-    import("../src/render.ts"),
-    import("../src/bootstrap.ts"),
+    import("../src/server/render.ts"),
+    import("../src/browser/bootstrap.ts"),
     import("../src/pages.ts"),
     import("../src/routes.ts"),
-    import("../src/loading.ts"),
-    import("../src/prefetch.ts"),
-    import("../src/data/products.ts"),
-    import("../src/analytics/dataset.ts"),
-    import("../src/state.ts")
+    import("../src/design/loading.ts"),
+    import("../src/browser/prefetch.ts"),
+    import("../src/product/domain/Product.ts"),
+    import("../src/analytics/domain/Analytics.ts"),
+    import("../src/browser/state.ts")
   ])
   return {
     ...render,
@@ -145,7 +151,7 @@ interface HydrateOptions {
 
 /**
  * Puts the server's HTML in the document at `url`, then runs the real client
- * `boot` against it, exactly as `src/client.ts` does (BrowserRouter included).
+ * `boot` against it, exactly as `src/main.ts` does (BrowserRouter included).
  * The browser is closed automatically after each test.
  *
  * `beforeBoot` runs on the server's DOM before the client boots: capture node
@@ -184,7 +190,7 @@ export async function hydrateFromServer(
   const state = options.editState?.(server.state) ?? server.state
   const { Effect, Exit, Layer, Scope } = app.lib
   const scope = await Effect.runPromise(Scope.make())
-  // Like client.ts: the platform layers live as long as the app's scope, not just as long as `boot`.
+  // Like main.ts: the platform layers live as long as the app's scope, not just as long as `boot`.
   const platform = await Effect.runPromise(
     Layer.buildWithScope(app.platformLayer(app.lib.BrowserRouter.layer({ routes: app.AppRoute })), scope)
   )

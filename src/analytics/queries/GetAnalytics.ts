@@ -1,6 +1,6 @@
 import { Query } from "@effect/ui"
 import { Effect, Schema } from "effect"
-import * as Dataset from "./dataset.ts"
+import * as Dataset from "../domain/Analytics.ts"
 
 /** Marker proving this page-only query lands in the Analytics chunk (see scripts/verify-bundles.ts). */
 export const GET_ANALYTICS_QUERY_CHUNK = "SENTINEL:get-analytics-query"

@@ -1,6 +1,6 @@
 import { Query } from "@effect/ui"
 import { Effect, Option, Schema } from "effect"
-import * as Products from "../data/products.ts"
+import * as Products from "../domain/Product.ts"
 
 /** Marker proving this page-only query lands in the ProductDetail chunk (see scripts/verify-bundles.ts). */
 export const GET_PRODUCT_QUERY_CHUNK = "SENTINEL:get-product-query"

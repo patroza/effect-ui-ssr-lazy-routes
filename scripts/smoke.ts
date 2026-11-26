@@ -72,7 +72,7 @@ try {
       problems.push(`page preloads: ${own.join(", ")}`)
     // Tailwind's stylesheet is global; the Analytics page's own stylesheet loads on /analytics only.
     const sheets = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((m) => m[1] ?? "")
-    if (!sheets.some((href) => /\/client-.*\.css$/.test(href))) problems.push("no global stylesheet")
+    if (!sheets.some((href) => /\/main-.*\.css$/.test(href))) problems.push("no global stylesheet")
     const pageSheet = sheets.some((href) => /AnalyticsPage-.*\.css$/.test(href))
     if (pageSheet !== (check.path === "/analytics"))
       problems.push(`Analytics stylesheet ${pageSheet ? "present" : "missing"}`)

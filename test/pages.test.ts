@@ -7,7 +7,7 @@ import type * as Routes from "../src/routes.ts"
 const loaded = {
   Home: () => import("../src/pages/HomePage.ts").then((m) => m.HomePage),
   Products: () => import("../src/pages/ProductsPage.ts").then((m) => m.ProductsPage),
-  ProductDetail: () => import("../src/pages/ProductDetailPage.ts").then((m) => m.ProductDetailPage),
+  ProductDetail: () => import("../src/pages/product/ProductDetailPage.ts").then((m) => m.ProductDetailPage),
   Analytics: () => import("../src/pages/AnalyticsPage.ts").then((m) => m.AnalyticsPage),
   NotFound: () => import("../src/pages/NotFoundPage.ts").then((m) => m.NotFoundPage)
 } as const satisfies Record<Routes.AppRouteTag, () => Promise<{ readonly definition: { readonly name: string } }>>

@@ -7,7 +7,7 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { gzipSync } from "node:zlib"
-import * as Assets from "../src/assets.ts"
+import * as Assets from "../src/server/assets.ts"
 import type * as Routes from "../src/routes.ts"
 
 const root = fileURLToPath(new URL("..", import.meta.url))

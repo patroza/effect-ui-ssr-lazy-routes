@@ -1,7 +1,7 @@
 import { Head, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
-import * as Design from "../design.ts"
+import * as Design from "../design/classes.ts"
 import * as Routes from "../routes.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */

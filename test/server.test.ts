@@ -4,7 +4,7 @@ import { createServer, request, type Server as HttpServer } from "node:http"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import * as Server from "../src/server.ts"
+import * as Server from "../src/server/handler.ts"
 
 interface Reply {
   readonly status: number

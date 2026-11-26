@@ -1,10 +1,10 @@
 import { Router } from "@effect/ui"
 import { HtmlServer } from "@effect/ui/html"
 import { Effect, Option } from "effect"
-import * as App from "./App.ts"
+import * as App from "../App.ts"
 import * as Assets from "./assets.ts"
-import * as Routes from "./routes.ts"
-import * as Status from "./status.ts"
+import * as Routes from "../routes.ts"
+import * as Status from "../lib/status.ts"
 
 /** A rendered document and the status the render itself implies. */
 export interface RenderedPage {
