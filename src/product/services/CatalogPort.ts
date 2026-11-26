@@ -1,42 +1,35 @@
-import { Context, Effect, Layer, Option } from "effect"
-import * as Products from "../domain/Product.ts"
+import { Context, Effect, Option } from "effect"
+import * as Product from "../domain/Product.ts"
+
+export interface CatalogPortService {
+  readonly search: (q: string | undefined) => Effect.Effect<ReadonlyArray<Product.Product>>
+  readonly find: (id: string) => Effect.Effect<Option.Option<Product.Product>>
+}
+
+/**
+ * The production implementation: an in-memory catalog standing in for a network
+ * round trip on the Effect clock, so a test (`TestClock`) decides when it completes.
+ * Tests wrap it to observe calls (see `test/support/ports.ts`).
+ */
+export const live: CatalogPortService = {
+  search: Effect.fn("CatalogPort.search")(function* (q: string | undefined) {
+    yield* Effect.sleep("5 millis")
+    return Product.searchProducts(q)
+  }),
+  find: Effect.fn("CatalogPort.find")(function* (id: string) {
+    yield* Effect.sleep("5 millis")
+    return Option.fromNullishOr(Product.findProduct(id))
+  })
+}
 
 /**
  * The catalog's I/O. Queries capture it, so a query's fetcher never names the
  * data source. Every operation is an `Effect.fn`, so each call is a span.
  *
- * The in-memory catalog stands in for a network round trip: it sleeps 5 ms on
- * the Effect clock, so a test (`TestClock`) decides when it completes.
+ * A `Context.Reference` carries `live` as its default: pages don't need to
+ * provide it, so it stays in the shared catalog chunk while tests can override
+ * it cleanly in any layer order.
  */
-export class CatalogPort extends Context.Service<
-  CatalogPort,
-  {
-    readonly search: (q: string | undefined) => Effect.Effect<ReadonlyArray<Products.Product>>
-    readonly find: (id: string) => Effect.Effect<Option.Option<Products.Product>>
-  }
->()("catalog/CatalogPort") {
-  /** The production implementation. Tests wrap it to observe calls (see `test/support/ports.ts`). */
-  static readonly live = CatalogPort.of({
-    search: Effect.fn("CatalogPort.search")(function* (q: string | undefined) {
-      yield* Effect.sleep("5 millis")
-      return Products.searchProducts(q)
-    }),
-    find: Effect.fn("CatalogPort.find")(function* (id: string) {
-      yield* Effect.sleep("5 millis")
-      return Option.fromNullishOr(Products.findProduct(id))
-    })
-  })
-
-  /**
-   * What a page provides with `Component.provide`, so the port ships in the page's chunk. `Component.provide`
-   * lets the INNER provide win, so a plain outer test Layer could never replace it. This Layer therefore reuses a
-   * `CatalogPort` the Env already holds (a test's fake or counting wrapper) and falls back to `live`.
-   */
-  static readonly layer = Layer.effect(
-    CatalogPort,
-    Effect.map(
-      Effect.serviceOption(CatalogPort),
-      Option.getOrElse(() => CatalogPort.live)
-    )
-  )
-}
+export const CatalogPort = Context.Reference<CatalogPortService>("product/CatalogPort", {
+  defaultValue: () => live
+})

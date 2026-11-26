@@ -10,6 +10,8 @@ import type * as Routes from "../routes.ts"
 const contentTypes: Readonly<Record<string, string>> = {
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
@@ -23,7 +25,8 @@ const contentTypes: Readonly<Record<string, string>> = {
  * `data:` image. The dev server (Vite's HMR client, injected styles) doesn't
  * get the policy.
  */
-export const contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:"
+export const contentSecurityPolicy =
+  "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'"
 
 export interface AppHandlerOptions {
   /** Decides which assets the document loads for the matched route. */
@@ -105,18 +108,24 @@ export const handleRequest =
         )
       }
       const target = req.url ?? "/"
-      if (!URL.canParse(target, "http://localhost")) {
+      if (target.startsWith("//") || target.startsWith("/\\") || !URL.canParse(target, "http://localhost")) {
         return send(req, res, 400, { "content-type": "text/plain", ...security }, "Bad Request")
       }
       const url = new URL(target, "http://localhost")
-      if (url.pathname === "/favicon.ico") return void res.writeHead(204, security).end()
+      if (url.origin !== "http://localhost") {
+        return send(req, res, 400, { "content-type": "text/plain", ...security }, "Bad Request")
+      }
       if (options.clientDir !== undefined && (await serveStatic(options.clientDir, url.pathname, req, res))) return
+      if (url.pathname === "/favicon.ico") return void res.writeHead(204, security).end()
 
       const page = await Render.renderPage(url.pathname + url.search, options.assetsFor)
       switch (page._tag) {
         case "BadRequest":
           return send(req, res, page.status, { "content-type": "text/plain", ...security }, "Bad Request")
         case "Redirect":
+          if (!Render.isSafeRelativeLocation(page.location)) {
+            return send(req, res, 400, { "content-type": "text/plain", ...security }, "Bad Request")
+          }
           return send(
             req,
             res,

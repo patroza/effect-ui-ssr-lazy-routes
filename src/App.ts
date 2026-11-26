@@ -40,5 +40,20 @@ export const createApp = (pages: Pages.Pages) => {
 
 export type AppComponent = ReturnType<typeof createApp>
 
+/** A matched `{ app, pages }` pair so a caller can never preload one set of pages and mount another. */
+export interface AppBundle {
+  readonly app: AppComponent
+  readonly pages: Pages.Pages
+}
+
+/** Builds a fresh `{ app, pages }` bundle with its own lazy load caches. */
+export const createAppBundle = (options?: Pages.PagesOptions): AppBundle => {
+  const pages = Pages.createPages(options)
+  return { app: createApp(pages), pages }
+}
+
 /** The production app, over the production `pages`. */
 export const App: AppComponent = createApp(Pages.pages)
+
+/** The production `{ app, pages }` bundle. */
+export const productionApp: AppBundle = { app: App, pages: Pages.pages }

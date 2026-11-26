@@ -185,9 +185,15 @@ importers:
       '@effect/language-service':
         specifier: 0.87.5
         version: 0.87.5
+      '@effect/platform-node':
+        specifier: 4.1.5
+        version: 4.1.5(effect@4.1.5)(redis@6.4.0)
       '@effect/tsgo':
         specifier: 0.73.7
         version: 0.73.7
+      '@effect/ui-devtools':
+        specifier: https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7ef6234
+        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7ef6234(@effect/platform-node@4.1.5(effect@4.1.5)(redis@6.4.0))(@effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5))(effect@4.1.5))(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5))(effect@4.1.5)
       '@effect/vitest':
         specifier: 4.1.5
         version: 4.1.5(effect@4.1.5)(vitest@5.1.1(@types/node@25.9.1)(happy-dom@21.0.4)(vite@8.0.15(@types/node@25.9.1)(jiti@2.7.0)))
@@ -243,6 +249,19 @@ packages:
     resolution: {integrity: sha512-np/zJgk71/PyHxtoqyUKLYcpQhoRBI+L6+1Z0ILk35JSQ/lvXzwlwOwddYZLDkeC4bdF2ukKekqKlla/F88R5w==}
     hasBin: true
 
+  '@effect/platform-node-shared@4.1.5':
+    resolution: {integrity: sha512-JzlrYe4uKaBFTWihBRXo2pDjkUVB39kQpKdGfXdbp7Co5sKT8hbcjOmdB5pg/WOYESdGTddd3fxD4lwlZELbZQ==}
+    engines: {node: '>=22.19.0'}
+    peerDependencies:
+      effect: ^4.1.5
+
+  '@effect/platform-node@4.1.5':
+    resolution: {integrity: sha512-tFnRvxF9EKc3oU17sDHj1JeLP+TL/IkaOEl3IUk2EjgMS0x7AWs0ioUXjdNKLb3Z1LdjVfMf/DxsNh9PW5FFAg==}
+    engines: {node: '>=22.19.0'}
+    peerDependencies:
+      effect: ^4.1.5
+      redis: '>=5.1.0 <7.0.0'
+
   '@effect/tsgo-darwin-arm64@0.73.7':
     resolution: {integrity: sha512-LtQMNY+PO1NSDKW4849z+QyqT6iAAedYYAJtw4FCyUex7KST5uyiBcGBJspZMoPc8c7Nplyl1BQH6fnq9v4svw==}
     cpu: [arm64]
@@ -281,6 +300,19 @@ packages:
   '@effect/tsgo@0.73.7':
     resolution: {integrity: sha512-Ks+JDKKrQxhV370MX/AZyBwX+/zUScIHBZ0n4rbS2/bwTcpCPga+9H5yNKX+uOMMUwreH7GFnBka0iZKqkRbfw==}
     hasBin: true
+
+  '@effect/ui-devtools@https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7ef6234':
+    resolution: {integrity: sha512-Bczpdm1kDv11KznfF2veMrcfCqnKmak3l8ycNZbQznK9Awj5bS0IPndRzbVu9S7hA1NXsK/FCQh8jCTTx+McrQ==, tarball: https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7ef6234}
+    version: 0.0.0
+    hasBin: true
+    peerDependencies:
+      '@effect/platform-node': ^4.1.4
+      '@effect/ui': ^0.0.0
+      '@effect/ui-kit': ^0.0.0
+      effect: ^4.1.4
+    peerDependenciesMeta:
+      '@effect/platform-node':
+        optional: true
 
   '@effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234':
     resolution: {integrity: sha512-7rRX78SyQK4JPpt1LD7ym+FvMBvYweWXuahIcDxeOSpoEiKgVYa4uxuDAAitVN3knHlpYIsVuYiZZTIQjuOmpA==, tarball: https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234}
@@ -870,6 +902,42 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [win32]
+
+  '@redis/bloom@6.4.0':
+    resolution: {integrity: sha512-haBv1OKeJoKxoAxwKEHPDKdoZaLIuWAKNr4VFRF2C3Rjjn7Ese5fijEW6295rMBIyddZfuIOcvH1aZ/yKzy8vQ==}
+    engines: {node: '>= 20.0.0'}
+    peerDependencies:
+      '@redis/client': ^6.4.0
+
+  '@redis/client@6.4.0':
+    resolution: {integrity: sha512-XEFSX0W1BUVFwtWC41vk5P/U5CqvacBWypFbmYHdF1gJeIYWWmEzsM2R5mPb+65SdODFQk7xuuMPFP6s1t9nhw==}
+    engines: {node: '>= 20.0.0'}
+    peerDependencies:
+      '@node-rs/xxhash': ^1.1.0
+      '@opentelemetry/api': '>=1 <2'
+    peerDependenciesMeta:
+      '@node-rs/xxhash':
+        optional: true
+      '@opentelemetry/api':
+        optional: true
+
+  '@redis/json@6.4.0':
+    resolution: {integrity: sha512-Dtxn3c2u5H5r3MA6kMrFI6iSOo4BIwibwkep94BMBD5ba1Eik1UYIwInX9lZ10RdUT4+BD7ZS9lAoORBvXUEYg==}
+    engines: {node: '>= 20.0.0'}
+    peerDependencies:
+      '@redis/client': ^6.4.0
+
+  '@redis/search@6.4.0':
+    resolution: {integrity: sha512-B4L2OD5BMwbOYewQ9KGJfukLUkRQz1gc91TEOxz76KLeJsLbHB0XXa7sKMNoB3JURPWvhuY0PE04fHQVYZPZKg==}
+    engines: {node: '>= 20.0.0'}
+    peerDependencies:
+      '@redis/client': ^6.4.0
+
+  '@redis/time-series@6.4.0':
+    resolution: {integrity: sha512-5QpeIlX/r0h0//JfJ8h4/Il9i0SGHhnOkdcocOhFDp0pb8VgVCEkxeCkUx8IR3g3rlq+uiPIf4NCueveHS9Vbw==}
+    engines: {node: '>= 20.0.0'}
+    peerDependencies:
+      '@redis/client': ^6.4.0
 
   '@rolldown/binding-android-arm64@1.0.3':
     resolution: {integrity: sha512-454rs7jHngixp/NMxd5srYD57OnzSlZ/eFTETjORQHLwJG1lRtmNOJcBerZlfu4GjKqeq8aCCIQrMdHyhI51Hw==}
@@ -2043,6 +2111,10 @@ packages:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
 
+  redis@6.4.0:
+    resolution: {integrity: sha512-8Xk9zRovBNDzIO3xRi036QFgijIZKeIPjQJ5VhgxV8nxkxDP5GlE5se71G1I4TnUTojbCtmfKzXpioxlDhHJvg==}
+    engines: {node: '>= 20.0.0'}
+
   reflect.getprototypeof@1.0.10:
     resolution: {integrity: sha512-00o4I+DVrefhv+nX0ulyi3biSHCPDe+yLv5o/p6d/UVlirijB8E16FtfwSAi4g3tcqrQ4lRAqQSoFEZJehYEcw==}
     engines: {node: '>= 0.4'}
@@ -2229,6 +2301,10 @@ packages:
   undici-types@7.24.6:
     resolution: {integrity: sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg==}
 
+  undici@8.13.1:
+    resolution: {integrity: sha512-Kt7EaPjh0s93lJH/PmW3d5rhkcpUa6fS3jqZ7+YGxNd9L7Xy/i827xe4C2uhhq+pJebM4tQOl5AgHmW11G5Skg==}
+    engines: {node: '>=22.19.0'}
+
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
 
@@ -2412,6 +2488,25 @@ snapshots:
 
   '@effect/language-service@0.87.5': {}
 
+  '@effect/platform-node-shared@4.1.5(effect@4.1.5)':
+    dependencies:
+      '@types/ws': 8.18.2
+      effect: 4.1.5
+      ws: 8.23.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@effect/platform-node@4.1.5(effect@4.1.5)(redis@6.4.0)':
+    dependencies:
+      '@effect/platform-node-shared': 4.1.5(effect@4.1.5)
+      effect: 4.1.5
+      redis: 6.4.0
+      undici: 8.13.1
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@effect/tsgo-darwin-arm64@0.73.7':
     optional: true
 
@@ -2442,6 +2537,14 @@ snapshots:
       '@effect/tsgo-linux-x64': 0.73.7
       '@effect/tsgo-win32-arm64': 0.73.7
       '@effect/tsgo-win32-x64': 0.73.7
+
+  '@effect/ui-devtools@https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7ef6234(@effect/platform-node@4.1.5(effect@4.1.5)(redis@6.4.0))(@effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5))(effect@4.1.5))(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5))(effect@4.1.5)':
+    dependencies:
+      '@effect/ui': https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5)
+      '@effect/ui-kit': https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5))(effect@4.1.5)
+      effect: 4.1.5
+    optionalDependencies:
+      '@effect/platform-node': 4.1.5(effect@4.1.5)(redis@6.4.0)
 
   '@effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5))(effect@4.1.5)':
     dependencies:
@@ -2772,6 +2875,24 @@ snapshots:
 
   '@oxlint/binding-win32-x64-msvc@1.95.0':
     optional: true
+
+  '@redis/bloom@6.4.0(@redis/client@6.4.0)':
+    dependencies:
+      '@redis/client': 6.4.0
+
+  '@redis/client@6.4.0': {}
+
+  '@redis/json@6.4.0(@redis/client@6.4.0)':
+    dependencies:
+      '@redis/client': 6.4.0
+
+  '@redis/search@6.4.0(@redis/client@6.4.0)':
+    dependencies:
+      '@redis/client': 6.4.0
+
+  '@redis/time-series@6.4.0(@redis/client@6.4.0)':
+    dependencies:
+      '@redis/client': 6.4.0
 
   '@rolldown/binding-android-arm64@1.0.3':
     optional: true
@@ -3990,6 +4111,17 @@ snapshots:
 
   punycode@2.3.1: {}
 
+  redis@6.4.0:
+    dependencies:
+      '@redis/bloom': 6.4.0(@redis/client@6.4.0)
+      '@redis/client': 6.4.0
+      '@redis/json': 6.4.0(@redis/client@6.4.0)
+      '@redis/search': 6.4.0(@redis/client@6.4.0)
+      '@redis/time-series': 6.4.0(@redis/client@6.4.0)
+    transitivePeerDependencies:
+      - '@node-rs/xxhash'
+      - '@opentelemetry/api'
+
   reflect.getprototypeof@1.0.10:
     dependencies:
       call-bind: 1.0.9
@@ -4244,6 +4376,8 @@ snapshots:
       which-boxed-primitive: 1.1.1
 
   undici-types@7.24.6: {}
+
+  undici@8.13.1: {}
 
   uri-js@4.4.1:
     dependencies:

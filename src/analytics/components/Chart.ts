@@ -1,4 +1,4 @@
-import type * as Dataset from "../domain/Analytics.ts"
+import type * as Analytics from "../domain/Analytics.ts"
 import "./chart.css"
 
 /**
@@ -22,7 +22,7 @@ export const escapeXml = (text: string): string =>
 
 const round = (value: number): number => Math.round(value * 10) / 10
 
-export const lineChartSvg = (title: string, points: ReadonlyArray<Dataset.SeriesPoint>): string => {
+export const lineChartSvg = (title: string, points: ReadonlyArray<Analytics.SeriesPoint>): string => {
   const values = points.map((point) => point.value)
   const max = Math.max(1, ...values)
   const innerWidth = WIDTH - PAD.left - PAD.right

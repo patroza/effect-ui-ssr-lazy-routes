@@ -24,3 +24,9 @@ export const flushFrames = (): number => {
   for (const [, callback] of frame) callback(0)
   return frame.length
 }
+
+/** Discards any un-flushed animation frames between tests. */
+export const resetFrames = (): void => {
+  queue.clear()
+  nextId = 1
+}

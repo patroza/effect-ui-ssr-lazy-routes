@@ -3,14 +3,12 @@ import { Html } from "@effect/ui/html"
 import { Button, Dialog, Input } from "@effect/ui-kit"
 import { Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import * as Products from "../../product/domain/Product.ts"
 import * as Design from "../../design/classes.ts"
-import * as BookmarkProduct from "../../product/commands/BookmarkProduct.ts"
-import * as GetProduct from "../../product/queries/GetProduct.ts"
-import * as BookmarkPort from "../../product/services/BookmarkPort.ts"
-import * as CatalogPort from "../../product/services/CatalogPort.ts"
-import * as Routes from "../../routes.ts"
 import * as Status from "../../lib/status.ts"
+import * as BookmarkProduct from "../../product/commands/BookmarkProduct.ts"
+import * as Product from "../../product/domain/Product.ts"
+import * as GetProduct from "../../product/queries/GetProduct.ts"
+import * as Routes from "../../routes.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
 export const PRODUCT_DETAIL_PAGE_CHUNK = "SENTINEL:product-detail-page"
@@ -19,7 +17,8 @@ export const ProductDetailPageMessage = UiSchema.TaggedEnum({
   ClickedMoreQuantity: {},
   ClickedLessQuantity: {},
   ClickedBookmark: {},
-  CompletedBookmarkProduct: { id: Schema.String },
+  CompletedBookmarkProduct: {},
+  FailedBookmarkProduct: {},
   RequestedOpenInquiry: {},
   RequestedCloseInquiry: {},
   UpdatedQuestion: { value: Schema.String },
@@ -32,12 +31,12 @@ const viewportClass = "fixed inset-0 grid place-items-center p-4"
 const popupClass =
   "w-full max-w-sm rounded-lg border border-neutral-200 bg-white p-5 shadow-xl transition-all data-starting-style:scale-95 data-starting-style:opacity-0 data-ending-style:scale-95 data-ending-style:opacity-0 dark:border-neutral-800 dark:bg-neutral-900"
 
-export const ProductDetailPageNoDeps = Html.component({
+const ProductDetailPageNoDeps = Html.component({
   name: "ProductDetailPage",
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({
     quantity: Schema.Finite,
-    bookmark: Schema.Literals(["Idle", "Saving", "Saved"]),
+    bookmark: Schema.Literals(["Idle", "Saving", "Saved", "Failed"]),
     inquiryOpen: Schema.Boolean,
     question: Schema.String,
     sentQuestion: Schema.NullOr(Schema.String)
@@ -47,21 +46,25 @@ export const ProductDetailPageNoDeps = Html.component({
     product: { query: GetProduct.GetProduct, args: ({ props }) => ({ id: props.id }) }
   }
 }).make({
-  init: () => ({ quantity: 1, bookmark: "Idle" as const, inquiryOpen: false, question: "", sentQuestion: null }),
+  init: () => ({ quantity: 1, bookmark: "Idle", inquiryOpen: false, question: "", sentQuestion: null }),
   update: ($, message) =>
     ProductDetailPageMessage.match(message, {
       ClickedMoreQuantity: () => $.evolve({ quantity: (n) => n + 1 }),
       ClickedLessQuantity: () => $.evolve({ quantity: (n) => Math.max(1, n - 1) }),
       ClickedBookmark: () =>
-        $.model.bookmark === "Idle"
-          ? $.evolve({ bookmark: "Saving" as const }).run(
+        $.model.bookmark === "Idle" || $.model.bookmark === "Failed"
+          ? $.evolve({ bookmark: "Saving" }).run(
               BookmarkProduct.BookmarkProduct.make({ id: $.props.id }).pipe(
                 // The command's domain result becomes this page's message here, so the command never imports the page.
-                Command.map(() => ProductDetailPageMessage.CompletedBookmarkProduct({ id: $.props.id }))
+                Command.match({
+                  onSuccess: () => ProductDetailPageMessage.CompletedBookmarkProduct(),
+                  onFailure: () => ProductDetailPageMessage.FailedBookmarkProduct()
+                })
               )
             )
           : $.model,
-      CompletedBookmarkProduct: () => $.evolve({ bookmark: "Saved" as const }),
+      CompletedBookmarkProduct: () => $.evolve({ bookmark: "Saved" }),
+      FailedBookmarkProduct: () => $.evolve({ bookmark: "Failed" }),
       RequestedOpenInquiry: () => $.evolve({ inquiryOpen: true }),
       RequestedCloseInquiry: () => $.evolve({ inquiryOpen: false }),
       UpdatedQuestion: ({ value }) => $.evolve({ question: value }),
@@ -109,13 +112,13 @@ export const ProductDetailPageNoDeps = Html.component({
           back
         )
     }
-    return shell.attr("data-catalog", Products.CATALOG_CHUNK).children(
+    return shell.attr("data-catalog", Product.CATALOG_CHUNK).children(
       h.h1.class(Design.ui.title).children(product.name),
       h.p.class(Design.ui.muted).children(product.blurb),
       h.p
         .attr("data-testid", "detail-total")
         .children(
-          `${model.quantity} × ${Products.formatPrice(product.priceCents)} = ${Products.formatPrice(model.quantity * product.priceCents)}`
+          `${model.quantity} × ${Product.formatPrice(product.priceCents)} = ${Product.formatPrice(model.quantity * product.priceCents)}`
         ),
       h.div.class(Design.ui.row).children(
         Button(h, { onPress: ProductDetailPageMessage.ClickedLessQuantity() })
@@ -129,12 +132,20 @@ export const ProductDetailPageNoDeps = Html.component({
           .attr("data-testid", "detail-more")
           .children("+"),
         Button(h, {
-          props: { disabled: model.bookmark !== "Idle" },
+          props: { disabled: model.bookmark === "Saving" || model.bookmark === "Saved" },
           onPress: ProductDetailPageMessage.ClickedBookmark()
         })
           .class(Design.ui.button)
           .attr("data-testid", "detail-bookmark")
-          .children(model.bookmark === "Idle" ? "Bookmark" : model.bookmark === "Saving" ? "Saving…" : "Bookmarked ✓"),
+          .children(
+            model.bookmark === "Idle"
+              ? "Bookmark"
+              : model.bookmark === "Saving"
+                ? "Saving…"
+                : model.bookmark === "Failed"
+                  ? "Bookmark failed — retry"
+                  : "Bookmarked ✓"
+          ),
         Dialog(h, {
           props: { open: model.inquiryOpen },
           onEmit: {
@@ -199,13 +210,10 @@ export const ProductDetailPageNoDeps = Html.component({
 })
 
 /**
- * The page with its own Layers: the `GetProduct` query over `CatalogPort` and the `BookmarkProduct`
- * Command over `BookmarkPort`. All four ship in this page's chunk.
+ * The page with its own Layers: `GetProduct` (over `CatalogPort`) and `BookmarkProduct`
+ * (over `BookmarkPort`). Both ports are `Context.Reference`s defaulting to `live`, so
+ * all four stay inside their page/shared chunks without shadowing outer test overrides.
  */
 export const ProductDetailPage = ProductDetailPageNoDeps.pipe(
-  Component.provide(
-    Layer.mergeAll(GetProduct.GetProduct.layer, BookmarkProduct.BookmarkProduct.layer).pipe(
-      Layer.provide(Layer.mergeAll(CatalogPort.CatalogPort.layer, BookmarkPort.BookmarkPort.layer))
-    )
-  )
+  Component.provide(Layer.mergeAll(GetProduct.GetProduct.layer, BookmarkProduct.BookmarkProduct.layer))
 )

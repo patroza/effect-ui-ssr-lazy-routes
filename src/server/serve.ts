@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { createServer } from "node:http"
 import { fileURLToPath } from "node:url"
 import * as Assets from "./assets.ts"
-import * as Server from "./handler.ts"
+import * as Handler from "./handler.ts"
 
 /**
  * Production entry, built to `dist/server/serve.js` (`pnpm build:server`).
@@ -11,7 +11,7 @@ import * as Server from "./handler.ts"
 const clientDir = fileURLToPath(new URL("../client", import.meta.url))
 const manifest = Assets.parseManifest(readFileSync(`${clientDir}/.vite/manifest.json`, "utf8"))
 
-const handler = Server.createAppHandler({
+const handler = Handler.createAppHandler({
   clientDir,
   assetsFor: (route) => Assets.resolveRouteAssets(manifest, route._tag)
 })

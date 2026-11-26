@@ -9,8 +9,8 @@ import * as Bootstrap from "../src/browser/bootstrap.ts"
 import * as State from "../src/browser/state.ts"
 import * as Pages from "../src/pages.ts"
 import * as Routes from "../src/routes.ts"
-import * as Render from "../src/server/render.ts"
 import type * as Assets from "../src/server/assets.ts"
+import * as Render from "../src/server/render.ts"
 import * as Frames from "./support/frames.ts"
 import * as Ports from "./support/ports.ts"
 
@@ -37,6 +37,16 @@ export const portCounts = Effect.gen(function* () {
   return yield* calls.counts
 })
 
+/** The server's state with a different Model for one page, keeping that page's serialized queries. */
+export const withModel = (path: string, model: unknown) => (state: Record<string, unknown>) => {
+  const entry = state[path]
+  const rest = typeof entry === "object" && entry !== null ? entry : {}
+  return { ...state, [path]: { ...rest, model } }
+}
+
+/** Lets everything that could still fire run, on virtual time: a refetch, a late fallback, a second send. */
+export const runOutTheClock = Effect.andThen(TestClock.adjust("10 seconds"), TestHost.settle)
+
 /**
  * Runs `effect`, which sleeps on the Clock (a port's 5 ms round trip, the render budget) and queues its work on the
  * `TestHost`'s scheduler, on the `TestClock`: it settles the host (so the fibers register their sleeps), then moves
@@ -54,11 +64,10 @@ export const onTestClock = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     return yield* Fiber.join(fiber)
   })
 
-/** A fresh set of pages and the app over them: what ONE side (server or browser) of a test uses. */
+/** A fresh `{ app, pages }` bundle with its own load log: what ONE side (server or browser) of a test uses. */
 export const makeSide = () => {
   const loaded: Array<Routes.AppRouteTag> = []
-  const pages = Pages.createPages({ onLoad: (tag) => loaded.push(tag) })
-  return { loaded, pages, app: App.createApp(pages) }
+  return { loaded, ...App.createAppBundle({ onLoad: (tag) => loaded.push(tag) }) }
 }
 export type Side = ReturnType<typeof makeSide>
 
@@ -87,8 +96,9 @@ const pageOrFallback = (container: globalThis.Element): "page" | "fallback" =>
  * for it: `result.root.fetches()` lists the client's fetches and `result.root.frames()` each commit as
  * `"page"` or `"fallback"`.
  *
- * The landing page's chunk is preloaded first, as `boot` does before it hydrates (see the negative control in
- * `hydration.test.ts`).
+ * Note: `Ssr.ssr` runs both sides against the same `side.app`, so they share one lazy load cache. This helper
+ * proves full SSR output, head/model/`~query` adoption and zero client refetches; `test/hydration.test.ts` uses
+ * two separate `createAppBundle()` instances to prove zero-flash lazy hydration on an unloaded client.
  */
 export const ssrAt = Effect.fn("ssrAt")(function* (url: string, options?: { readonly budget?: Duration.Input }) {
   const side = makeSide()
@@ -150,14 +160,27 @@ export interface Browser<Before> {
   readonly serverState: Renderer.State
   /** What `beforeBoot` returned: typically the server-rendered nodes, captured before the client boots. */
   readonly before: Before
-  /** Every element with `data-fallback` that was ever inserted under the container. */
-  readonly fallbacksSeen: ReadonlyArray<Element>
+  /**
+   * Drains pending `MutationObserver` records synchronously and returns every
+   * element with `data-fallback` ever inserted under the container.
+   */
+  readonly fallbacksSeen: () => ReadonlyArray<Element>
   /** Closes the app's scope: its listeners (link prefetch, reload guard, the Router's) are removed. */
   readonly close: Effect.Effect<void>
 }
 
 interface HydrateOptions {
   readonly editState?: (state: Renderer.State) => Renderer.State
+}
+
+const collectFallbacks = (records: ReadonlyArray<MutationRecord>, target: Array<Element>): void => {
+  for (const record of records) {
+    for (const node of record.addedNodes) {
+      if (!(node instanceof Element)) continue
+      if (node.hasAttribute("data-fallback")) target.push(node)
+      target.push(...node.querySelectorAll("[data-fallback]"))
+    }
+  }
 }
 
 const hydrate = Effect.fn("hydrateFromServer")(function* <Before>(
@@ -174,38 +197,31 @@ const hydrate = Effect.fn("hydrateFromServer")(function* <Before>(
   if (container === null) throw new Error("#app missing")
   const before = capture(container)
 
-  const fallbacksSeen: Array<Element> = []
-  const observer = new MutationObserver((records) => {
-    for (const record of records) {
-      for (const node of record.addedNodes) {
-        if (!(node instanceof Element)) continue
-        if (node.hasAttribute("data-fallback")) fallbacksSeen.push(node)
-        fallbacksSeen.push(...node.querySelectorAll("[data-fallback]"))
-      }
-    }
-  })
+  const seen: Array<Element> = []
+  const observer = new MutationObserver((records) => collectFallbacks(records, seen))
   observer.observe(container, { childList: true, subtree: true })
+  const fallbacksSeen = (): ReadonlyArray<Element> => {
+    collectFallbacks(observer.takeRecords(), seen)
+    return [...seen]
+  }
 
   const state = options.editState?.(server.state) ?? server.state
   const scope = yield* Scope.make()
   const close = Effect.suspend(() => {
+    collectFallbacks(observer.takeRecords(), seen)
     observer.disconnect()
     return Scope.close(scope, Exit.void)
   })
   yield* Effect.addFinalizer(() => close)
-  // Like main.ts: the platform layers live as long as the app's scope, not just as long as `boot`.
-  const platform = yield* Layer.buildWithScope(
-    Bootstrap.platformLayer(BrowserRouter.layer({ routes: Routes.AppRoute })),
-    scope
-  )
+  // Like main.ts: the Router layer lives as long as the app's scope, not just as long as `boot`.
+  const router = yield* Layer.buildWithScope(BrowserRouter.layer({ routes: Routes.AppRoute }), scope)
   yield* Bootstrap.boot({
     container,
     location: window.location.pathname + window.location.search,
     state,
-    app: side.app,
-    pages: side.pages
+    bundle: side
   }).pipe(
-    Effect.provideContext(platform),
+    Effect.provideContext(router),
     Effect.provideService(Scope.Scope, scope),
     Effect.tap(() => TestHost.settle)
   )
@@ -224,9 +240,10 @@ const hydrate = Effect.fn("hydrateFromServer")(function* <Before>(
  * Puts the server's HTML in the document at `url`, then runs the real client `boot` against it, exactly as
  * `src/main.ts` does (`BrowserRouter` included, so `<a href>` clicks are intercepted and `history.pushState` runs).
  *
- * The server and the browser are two sides in ONE module graph, each with its own `createPages()` (its own lazy
- * caches) and its own `createApp(pages)`: no module is reset. Everything runs on `TestHost`: end each step with
- * `TestHost.settle`. The app's scope closes with the test.
+ * The server and the browser are two sides in ONE module graph, each with its own `createAppBundle()` (its own
+ * lazy caches): no module is reset. Effects run on `TestHost`'s scheduler and `TestClock` — call `TestHost.settle`
+ * after each DOM event, and `chunkLoaded` when navigation triggers a lazy `import()` (a native Promise outside
+ * `TestHost`'s scheduler). The app's scope closes with the test.
  *
  * `capture` runs on the server's DOM before the client boots: take node references there to prove they are the
  * ones the client adopts. It is `Browser.before`.

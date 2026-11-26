@@ -4,7 +4,7 @@ import { createServer, request, type Server as HttpServer } from "node:http"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import * as Server from "../src/server/handler.ts"
+import * as Handler from "../src/server/handler.ts"
 
 interface Reply {
   readonly status: number
@@ -21,7 +21,7 @@ let dev: HttpServer
 let port: number
 let devPort: number
 
-const listen = async (handler: ReturnType<typeof Server.createAppHandler>): Promise<[HttpServer, number]> => {
+const listen = async (handler: ReturnType<typeof Handler.createAppHandler>): Promise<[HttpServer, number]> => {
   const instance = createServer(handler)
   await new Promise<void>((resolve) => instance.listen(0, "127.0.0.1", resolve))
   const address = instance.address()
@@ -40,8 +40,8 @@ beforeAll(async () => {
   writeFileSync(join(clientDir, "robots.txt"), "User-agent: *\n")
   writeFileSync(join(clientDir, ".vite", "manifest.json"), '{"manifest":"private"}')
   writeFileSync(join(root, "secret.txt"), secret)
-  ;[server, port] = await listen(Server.createAppHandler({ clientDir, assetsFor }))
-  ;[dev, devPort] = await listen(Server.createAppHandler({ assetsFor }))
+  ;[server, port] = await listen(Handler.createAppHandler({ clientDir, assetsFor }))
+  ;[dev, devPort] = await listen(Handler.createAppHandler({ assetsFor }))
 })
 
 afterAll(async () => {
@@ -71,12 +71,13 @@ describe("static files", () => {
     expect(reply.headers["content-type"]).toBe("text/javascript; charset=utf-8")
     expect(reply.headers["cache-control"]).toBe("public, max-age=31536000, immutable")
     expect(reply.headers["x-content-type-options"]).toBe("nosniff")
-    expect(reply.headers["content-security-policy"]).toBe(Server.contentSecurityPolicy)
+    expect(reply.headers["content-security-policy"]).toBe(Handler.contentSecurityPolicy)
   })
 
-  it("does not cache other files forever", async () => {
+  it("does not cache other files forever and serves .txt as text/plain", async () => {
     const reply = await raw("/robots.txt")
     expect(reply.status).toBe(200)
+    expect(reply.headers["content-type"]).toBe("text/plain; charset=utf-8")
     expect(reply.headers["cache-control"]).toBe("no-cache")
   })
 
@@ -175,6 +176,15 @@ describe("canonical URLs", () => {
     expect(reply.status).toBe(200)
     expect(reply.headers["location"]).toBeUndefined()
   })
+
+  it.each(["//evil.com/", "/%2F%2Fevil.com/", "/.//evil.com/", "/a/..//evil.com/"])(
+    "never open-redirects for %s",
+    async (path) => {
+      const reply = await raw(path)
+      expect([400, 404]).toContain(reply.status)
+      expect(reply.headers["location"]).toBeUndefined()
+    }
+  )
 })
 
 describe("pages", () => {
@@ -183,7 +193,7 @@ describe("pages", () => {
     expect(reply.status).toBe(200)
     expect(reply.body).toContain("Field notebook")
     expect(reply.headers["x-content-type-options"]).toBe("nosniff")
-    expect(reply.headers["content-security-policy"]).toBe(Server.contentSecurityPolicy)
+    expect(reply.headers["content-security-policy"]).toBe(Handler.contentSecurityPolicy)
   })
 
   it("answers 404 for an unknown product, derived from the rendered page", async () => {
@@ -192,8 +202,22 @@ describe("pages", () => {
     expect(reply.body).toContain("Unknown product")
   })
 
-  it("answers favicon requests with 204", async () => {
+  it("answers favicon requests with 204 when no favicon.ico exists, and serves it when present", async () => {
     expect((await raw("/favicon.ico")).status).toBe(204)
+
+    const withFavicon = join(root, "client-with-favicon")
+    mkdirSync(withFavicon, { recursive: true })
+    writeFileSync(join(withFavicon, "favicon.ico"), "ICO")
+    const [faviconServer, faviconPort] = await listen(Handler.createAppHandler({ clientDir: withFavicon, assetsFor }))
+    try {
+      const reply = await raw("/favicon.ico", "GET", faviconPort)
+      expect(reply.status).toBe(200)
+      expect(reply.headers["content-type"]).toBe("image/x-icon")
+      expect(reply.body).toBe("ICO")
+    } finally {
+      faviconServer.closeAllConnections()
+      await new Promise<void>((resolve) => faviconServer.close(() => resolve()))
+    }
   })
 
   it("the dev handler (no clientDir) sends nosniff but no Content-Security-Policy", async () => {

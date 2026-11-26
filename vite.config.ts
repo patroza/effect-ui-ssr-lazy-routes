@@ -1,8 +1,10 @@
+import { DevToolsVite } from "@effect/ui-devtools/node"
 import tailwindcss from "@tailwindcss/vite"
 import { defineConfig } from "vite"
 
 export default defineConfig(({ isSsrBuild }) => ({
-  plugins: [tailwindcss()],
+  // DevToolsVite.plugin only applies during `vite dev` (never during `vite build`, preview, or Vitest).
+  plugins: [tailwindcss(), DevToolsVite.plugin({ dispatch: true })],
   build: isSsrBuild
     ? {
         // `vite build --ssr src/server/serve.ts --outDir dist/server`

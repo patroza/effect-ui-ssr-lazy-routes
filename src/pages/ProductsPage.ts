@@ -1,13 +1,12 @@
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Button, Input } from "@effect/ui-kit"
-import { Layer, Option, Schema } from "effect"
+import { Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import * as Products from "../product/domain/Product.ts"
-import * as CatalogPort from "../product/services/CatalogPort.ts"
 import * as Design from "../design/classes.ts"
-import * as SearchProducts from "../search/queries/SearchProducts.ts"
+import * as Product from "../product/domain/Product.ts"
 import * as Routes from "../routes.ts"
+import * as SearchProducts from "../search/queries/SearchProducts.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
 export const PRODUCTS_PAGE_CHUNK = "SENTINEL:products-page"
@@ -21,7 +20,7 @@ export const ProductsPageMessage = UiSchema.TaggedEnum({
   ToggledCompare: { id: Schema.String }
 })
 
-export const ProductsPageNoDeps = Html.component({
+const ProductsPageNoDeps = Html.component({
   name: "ProductsPage",
   props: Schema.Struct({ route: ProductsRoute }),
   // The compare list is local state: it is serialized by the server and adopted
@@ -70,7 +69,7 @@ export const ProductsPageNoDeps = Html.component({
           : `${results.length} product(s).`
     return h.section
       .attr("data-page-chunk", PRODUCTS_PAGE_CHUNK)
-      .attr("data-catalog", Products.CATALOG_CHUNK)
+      .attr("data-catalog", Product.CATALOG_CHUNK)
       .attr("data-query", SearchProducts.SEARCH_PRODUCTS_QUERY_CHUNK)
       .class(Design.ui.stack)
       .children(
@@ -101,7 +100,7 @@ export const ProductsPageNoDeps = Html.component({
                     .class(Design.ui.link)
                     .attr("href", Routes.AppRoute.print(Routes.AppRoute.ProductDetail({ params: { id: product.id } })))
                     .children(product.name),
-                  h.span.class(Design.ui.muted).children(` — ${Products.formatPrice(product.priceCents)}`)
+                  h.span.class(Design.ui.muted).children(` — ${Product.formatPrice(product.priceCents)}`)
                 ),
                 Button(h, { onPress: ProductsPageMessage.ToggledCompare({ id: product.id }) })
                   .class(Design.ui.button)
@@ -116,9 +115,7 @@ export const ProductsPageNoDeps = Html.component({
 })
 
 /**
- * The page with its own Layers: the `SearchProducts` query over `CatalogPort`.
- * `Component.provide` keeps both inside this module, so they ship in the Products chunk with the page.
+ * The page with its own Layer: `SearchProducts` reads `CatalogPort` (a `Context.Reference`
+ * defaulting to `live`). `Component.provide` keeps the query inside the Products chunk.
  */
-export const ProductsPage = ProductsPageNoDeps.pipe(
-  Component.provide(SearchProducts.SearchProducts.layer.pipe(Layer.provide(CatalogPort.CatalogPort.layer)))
-)
+export const ProductsPage = ProductsPageNoDeps.pipe(Component.provide(SearchProducts.SearchProducts.layer))

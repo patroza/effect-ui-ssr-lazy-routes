@@ -1,9 +1,9 @@
 import { Schema } from "effect"
 
 /**
- * A tiny in-memory catalog. It is imported by `CatalogPort` (and so by the Products and ProductDetail
- * query services) only, so the bundler puts it in a chunk shared by those two
- * pages (never in the entry chunk).
+ * A tiny in-memory catalog and product domain helpers, imported only by the
+ * Products and ProductDetail pages and their query/port modules, so the bundler
+ * puts it in a chunk shared by those two pages (never in the entry chunk).
  */
 export const Product = Schema.Struct({
   id: Schema.String,

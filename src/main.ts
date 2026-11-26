@@ -1,8 +1,9 @@
 import { BrowserRouter } from "@effect/ui/html"
-import { Effect } from "effect"
+import { DevTools } from "@effect/ui-devtools"
+import { Effect, Layer } from "effect"
 import * as Bootstrap from "./browser/bootstrap.ts"
-import * as Routes from "./routes.ts"
 import * as State from "./browser/state.ts"
+import * as Routes from "./routes.ts"
 import "./index.css"
 
 const container = document.getElementById("app")
@@ -18,6 +19,9 @@ const readState = Effect.try(() => State.readState(document.getElementById("stat
   )
 )
 
+// Dev-only inspector overlay + Time Travel (tree-shaken to 0 bytes in production builds).
+const devToolsLayer = import.meta.env.DEV ? DevTools.layer({ position: "BottomRight" }) : Layer.empty
+
 Effect.runFork(
   readState.pipe(
     Effect.flatMap((state) =>
@@ -26,7 +30,8 @@ Effect.runFork(
     // Keep the app (and its scope, which owns the document listeners) alive for the life of the page...
     Effect.andThen(Effect.never),
     Effect.scoped,
-    // ...and the Router/HTTP layers outside it, so their document listeners stay installed.
-    Effect.provide(Bootstrap.platformLayer(BrowserRouter.layer({ routes: Routes.AppRoute })))
+    // ...and the Router/DevTools layers outside it, so their listeners stay installed.
+    Effect.provide(Layer.mergeAll(BrowserRouter.layer({ routes: Routes.AppRoute }), devToolsLayer)),
+    Effect.tapCause((cause) => Effect.logError("Failed to boot app", cause))
   )
 )

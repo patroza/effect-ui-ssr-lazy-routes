@@ -1,3 +1,4 @@
+import { afterEach } from "vitest"
 import * as Frames from "./support/frames.ts"
 
 /**
@@ -7,6 +8,7 @@ import * as Frames from "./support/frames.ts"
  */
 // Files that opt into `@vitest-environment node` (the HTTP server tests) have no DOM to patch.
 if (typeof HTMLElement !== "undefined") {
+  afterEach(Frames.resetFrames)
   // The kit's transitions settle on animation frames: a test runs them with `flushFrames`, not a timer.
   // The kit calls `document.defaultView.requestAnimationFrame`, which is happy-dom's own window.
   for (const view of new Set([window, document.defaultView])) {

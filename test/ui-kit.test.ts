@@ -2,22 +2,13 @@ import { TestHost } from "@effect/ui/testing"
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { TestClock } from "effect/testing"
+import * as BookmarkPort from "../src/product/services/BookmarkPort.ts"
 import * as Helpers from "./helpers.ts"
 
 const analyticsPath = "/App/AnalyticsPage[/analytics]"
 
-/** The server's state with a different Model for one page, keeping that page's serialized queries. */
-const withModel = (path: string, model: unknown) => (state: Record<string, unknown>) => {
-  const entry = state[path]
-  const rest = typeof entry === "object" && entry !== null ? entry : {}
-  return { ...state, [path]: { ...rest, model } }
-}
-
 /** The ports' round trip is 5 ms: this completes whatever a step started. */
 const roundTrip = Effect.andThen(TestClock.adjust("5 millis"), TestHost.settle)
-
-/** Lets everything that could still fire run, on virtual time: a refetch, a late fallback, a second send. */
-const runOutTheClock = Effect.andThen(TestClock.adjust("10 seconds"), TestHost.settle)
 
 const serverDocument = (html: string) => new DOMParser().parseFromString(`<body>${html}</body>`, "text/html")
 
@@ -73,16 +64,16 @@ describe("@effect/ui-kit primitives: zero-flash hydration", () => {
         expect(Helpers.byTestId(container, "analytics-chart")).toBe(before.chart)
         expect(Helpers.byTestId(container, "about-trigger")).toBe(before.about)
 
-        yield* runOutTheClock
+        yield* Helpers.runOutTheClock
         expect((yield* Helpers.portCounts).getAnalytics).toBe(0)
-        expect(browser.fallbacksSeen).toEqual([])
+        expect(browser.fallbacksSeen()).toEqual([])
       })
     )
 
     it.effect("Analytics: adopts the server's Collapsible state from the serialized Model", () =>
       Effect.gen(function* () {
         const browser = yield* Helpers.hydrateFromServer("/analytics", {
-          editState: withModel(analyticsPath, { metric: "revenue", aboutOpen: true })
+          editState: Helpers.withModel(analyticsPath, { metric: "revenue", aboutOpen: true })
         })
         expect(Helpers.byTestId(browser.container, "about-trigger").getAttribute("aria-expanded")).toBe("true")
         expect(Helpers.text(browser.container, '[data-testid="about-trigger"]')).toBe("Hide data notes")
@@ -101,9 +92,9 @@ describe("@effect/ui-kit primitives: zero-flash hydration", () => {
         expect(Helpers.byTestId(browser.container, "inquiry-trigger")).toBe(browser.before.trigger)
         expect(Helpers.byTestId(browser.container, "detail-more")).toBe(browser.before.more)
         expect(Helpers.byTestId(browser.container, "detail-bookmark")).toBe(browser.before.bookmark)
-        yield* runOutTheClock
+        yield* Helpers.runOutTheClock
         expect((yield* Helpers.portCounts).getProduct).toBe(0)
-        expect(browser.fallbacksSeen).toEqual([])
+        expect(browser.fallbacksSeen()).toEqual([])
       })
     )
   })
@@ -135,7 +126,7 @@ describe("@effect/ui-kit primitives: interactive after hydration", () => {
         Helpers.click(Helpers.byTestId(container, "tab-revenue")) // back: served from the (adopted) query cache
         yield* Helpers.settleFrames
         expect(Helpers.text(container, '[data-testid="analytics-total"]')).toBe("Total Revenue (USD): 237500")
-        yield* runOutTheClock
+        yield* Helpers.runOutTheClock
         expect((yield* Helpers.portCounts).getAnalytics).toBe(1)
       })
     )
@@ -224,8 +215,32 @@ describe("@effect/ui-kit primitives: interactive after hydration", () => {
         expect(Helpers.byTestId(container, "detail-bookmark")).toBe(button) // same node
 
         Helpers.click(Helpers.byTestId(container, "detail-bookmark")) // a disabled button sends nothing
-        yield* runOutTheClock
+        yield* Helpers.runOutTheClock
         expect((yield* Helpers.portCounts).bookmarkProduct).toBe(1)
+      })
+    )
+
+    it.effect("Command.Service: BookmarkProduct handles failure and allows retry", () =>
+      Effect.gen(function* () {
+        let attempts = 0
+        const browser = yield* Helpers.hydrateFromServer("/products/42").pipe(
+          Effect.provideService(BookmarkPort.BookmarkPort, {
+            bookmark: () => {
+              attempts++
+              return attempts === 1 ? Effect.fail("offline") : Effect.void
+            }
+          })
+        )
+        const button = Helpers.byTestId(browser.container, "detail-bookmark")
+        Helpers.click(button)
+        yield* Helpers.settleFrames
+        expect(button.textContent).toBe("Bookmark failed — retry")
+        expect(button.hasAttribute("disabled")).toBe(false)
+
+        Helpers.click(button)
+        yield* Helpers.settleFrames
+        expect(button.textContent).toBe("Bookmarked ✓")
+        expect(attempts).toBe(2)
       })
     )
 

@@ -39,9 +39,9 @@ const makePortCalls = Layer.effect(
 /**
  * The production ports, each counting its calls into `PortCalls`.
  *
- * A page provides its own `CatalogPort.layer` with `Component.provide`, and the inner provide wins over an outer
- * one. `CatalogPort.layer` therefore reuses a port the Env already holds, which is how these reach the pages:
- * provide this Layer next to `TestHost.layer()`.
+ * Each port is a `Context.Reference` defaulting to its `live` implementation,
+ * so pages never provide the port themselves and tests can override it cleanly
+ * in any Layer build order.
  *
  * Layers are memoized by identity, so the "server" of a test builds it with `Layer.fresh`: its own `Ref`, apart
  * from the "browser"'s.
@@ -51,31 +51,28 @@ export const countingPorts = Layer.mergeAll(
     CatalogPort.CatalogPort,
     Effect.gen(function* () {
       const calls = yield* PortCalls
-      const live = CatalogPort.CatalogPort.live
-      return CatalogPort.CatalogPort.of({
-        search: (q) => Effect.andThen(calls.record("searchProducts"), live.search(q)),
-        find: (id) => Effect.andThen(calls.record("getProduct"), live.find(id))
-      })
+      return {
+        search: (q) => Effect.andThen(calls.record("searchProducts"), CatalogPort.live.search(q)),
+        find: (id) => Effect.andThen(calls.record("getProduct"), CatalogPort.live.find(id))
+      }
     })
   ),
   Layer.effect(
     BookmarkPort.BookmarkPort,
     Effect.gen(function* () {
       const calls = yield* PortCalls
-      const live = BookmarkPort.BookmarkPort.live
-      return BookmarkPort.BookmarkPort.of({
-        bookmark: (id) => Effect.andThen(calls.record("bookmarkProduct"), live.bookmark(id))
-      })
+      return {
+        bookmark: (id) => Effect.andThen(calls.record("bookmarkProduct"), BookmarkPort.live.bookmark(id))
+      }
     })
   ),
   Layer.effect(
     AnalyticsPort.AnalyticsPort,
     Effect.gen(function* () {
       const calls = yield* PortCalls
-      const live = AnalyticsPort.AnalyticsPort.live
-      return AnalyticsPort.AnalyticsPort.of({
-        series: (metric) => Effect.andThen(calls.record("getAnalytics"), live.series(metric))
-      })
+      return {
+        series: (metric) => Effect.andThen(calls.record("getAnalytics"), AnalyticsPort.live.series(metric))
+      }
     })
   )
 ).pipe(Layer.provideMerge(makePortCalls))

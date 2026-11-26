@@ -28,12 +28,12 @@ const owned: ReadonlyArray<Owned> = [
   ["SENTINEL:home-page", "Home page", "Home"],
   ["SENTINEL:products-page", "Products page", "Products"],
   ["SENTINEL:search-products-query", "SearchProducts marker", "Products"],
-  ["catalog/SearchProducts", "SearchProducts query", "Products"],
+  ["search/SearchProducts", "SearchProducts query", "Products"],
   ["SENTINEL:product-detail-page", "ProductDetail page", "ProductDetail"],
   ["SENTINEL:get-product-query", "GetProduct marker", "ProductDetail"],
-  ["catalog/GetProduct", "GetProduct query", "ProductDetail"],
-  ["catalog/BookmarkProduct", "BookmarkProduct command", "ProductDetail"],
-  ["catalog/BookmarkPort", "BookmarkPort port", "ProductDetail"],
+  ["product/GetProduct", "GetProduct query", "ProductDetail"],
+  ["product/BookmarkProduct", "BookmarkProduct command", "ProductDetail"],
+  ["product/BookmarkPort", "BookmarkPort port", "ProductDetail"],
   ["data-dialog-backdrop", "ui-kit Dialog", "ProductDetail"],
   ["SENTINEL:analytics-page", "Analytics page", "Analytics"],
   ["SENTINEL:analytics-chart", "Analytics chart", "Analytics"],
@@ -56,7 +56,14 @@ const pageOnlyFramework: ReadonlyArray<readonly [needle: string, label: string]>
 // Imported by exactly the Products and ProductDetail chunks: one shared chunk, never the entry.
 const sharedNeedles: ReadonlyArray<readonly [needle: string, label: string]> = [
   ["SENTINEL:catalog-data", "catalog data"],
-  ["catalog/CatalogPort", "CatalogPort port"]
+  ["product/CatalogPort", "CatalogPort port"]
+]
+// Dev-only code that must never appear in any production chunk (0 bytes in dist/client).
+const devOnlyNeedles: ReadonlyArray<readonly [needle: string, label: string]> = [
+  ["@effect/ui-devtools", "@effect/ui-devtools package"],
+  ["effect-ui-devtools", "@effect/ui-devtools plugin/overlay"],
+  ["effect_ui_list_sessions", "@effect/ui-devtools WebMCP tools"],
+  ["Paused at #", "@effect/ui-devtools Time travel UI"]
 ]
 
 // Every SENTINEL a source file declares must be known here, so a new marker can't escape the check.
@@ -181,6 +188,25 @@ for (const [needle] of sharedNeedles) {
     )
   }
   check(holder === undefined || !entryClosure.has(holder), `the entry statically imports the catalog chunk ${holder}`)
+}
+
+// Home and NotFound use no queries and no transitions: neither may statically/transitively import Query or transition.
+const queryHolders = holdersOf("effect/ui/Query/Build")
+for (const route of ["Home", "NotFound"] as const) {
+  const closure = staticClosureFiles(Assets.routeSources[route])
+  for (const holder of queryHolders) {
+    check(!closure.has(holder), `${route} chunk (transitively) imports Query runtime ${holder}`)
+  }
+  for (const file of closure) {
+    check(!/^assets\/Query-.*\.js$/.test(file), `${route} chunk (transitively) imports ${file}`)
+    check(!/^assets\/transition-.*\.js$/.test(file), `${route} chunk (transitively) imports ${file}`)
+  }
+}
+
+// Dev-only @effect/ui-devtools code must be completely absent from every production chunk.
+for (const [needle, label] of devOnlyNeedles) {
+  const holders = holdersOf(needle)
+  check(holders.length === 0, `production build contains ${label} (${needle}) in: ${holders.join(", ")}`)
 }
 
 // --- CSS: Tailwind (global) rides with the entry; the page-specific stylesheet only with Analytics. ---

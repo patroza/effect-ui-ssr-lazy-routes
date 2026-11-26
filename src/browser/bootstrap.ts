@@ -1,11 +1,10 @@
 import { type Renderer, Router } from "@effect/ui"
 import { BrowserHost, HtmlHydrate } from "@effect/ui/html"
-import { Effect, Layer, Option } from "effect"
-import { FetchHttpClient } from "effect/http"
+import { Effect, Option } from "effect"
 import * as App from "../App.ts"
 import * as Pages from "../pages.ts"
-import * as Prefetch from "./prefetch.ts"
 import * as Routes from "../routes.ts"
+import * as Prefetch from "./prefetch.ts"
 
 export interface BootOptions {
   /** The element the server rendered into (`#app`). */
@@ -14,21 +13,9 @@ export interface BootOptions {
   readonly location: string
   /** The server's serialized state (`#state`), or `undefined` when nothing was server-rendered. */
   readonly state: Renderer.State | undefined
-  /** The root to mount. Defaults to the production `App`; a test passes one built over its own `pages`. */
-  readonly app?: App.AppComponent | undefined
-  /** The `pages` that `app` was created over (and whose chunk is preloaded). Defaults to the production `pages`. */
-  readonly pages?: Pages.Pages | undefined
+  /** The matched `{ app, pages }` bundle to preload and mount. Defaults to `App.productionApp`. */
+  readonly bundle?: App.AppBundle | undefined
 }
-
-/**
- * The platform services the app needs: a Router (`BrowserRouter.layer(...)` in
- * the browser, `Router.memory(...)` in tests) and an HTTP client.
- *
- * Provide this layer AROUND the scope that keeps the app alive (as
- * `src/main.ts` does), never inside `boot`: the Router layer owns the
- * document's click listeners and removes them when the layer closes.
- */
-export const platformLayer = (router: Layer.Layer<Router.Services>) => Layer.mergeAll(router, FetchHttpClient.layer)
 
 /**
  * Boots the app in the browser, inside the caller's scope:
@@ -42,24 +29,28 @@ export const platformLayer = (router: Layer.Layer<Router.Services>) => Layer.mer
  *
  * Step 2 must come before step 4: the lazy child then hydrates like a direct
  * one (same DOM nodes, Model and `~query` entries, no fallback).
+ *
+ * Provide the Router layer (`BrowserRouter.layer(...)` in the browser,
+ * `Router.memory(...)` in tests) AROUND the scope that keeps the app alive (as
+ * `src/main.ts` does), never inside `boot`: the Router layer owns the
+ * document's click listeners and removes them when the layer closes.
  */
 export const boot = Effect.fn("boot")(function* (options: BootOptions) {
+  const bundle = options.bundle ?? App.productionApp
   // `/*` is a catch-all, so the server only serves URLs that resolve; an undecodable one has no page to preload.
   const route = Routes.routeOf(options.location)
-  const pages = options.pages ?? Pages.pages
-  if (Option.isSome(route)) yield* Effect.promise(() => Pages.preloadRoute(route.value, pages))
+  if (Option.isSome(route)) yield* Effect.promise(() => Pages.preloadRoute(route.value, bundle.pages))
 
   // After the initial preload, so a failed first load surfaces as itself.
   const doc = options.container.ownerDocument
   const win = doc.defaultView
   if (win !== null) yield* Prefetch.installPreloadErrorReload(win)
-  yield* Prefetch.installLinkPrefetch(doc, pages)
+  yield* Prefetch.installLinkPrefetch(doc, bundle.pages)
 
-  const app = options.app ?? App.App
   const root =
     options.state === undefined
-      ? yield* BrowserHost.mountEffect(app, Router.props(Routes.AppRoute), options.container)
-      : yield* HtmlHydrate.hydrateEffect(app, Router.props(Routes.AppRoute), options.container, options.state)
+      ? yield* BrowserHost.mountEffect(bundle.app, Router.props(Routes.AppRoute), options.container)
+      : yield* HtmlHydrate.hydrateEffect(bundle.app, Router.props(Routes.AppRoute), options.container, options.state)
 
   // Completes once every instance that adopts server state is live.
   yield* root.adopted

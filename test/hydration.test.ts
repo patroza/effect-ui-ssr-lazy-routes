@@ -3,21 +3,10 @@ import { BrowserRouter, HtmlHydrate } from "@effect/ui/html"
 import { TestHost } from "@effect/ui/testing"
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Exit, Layer, Scope } from "effect"
-import { TestClock } from "effect/testing"
 import * as Routes from "../src/routes.ts"
 import * as Helpers from "./helpers.ts"
 
 const productsPath = "/App/ProductsPage[/products]"
-
-/** The server's state with a different Model for one page, keeping that page's serialized queries. */
-const withModel = (path: string, model: unknown) => (state: Record<string, unknown>) => {
-  const entry = state[path]
-  const rest = typeof entry === "object" && entry !== null ? entry : {}
-  return { ...state, [path]: { ...rest, model } }
-}
-
-/** Lets everything that could still fire run, on virtual time: a refetch, a late fallback, a second send. */
-const runOutTheClock = Effect.andThen(TestClock.adjust("10 seconds"), TestHost.settle)
 
 describe("hydration of native Component.lazy pages after `await preloadRoute(route)`", () => {
   it.layer(Helpers.browserEnv, { buildPerTest: true })("on the browser", (it) => {
@@ -52,8 +41,8 @@ describe("hydration of native Component.lazy pages after `await preloadRoute(rou
     it.effect("never renders the loading fallback, at any point", () =>
       Effect.gen(function* () {
         const browser = yield* Helpers.hydrateFromServer("/analytics")
-        yield* runOutTheClock
-        expect(browser.fallbacksSeen).toEqual([])
+        yield* Helpers.runOutTheClock
+        expect(browser.fallbacksSeen()).toEqual([])
         expect(browser.container.querySelector("[data-fallback]")).toBeNull()
         expect(browser.container.querySelector('[data-page-chunk="SENTINEL:analytics-page"]')).not.toBeNull()
       })
@@ -63,12 +52,12 @@ describe("hydration of native Component.lazy pages after `await preloadRoute(rou
       Effect.gen(function* () {
         // `init` gives `compared: []`. The (edited) server state says one product is compared.
         const browser = yield* Helpers.hydrateFromServer("/products", {
-          editState: withModel(productsPath, { compared: ["64"] })
+          editState: Helpers.withModel(productsPath, { compared: ["64"] })
         })
         expect(Helpers.text(browser.container, '[data-testid="products-compared"]')).toBe("Comparing 1 product(s)")
         const pressed = [...browser.container.querySelectorAll("li button")].map((b) => b.getAttribute("aria-pressed"))
         expect(pressed).toEqual(["false", "false", "false", "false", "false", "true"])
-        expect(browser.fallbacksSeen).toEqual([])
+        expect(browser.fallbacksSeen()).toEqual([])
       })
     )
 
@@ -110,7 +99,7 @@ describe("hydration of native Component.lazy pages after `await preloadRoute(rou
           container.querySelector("section")
         )
         expect(browser.container.querySelector("section")).toBe(browser.before)
-        expect(browser.fallbacksSeen).toEqual([])
+        expect(browser.fallbacksSeen()).toEqual([])
       })
     )
   })
@@ -121,7 +110,7 @@ describe("Query.Service entries hydrate from the server's `~query`", () => {
     it.effect("Products: ships the entry, adopts the DOM, and the client never refetches", () =>
       Effect.gen(function* () {
         const server = yield* Helpers.serverRender("/products?q=mug")
-        expect(JSON.stringify(server.state["~query"])).toContain("catalog/SearchProducts")
+        expect(JSON.stringify(server.state["~query"])).toContain("search/SearchProducts")
         expect(server.state[productsPath]).toHaveProperty("queries.results")
         expect(server.serverCalls.searchProducts).toBe(1)
 
@@ -136,16 +125,16 @@ describe("Query.Service entries hydrate from the server's `~query`", () => {
         expect(Helpers.text(browser.container, '[data-testid="products-status"]')).toBe("1 product(s).")
 
         // Let anything that would refetch run, then count the catalog reads on the CLIENT's ports.
-        yield* runOutTheClock
+        yield* Helpers.runOutTheClock
         expect((yield* Helpers.portCounts).searchProducts).toBe(0)
-        expect(browser.fallbacksSeen).toEqual([])
+        expect(browser.fallbacksSeen()).toEqual([])
       })
     )
 
     it.effect("ProductDetail: ships the entry, adopts the DOM, and the client never refetches", () =>
       Effect.gen(function* () {
         const server = yield* Helpers.serverRender("/products/42")
-        expect(JSON.stringify(server.state["~query"])).toContain("catalog/GetProduct")
+        expect(JSON.stringify(server.state["~query"])).toContain("product/GetProduct")
 
         const browser = yield* Helpers.hydrateCapturing("/products/42", (container) => ({
           section: container.querySelector("section"),
@@ -155,7 +144,7 @@ describe("Query.Service entries hydrate from the server's `~query`", () => {
         expect(browser.container.querySelector("h1")).toBe(browser.before.title)
         expect(Helpers.text(browser.container, "h1")).toBe("Field notebook")
 
-        yield* runOutTheClock
+        yield* Helpers.runOutTheClock
         expect((yield* Helpers.portCounts).getProduct).toBe(0)
       })
     )
@@ -165,7 +154,7 @@ describe("Query.Service entries hydrate from the server's `~query`", () => {
         yield* Helpers.hydrateFromServer("/products?q=mug", {
           editState: ({ "~query": _dropped, ...state }) => state
         })
-        yield* runOutTheClock
+        yield* Helpers.runOutTheClock
         expect((yield* Helpers.portCounts).searchProducts).toBe(1)
       })
     )
@@ -187,13 +176,14 @@ describe("negative control: native Component.lazy WITHOUT preloadRoute before hy
         expect(serverSection).not.toBeNull()
 
         const fallbacks: Array<Element> = []
-        const observer = new MutationObserver((records) => {
+        const recordFallbacks = (records: ReadonlyArray<MutationRecord>): void => {
           for (const record of records) {
             for (const node of record.addedNodes) {
               if (node instanceof Element && node.hasAttribute("data-fallback")) fallbacks.push(node)
             }
           }
-        })
+        }
+        const observer = new MutationObserver(recordFallbacks)
         observer.observe(container, { childList: true, subtree: true })
 
         // Whatever an assertion below does, the observer and the app's scope are released.
@@ -216,6 +206,7 @@ describe("negative control: native Component.lazy WITHOUT preloadRoute before hy
         // The load `Component.lazy` started is the one `preload()` shares: once it resolves, settle renders the page.
         yield* Helpers.chunkLoaded(side, "/products?q=mug")
         // The page renders, but as a NEW node: the server's was thrown away.
+        recordFallbacks(observer.takeRecords())
         expect(container.querySelector('[data-page-chunk="SENTINEL:products-page"]')).not.toBeNull()
         expect(side.loaded).toEqual(["Products"])
         expect(fallbacks.length).toBeGreaterThan(0)

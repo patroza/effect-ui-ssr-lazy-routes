@@ -38,6 +38,10 @@ export interface RenderOptions {
 
 export type RenderOutcome = RenderedPage | RenderedRedirect | RenderedBadRequest
 
+/** Only same-origin path-relative targets (never protocol-relative `//host` or `/\host`). */
+export const isSafeRelativeLocation = (location: string): boolean =>
+  location.startsWith("/") && !location.startsWith("//") && !location.startsWith("/\\")
+
 /**
  * Server-renders one URL.
  *
@@ -64,10 +68,12 @@ export const renderPageEffect = Effect.fn("renderPage")(function* (
   if (Option.isNone(resolved)) return { _tag: "BadRequest", status: 400 } satisfies RenderOutcome
   const { invalid, notFound, redirected, route } = resolved.value
   if (redirected || invalid.length > 0) {
+    const location = Routes.AppRoute.print(route)
+    if (!isSafeRelativeLocation(location)) return { _tag: "BadRequest", status: 400 } satisfies RenderOutcome
     return {
       _tag: "Redirect",
       status: invalid.length > 0 ? 302 : 301,
-      location: Routes.AppRoute.print(route)
+      location
     } satisfies RenderOutcome
   }
 

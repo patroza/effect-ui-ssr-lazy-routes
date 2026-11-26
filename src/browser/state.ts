@@ -9,7 +9,7 @@ const StateFromJson = JsonString.jsonString(Schema.Record(Schema.String, Schema.
 /**
  * Decodes the server's serialized state, or `undefined` when nothing was
  * server-rendered. Malformed JSON, or JSON that isn't an object, throws a
- * Schema error instead of hydrating from garbage (`client.ts` catches it and
+ * Schema error instead of hydrating from garbage (`main.ts` catches it and
  * mounts fresh).
  */
 export const readState = (text: string | null | undefined): Renderer.State | undefined =>

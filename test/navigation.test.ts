@@ -29,8 +29,8 @@ describe("client-side navigation to a route that was not preloaded", () => {
         expect(browser.container.querySelectorAll("li")).toHaveLength(6)
 
         const section = browser.container.querySelector("section")
-        const input = browser.container.querySelector<HTMLInputElement>("input[type=search]")
-        if (section === null || input === null) throw new Error("products page not rendered")
+        const input = browser.container.querySelector("input[type=search]")
+        if (section === null || !(input instanceof HTMLInputElement)) throw new Error("products page not rendered")
 
         // 1. A Model update (compare product "1") keeps the very same nodes.
         const compare = browser.container.querySelector("li button")
@@ -88,7 +88,7 @@ describe("client-side navigation to a route that was not preloaded", () => {
         expect((yield* Helpers.portCounts).searchProducts).toBe(before.searchProducts + 1)
         expect(window.location.search).toBe("?q=mug")
         expect(browser.container.querySelectorAll("li")).toHaveLength(1)
-        expect(browser.fallbacksSeen).toEqual([])
+        expect(browser.fallbacksSeen()).toEqual([])
       })
     )
 
@@ -182,7 +182,7 @@ describe("link prefetch", () => {
         yield* TestHost.settle
         expect(browser.container.querySelector('[data-page-chunk="SENTINEL:products-page"]')).not.toBeNull()
         // The chunk was already loaded, so `Component.lazy` mounts at once: no fallback.
-        expect(browser.fallbacksSeen).toEqual([])
+        expect(browser.fallbacksSeen()).toEqual([])
       })
     )
 
