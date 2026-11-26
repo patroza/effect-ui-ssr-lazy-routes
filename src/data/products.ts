@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import * as Schema from "effect/Schema"
 
 /**
  * A tiny in-memory catalog. It is imported by the Products and ProductDetail
@@ -8,7 +8,7 @@ import { Schema } from "effect"
 export const Product = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
-  priceCents: Schema.Number,
+  priceCents: Schema.Finite,
   blurb: Schema.String
 })
 export type Product = typeof Product.Type
@@ -23,7 +23,7 @@ export const catalogReads = { searchProducts: 0, getProduct: 0 }
 /** How many times the `BookmarkProduct` Command body ran. The tests assert the click ran it exactly once. */
 export const catalogWrites = { bookmarkProduct: 0 }
 
-/** Marker proving which chunk the catalog landed in (see scripts/verify-bundles.mjs). */
+/** Marker proving which chunk the catalog landed in (see scripts/verify-bundles.ts). */
 export const CATALOG_CHUNK = "SENTINEL:catalog-data"
 
 export const products: ReadonlyArray<Product> = [

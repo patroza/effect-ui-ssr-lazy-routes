@@ -52,24 +52,26 @@ const serveStatic = async (clientDir: string, pathname: string, req: IncomingMes
 }
 
 /** A plain Node request listener: static files first, then server-rendered pages. */
-export const createAppHandler = (options: AppHandlerOptions): RequestListener => async (req, res) => {
-  try {
-    if (req.method !== "GET" && req.method !== "HEAD") {
-      return send(res, 405, { allow: "GET, HEAD", "content-type": "text/plain" }, "Method Not Allowed")
-    }
-    const url = new URL(req.url ?? "/", "http://localhost")
-    if (url.pathname === "/favicon.ico") return void res.writeHead(204).end()
-    if (options.clientDir !== undefined && (await serveStatic(options.clientDir, url.pathname, req, res))) return
+export const createAppHandler =
+  (options: AppHandlerOptions): RequestListener =>
+  async (req, res) => {
+    try {
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        return send(res, 405, { allow: "GET, HEAD", "content-type": "text/plain" }, "Method Not Allowed")
+      }
+      const url = new URL(req.url ?? "/", "http://localhost")
+      if (url.pathname === "/favicon.ico") return void res.writeHead(204).end()
+      if (options.clientDir !== undefined && (await serveStatic(options.clientDir, url.pathname, req, res))) return
 
-    const page = await renderPage(url.pathname + url.search, options.assetsFor)
-    send(
-      res,
-      page.status,
-      { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" },
-      req.method === "HEAD" ? "" : page.html
-    )
-  } catch (error) {
-    console.error(error)
-    send(res, 500, { "content-type": "text/plain" }, "Internal Server Error")
+      const page = await renderPage(url.pathname + url.search, options.assetsFor)
+      send(
+        res,
+        page.status,
+        { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" },
+        req.method === "HEAD" ? "" : page.html
+      )
+    } catch (error) {
+      console.error(error)
+      send(res, 500, { "content-type": "text/plain" }, "Internal Server Error")
+    }
   }
-}

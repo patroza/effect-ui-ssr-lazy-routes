@@ -1,8 +1,10 @@
-import { Router } from "@effect/ui"
-import type { Renderer } from "@effect/ui"
+import * as Router from "@effect/ui/Router"
+import type * as Renderer from "@effect/ui/Renderer"
 import { BrowserHost, HtmlHydrate } from "@effect/ui/html"
-import { Effect, Layer, Option } from "effect"
-import { FetchHttpClient } from "effect/http"
+import * as Effect from "effect/Effect"
+import * as Layer from "effect/Layer"
+import * as Option from "effect/Option"
+import * as FetchHttpClient from "effect/http/FetchHttpClient"
 import { App } from "./App.ts"
 import { preloadRoute } from "./pages.ts"
 import { installLinkPrefetch, installPreloadErrorReload } from "./prefetch.ts"
@@ -44,7 +46,7 @@ export const platformLayer = (router: Layer.Layer<Router.Services>) => Layer.mer
  * Step 2 must come before step 4: the lazy child then hydrates like a direct
  * one (same DOM nodes, Model and `~query` entries, no fallback).
  */
-export const boot = Effect.fn("boot")(function*(options: BootOptions) {
+export const boot = Effect.fn("boot")(function* (options: BootOptions) {
   const route = parseLocation(options.location)
   yield* Effect.promise(() => preloadRoute(route))
 
@@ -54,9 +56,10 @@ export const boot = Effect.fn("boot")(function*(options: BootOptions) {
   if (win !== null) yield* installPreloadErrorReload(win)
   yield* installLinkPrefetch(doc)
 
-  const root = options.state === undefined
-    ? yield* BrowserHost.mountEffect(App, Router.props(AppRoute), options.container)
-    : yield* HtmlHydrate.hydrateEffect(App, Router.props(AppRoute), options.container, options.state)
+  const root =
+    options.state === undefined
+      ? yield* BrowserHost.mountEffect(App, Router.props(AppRoute), options.container)
+      : yield* HtmlHydrate.hydrateEffect(App, Router.props(AppRoute), options.container, options.state)
 
   // Completes once every instance that adopts server state is live.
   yield* root.adopted

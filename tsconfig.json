@@ -1,4 +1,5 @@
 {
+  "extends": "./tsconfig.plugins.json",
   "compilerOptions": {
     "target": "ES2023",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
@@ -15,7 +16,9 @@
     "isolatedModules": true,
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
+    "allowJs": true,
+    "checkJs": true,
     "noEmit": true
   },
-  "include": ["src", "test", "vite.config.ts", "vitest.config.ts"]
+  "include": ["src", "test", "vite.config.ts", "vitest.config.ts", "scripts"]
 }

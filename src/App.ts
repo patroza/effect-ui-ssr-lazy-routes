@@ -1,6 +1,8 @@
-import { Head, Router, UiSchema } from "@effect/ui"
+import * as Head from "@effect/ui/Head"
+import * as Router from "@effect/ui/Router"
+import * as UiSchema from "@effect/ui/UiSchema"
 import { Html, HtmlHead } from "@effect/ui/html"
-import { Schema } from "effect"
+import * as Schema from "effect/Schema"
 import { ui } from "./design.ts"
 import { pageFallback } from "./loading.ts"
 import { pages } from "./pages.ts"
@@ -40,16 +42,19 @@ export const App = Html.component({
     ] as const
     return h.div(
       h.header.class("border-b border-neutral-200 pb-3 dark:border-neutral-800").children(
-        h.nav.class("flex gap-1").attr("aria-label", "Primary").children(
-          links.map((link) =>
-            h.a
-              .key(link.tag)
-              .class(ui.navLink)
-              .attr("href", link.href)
-              .attr("aria-current", link.tag === route._tag ? "page" : undefined)
-              .children(link.label)
+        h.nav
+          .class("flex gap-1")
+          .attr("aria-label", "Primary")
+          .children(
+            links.map((link) =>
+              h.a
+                .key(link.tag)
+                .class(ui.navLink)
+                .attr("href", link.href)
+                .attr("aria-current", link.tag === route._tag ? "page" : undefined)
+                .children(link.label)
+            )
           )
-        )
       ),
       h.main.class("pt-6").children(
         // Key by `printPath` (no search): a new path mounts a fresh page, while

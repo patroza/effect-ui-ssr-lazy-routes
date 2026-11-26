@@ -1,5 +1,5 @@
 import { BrowserRouter } from "@effect/ui/html"
-import { Effect } from "effect"
+import * as Effect from "effect/Effect"
 import { boot, platformLayer } from "./bootstrap.ts"
 import { AppRoute } from "./routes.ts"
 import { readState } from "./state.ts"

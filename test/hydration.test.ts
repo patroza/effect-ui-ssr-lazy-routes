@@ -97,7 +97,7 @@ describe("Query.Service entries hydrate from the server's `~query`", () => {
   it("Products: ships the entry, adopts the DOM, and the client never refetches", async () => {
     const server = await serverRender("/products?q=mug")
     expect(JSON.stringify(server.state["~query"])).toContain("catalog/SearchProducts")
-    expect(server.state[productsPath]).toMatchObject({ queries: { results: expect.anything() } })
+    expect(server.state[productsPath]).toHaveProperty("queries.results")
 
     const browser = await hydrateFromServer("/products?q=mug", {
       beforeBoot: (container) => ({ list: container.querySelector("ul"), item: container.querySelector("li") })

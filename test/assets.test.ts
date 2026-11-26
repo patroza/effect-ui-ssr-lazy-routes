@@ -3,7 +3,13 @@ import { type Manifest, renderAssetTags, resolveRouteAssets, routeSources } from
 import type { AppRouteTag } from "../src/routes.ts"
 import { loadApp } from "./helpers.ts"
 
-const routeTags = ["Home", "Products", "ProductDetail", "Analytics", "NotFound"] as const satisfies ReadonlyArray<AppRouteTag>
+const routeTags = [
+  "Home",
+  "Products",
+  "ProductDetail",
+  "Analytics",
+  "NotFound"
+] as const satisfies ReadonlyArray<AppRouteTag>
 
 // The shape of Vite's `.vite/manifest.json` for this app: every page imports the
 // entry chunk (it shares the framework), and the two product pages also share a

@@ -1,16 +1,23 @@
+import * as Schema from "effect/Schema"
 import type { AppRouteTag } from "./routes.ts"
 
 /** The subset of Vite's `.vite/manifest.json` chunk entries this app reads. */
-export interface ManifestChunk {
-  readonly file: string
-  readonly src?: string
-  readonly isEntry?: boolean
-  readonly isDynamicEntry?: boolean
-  readonly imports?: ReadonlyArray<string>
-  readonly dynamicImports?: ReadonlyArray<string>
-  readonly css?: ReadonlyArray<string>
-}
-export type Manifest = Readonly<Record<string, ManifestChunk>>
+export const ManifestChunk = Schema.Struct({
+  file: Schema.String,
+  src: Schema.optionalKey(Schema.String),
+  isEntry: Schema.optionalKey(Schema.Boolean),
+  isDynamicEntry: Schema.optionalKey(Schema.Boolean),
+  imports: Schema.optionalKey(Schema.Array(Schema.String)),
+  dynamicImports: Schema.optionalKey(Schema.Array(Schema.String)),
+  css: Schema.optionalKey(Schema.Array(Schema.String))
+})
+export type ManifestChunk = typeof ManifestChunk.Type
+
+export const Manifest = Schema.Record(Schema.String, ManifestChunk)
+export type Manifest = typeof Manifest.Type
+
+/** Decodes the text of Vite's `.vite/manifest.json`; throws a Schema error when the shape is wrong. */
+export const parseManifest = Schema.decodeSync(Schema.fromJsonString(Manifest))
 
 /** What one HTML response needs to load: the entry, the active route's chunks, and CSS. */
 export interface PageAssets {

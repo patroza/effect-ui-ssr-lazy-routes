@@ -27,17 +27,20 @@ describe("SSR", () => {
     }
   ] as const
 
-  it.each(cases)("renders full HTML and serialized state for $url", async ({ url, status, marker, statePath, title }) => {
-    const server = await serverRender(url)
-    expect(server.status).toBe(status)
-    // The page itself is in the HTML: not a loading placeholder.
-    expect(server.appHtml).toContain(`data-page-chunk="${marker}"`)
-    expect(server.appHtml).not.toContain("data-fallback")
-    expect(new DOMParser().parseFromString(server.html, "text/html").title).toBe(`${title} · Effect UI lazy routes`)
-    // The page's Model is serialized under its path, next to the root's.
-    expect(Object.keys(server.state)).toContain(statePath)
-    expect(Object.keys(server.state)).toContain("/App")
-  })
+  it.each(cases)(
+    "renders full HTML and serialized state for $url",
+    async ({ url, status, marker, statePath, title }) => {
+      const server = await serverRender(url)
+      expect(server.status).toBe(status)
+      // The page itself is in the HTML: not a loading placeholder.
+      expect(server.appHtml).toContain(`data-page-chunk="${marker}"`)
+      expect(server.appHtml).not.toContain("data-fallback")
+      expect(new DOMParser().parseFromString(server.html, "text/html").title).toBe(`${title} · Effect UI lazy routes`)
+      // The page's Model is serialized under its path, next to the root's.
+      expect(Object.keys(server.state)).toContain(statePath)
+      expect(Object.keys(server.state)).toContain("/App")
+    }
+  )
 
   it("renders the route's search into the page", async () => {
     const server = await serverRender("/products?q=mug")

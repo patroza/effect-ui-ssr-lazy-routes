@@ -15,7 +15,9 @@ describe("client-side navigation to a route that was not preloaded", () => {
     expect([...loadedPages]).toEqual(["Home"])
 
     click(link(browser.container, "/analytics"))
-    await expect.poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:analytics-page"]')).not.toBeNull()
+    await expect
+      .poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:analytics-page"]'))
+      .not.toBeNull()
 
     expect([...loadedPages].sort()).toEqual(["Analytics", "Home"]) // only the visited page was imported
     expect(window.location.pathname).toBe("/analytics")
@@ -26,7 +28,9 @@ describe("client-side navigation to a route that was not preloaded", () => {
   it("does not remount the page on state or search updates", async () => {
     const browser = await hydrateFromServer("/", {})
     click(link(browser.container, "/products"))
-    await expect.poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:products-page"]')).not.toBeNull()
+    await expect
+      .poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:products-page"]'))
+      .not.toBeNull()
     expect(loadedPages.has("Products")).toBe(true)
     await expect.poll(() => browser.container.querySelectorAll("li").length).toBe(6)
 
@@ -56,7 +60,9 @@ describe("client-side navigation to a route that was not preloaded", () => {
   it("can still navigate back to the page the server rendered (no remount issues)", async () => {
     const browser = await hydrateFromServer("/")
     click(link(browser.container, "/analytics"))
-    await expect.poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:analytics-page"]')).not.toBeNull()
+    await expect
+      .poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:analytics-page"]'))
+      .not.toBeNull()
     click(link(browser.container, "/"))
     await expect.poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:home-page"]')).not.toBeNull()
     const counter = browser.container.querySelector('[data-testid="home-counter"]')
@@ -68,7 +74,9 @@ describe("client-side navigation to a route that was not preloaded", () => {
   it("keeps a lazily navigated page mounted across its own state updates", async () => {
     const browser = await hydrateFromServer("/")
     click(link(browser.container, "/analytics"))
-    await expect.poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:analytics-page"]')).not.toBeNull()
+    await expect
+      .poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:analytics-page"]'))
+      .not.toBeNull()
     const section = browser.container.querySelector("section")
     const revenueTab = byTestId(browser.container, "tab-revenue")
 
@@ -91,7 +99,9 @@ describe("client-side navigation to a route that was not preloaded", () => {
     await expect.poll(() => text(browser.container, "h1")).toBe("Field notebook")
     expect(browser.app.catalogReads.getProduct).toBe(1)
     click(link(browser.container, "/analytics"))
-    await expect.poll(() => text(browser.container, '[data-testid="analytics-total"]')).toBe("Total Revenue (USD): 237500")
+    await expect
+      .poll(() => text(browser.container, '[data-testid="analytics-total"]'))
+      .toBe("Total Revenue (USD): 237500")
     expect(browser.app.analyticsReads.getAnalytics).toBe(1)
   })
 })
@@ -118,7 +128,9 @@ describe("link prefetch", () => {
     await expect.poll(() => loadedPages.has("Products")).toBe(true)
 
     click(products)
-    await expect.poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:products-page"]')).not.toBeNull()
+    await expect
+      .poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:products-page"]'))
+      .not.toBeNull()
     // The chunk was already loaded, so `Component.lazy` mounts at once: no fallback.
     expect(browser.fallbacksSeen).toEqual([])
     expect(browser.app.loadingStats.rendered).toBe(0)

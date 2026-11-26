@@ -1,14 +1,23 @@
-import { Command, Component, Head, UiSchema } from "@effect/ui"
+import * as Command from "@effect/ui/Command"
+import * as Component from "@effect/ui/Component"
+import * as Head from "@effect/ui/Head"
+import * as UiSchema from "@effect/ui/UiSchema"
 import { Html } from "@effect/ui/html"
-import { Button, Dialog, Input } from "@effect/ui-kit"
-import { Cause, Effect, Layer, Option, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
+import { Button } from "@effect/ui-kit/Button"
+import { Dialog } from "@effect/ui-kit/Dialog"
+import { Input } from "@effect/ui-kit/Input"
+import * as Cause from "effect/Cause"
+import * as Effect from "effect/Effect"
+import * as Layer from "effect/Layer"
+import * as Option from "effect/Option"
+import * as Schema from "effect/Schema"
+import * as AsyncResult from "effect/reactivity/AsyncResult"
 import { catalogWrites, CATALOG_CHUNK, formatPrice } from "../data/products.ts"
 import { ui } from "../design.ts"
 import { GET_PRODUCT_QUERY_CHUNK, GetProduct } from "../queries/GetProduct.ts"
 import { AppRoute } from "../routes.ts"
 
-/** Marker proving which chunk this page lands in (see scripts/verify-bundles.mjs). */
+/** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
 export const PRODUCT_DETAIL_PAGE_CHUNK = "SENTINEL:product-detail-page"
 
 export const ProductDetailPageMessage = UiSchema.TaggedEnum({
@@ -32,15 +41,18 @@ export class BookmarkProduct extends Command.Service<BookmarkProduct>()("catalog
   args: { id: Schema.String },
   success: ProductDetailPageMessage
 }) {
-  static readonly layer = this.toLayer(Effect.fnUntraced(function*({ id }) {
-    // A stand-in for a network round trip.
-    yield* Effect.sleep("5 millis")
-    catalogWrites.bookmarkProduct += 1
-    return ProductDetailPageMessage.CompletedBookmarkProduct({ id })
-  }))
+  static readonly layer = this.toLayer(
+    Effect.fnUntraced(function* ({ id }) {
+      // A stand-in for a network round trip.
+      yield* Effect.sleep("5 millis")
+      catalogWrites.bookmarkProduct += 1
+      return ProductDetailPageMessage.CompletedBookmarkProduct({ id })
+    })
+  )
 }
 
-const backdropClass = "fixed inset-0 bg-black/40 transition-opacity data-starting-style:opacity-0 data-ending-style:opacity-0"
+const backdropClass =
+  "fixed inset-0 bg-black/40 transition-opacity data-starting-style:opacity-0 data-ending-style:opacity-0"
 const viewportClass = "fixed inset-0 grid place-items-center p-4"
 const popupClass =
   "w-full max-w-sm rounded-lg border border-neutral-200 bg-white p-5 shadow-xl transition-all data-starting-style:scale-95 data-starting-style:opacity-0 data-ending-style:scale-95 data-ending-style:opacity-0 dark:border-neutral-800 dark:bg-neutral-900"
@@ -49,7 +61,7 @@ export const ProductDetailPageNoDeps = Html.component({
   name: "ProductDetailPage",
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({
-    quantity: Schema.Number,
+    quantity: Schema.Finite,
     bookmark: Schema.Literals(["Idle", "Saving", "Saved"]),
     inquiryOpen: Schema.Boolean,
     question: Schema.String,
@@ -88,7 +100,10 @@ export const ProductDetailPageNoDeps = Html.component({
     )
   ],
   view: (h, model) => {
-    const back = h.a.class(ui.link).attr("href", AppRoute.print(AppRoute.Products({ search: {} }))).children("← All products")
+    const back = h.a
+      .class(ui.link)
+      .attr("href", AppRoute.print(AppRoute.Products({ search: {} })))
+      .children("← All products")
     const shell = h.section
       .attr("data-page-chunk", PRODUCT_DETAIL_PAGE_CHUNK)
       .attr("data-query", GET_PRODUCT_QUERY_CHUNK)
@@ -96,7 +111,11 @@ export const ProductDetailPageNoDeps = Html.component({
     const result = h.queries.product
     if (AsyncResult.isInitial(result)) return shell.children(h.h1.class(ui.title).children("Loading product…"), back)
     if (AsyncResult.isFailure(result)) {
-      return shell.children(h.h1.class(ui.title).children("Couldn't load the product"), h.pre(Cause.pretty(result.cause)), back)
+      return shell.children(
+        h.h1.class(ui.title).children("Couldn't load the product"),
+        h.pre(Cause.pretty(result.cause)),
+        back
+      )
     }
     const product = Option.getOrUndefined(result.value)
     if (product === undefined) {
@@ -106,46 +125,52 @@ export const ProductDetailPageNoDeps = Html.component({
         back
       )
     }
-    return shell
-      .attr("data-catalog", CATALOG_CHUNK)
-      .children(
-        h.h1.class(ui.title).children(product.name),
-        h.p.class(ui.muted).children(product.blurb),
-        h.p.attr("data-testid", "detail-total").children(
+    return shell.attr("data-catalog", CATALOG_CHUNK).children(
+      h.h1.class(ui.title).children(product.name),
+      h.p.class(ui.muted).children(product.blurb),
+      h.p
+        .attr("data-testid", "detail-total")
+        .children(
           `${model.quantity} × ${formatPrice(product.priceCents)} = ${formatPrice(model.quantity * product.priceCents)}`
         ),
-        h.div.class(ui.row).children(
-          Button(h, { onPress: ProductDetailPageMessage.ClickedLessQuantity() })
-            .class(ui.button)
-            .attr("aria-label", "Less")
-            .attr("data-testid", "detail-less")
-            .children("−"),
-          Button(h, { onPress: ProductDetailPageMessage.ClickedMoreQuantity() })
-            .class(ui.button)
-            .attr("aria-label", "More")
-            .attr("data-testid", "detail-more")
-            .children("+"),
-          Button(h, {
-            props: { disabled: model.bookmark !== "Idle" },
-            onPress: ProductDetailPageMessage.ClickedBookmark()
-          })
-            .class(ui.button)
-            .attr("data-testid", "detail-bookmark")
-            .children(model.bookmark === "Idle" ? "Bookmark" : model.bookmark === "Saving" ? "Saving…" : "Bookmarked ✓"),
-          Dialog(h, {
-            props: { open: model.inquiryOpen },
-            onEmit: {
-              RequestedOpen: () => ProductDetailPageMessage.RequestedOpenInquiry(),
-              RequestedClose: () => ProductDetailPageMessage.RequestedCloseInquiry(),
-              Settled: () => undefined
-            },
-            view: (dialog) =>
-              h.div.class("contents").children(
-                dialog.trigger(h.button.class(ui.button)).attr("data-testid", "inquiry-trigger").children("Ask a question"),
-                dialog.portal(h.dialog)?.children(
-                  dialog.backdrop(h.div.class(backdropClass)),
-                  dialog.viewport(h.div.class(viewportClass)).children(
-                    dialog.popup(h.div.class(popupClass)).attr("data-testid", "inquiry-popup").children(
+      h.div.class(ui.row).children(
+        Button(h, { onPress: ProductDetailPageMessage.ClickedLessQuantity() })
+          .class(ui.button)
+          .attr("aria-label", "Less")
+          .attr("data-testid", "detail-less")
+          .children("−"),
+        Button(h, { onPress: ProductDetailPageMessage.ClickedMoreQuantity() })
+          .class(ui.button)
+          .attr("aria-label", "More")
+          .attr("data-testid", "detail-more")
+          .children("+"),
+        Button(h, {
+          props: { disabled: model.bookmark !== "Idle" },
+          onPress: ProductDetailPageMessage.ClickedBookmark()
+        })
+          .class(ui.button)
+          .attr("data-testid", "detail-bookmark")
+          .children(model.bookmark === "Idle" ? "Bookmark" : model.bookmark === "Saving" ? "Saving…" : "Bookmarked ✓"),
+        Dialog(h, {
+          props: { open: model.inquiryOpen },
+          onEmit: {
+            RequestedOpen: () => ProductDetailPageMessage.RequestedOpenInquiry(),
+            RequestedClose: () => ProductDetailPageMessage.RequestedCloseInquiry(),
+            Settled: () => undefined
+          },
+          view: (dialog) =>
+            h.div.class("contents").children(
+              dialog
+                .trigger(h.button.class(ui.button))
+                .attr("data-testid", "inquiry-trigger")
+                .children("Ask a question"),
+              dialog.portal(h.dialog)?.children(
+                dialog.backdrop(h.div.class(backdropClass)),
+                dialog.viewport(h.div.class(viewportClass)).children(
+                  dialog
+                    .popup(h.div.class(popupClass))
+                    .attr("data-testid", "inquiry-popup")
+                    .children(
                       h.div.class(ui.stack).children(
                         dialog.title(h.h2.class("text-lg font-semibold")).children(`About ${product.name}`),
                         dialog.description(h.p.class(ui.muted)).children("We usually reply within a day."),
@@ -154,26 +179,35 @@ export const ProductDetailPageNoDeps = Html.component({
                           onUpdate: ({ value }) => ProductDetailPageMessage.UpdatedQuestion({ value })
                         })
                           .class(ui.input)
-                          .attrs({ placeholder: "Your question", "aria-label": "Your question", "data-testid": "inquiry-input" }),
-                        h.div.class(`${ui.row} justify-end`).children(
-                          dialog.close(h.button.class(ui.button)).attr("data-testid", "inquiry-close").children("Cancel"),
-                          Button(h, { onPress: ProductDetailPageMessage.ClickedSendQuestion() })
-                            .class(ui.button)
-                            .attr("data-testid", "inquiry-send")
-                            .children("Send")
-                        )
+                          .attrs({
+                            placeholder: "Your question",
+                            "aria-label": "Your question",
+                            "data-testid": "inquiry-input"
+                          }),
+                        h.div
+                          .class(`${ui.row} justify-end`)
+                          .children(
+                            dialog
+                              .close(h.button.class(ui.button))
+                              .attr("data-testid", "inquiry-close")
+                              .children("Cancel"),
+                            Button(h, { onPress: ProductDetailPageMessage.ClickedSendQuestion() })
+                              .class(ui.button)
+                              .attr("data-testid", "inquiry-send")
+                              .children("Send")
+                          )
                       )
                     )
-                  )
                 )
               )
-          })
-        ),
-        model.sentQuestion === null
-          ? undefined
-          : h.p.class(ui.muted).attr("data-testid", "inquiry-sent").children(`Question sent: “${model.sentQuestion}”`),
-        back
-      )
+            )
+        })
+      ),
+      model.sentQuestion === null
+        ? undefined
+        : h.p.class(ui.muted).attr("data-testid", "inquiry-sent").children(`Question sent: “${model.sentQuestion}”`),
+      back
+    )
   }
 })
 

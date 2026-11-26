@@ -1,5 +1,5 @@
-import { Route } from "@effect/ui"
-import { Schema } from "effect"
+import * as Route from "@effect/ui/Route"
+import * as Schema from "effect/Schema"
 
 /**
  * The typed route union shared by the server, the client and the tests.

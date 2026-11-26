@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import * as Schema from "effect/Schema"
 
 /**
  * Analytics-only dataset. Nothing outside `AnalyticsPage` imports it, so it
@@ -9,7 +9,7 @@ export const ANALYTICS_DATASET_CHUNK = "SENTINEL:analytics-dataset"
 export const Metric = Schema.Literals(["revenue", "orders"])
 export type Metric = typeof Metric.Type
 
-export const SeriesPoint = Schema.Struct({ label: Schema.String, value: Schema.Number })
+export const SeriesPoint = Schema.Struct({ label: Schema.String, value: Schema.Finite })
 export type SeriesPoint = typeof SeriesPoint.Type
 
 /**

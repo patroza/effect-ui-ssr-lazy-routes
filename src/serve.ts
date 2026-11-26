@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { createServer } from "node:http"
 import { fileURLToPath } from "node:url"
-import { type Manifest, resolveRouteAssets } from "./assets.ts"
+import { parseManifest, resolveRouteAssets } from "./assets.ts"
 import { createAppHandler } from "./server.ts"
 
 /**
@@ -9,7 +9,7 @@ import { createAppHandler } from "./server.ts"
  * It reads the client build's manifest once at startup.
  */
 const clientDir = fileURLToPath(new URL("../client", import.meta.url))
-const manifest: Manifest = JSON.parse(readFileSync(`${clientDir}/.vite/manifest.json`, "utf8"))
+const manifest = parseManifest(readFileSync(`${clientDir}/.vite/manifest.json`, "utf8"))
 
 const handler = createAppHandler({
   clientDir,

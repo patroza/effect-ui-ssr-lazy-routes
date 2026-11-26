@@ -11,10 +11,8 @@ const control =
 
 export const ui = {
   link: `rounded-xs font-medium text-sky-700 underline-offset-4 hover:underline dark:text-sky-400 ${focus}`,
-  navLink:
-    `rounded-md px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 aria-[current=page]:bg-neutral-900 aria-[current=page]:text-white dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100 dark:aria-[current=page]:bg-neutral-100 dark:aria-[current=page]:text-neutral-900 ${focus}`,
-  button:
-    `inline-flex cursor-pointer items-center justify-center gap-1 px-3 py-1.5 font-medium hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50 aria-pressed:border-neutral-900 aria-pressed:bg-neutral-900 aria-pressed:text-white dark:hover:bg-neutral-800 dark:aria-pressed:border-neutral-100 dark:aria-pressed:bg-neutral-100 dark:aria-pressed:text-neutral-900 ${control} ${focus}`,
+  navLink: `rounded-md px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 aria-[current=page]:bg-neutral-900 aria-[current=page]:text-white dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100 dark:aria-[current=page]:bg-neutral-100 dark:aria-[current=page]:text-neutral-900 ${focus}`,
+  button: `inline-flex cursor-pointer items-center justify-center gap-1 px-3 py-1.5 font-medium hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50 aria-pressed:border-neutral-900 aria-pressed:bg-neutral-900 aria-pressed:text-white dark:hover:bg-neutral-800 dark:aria-pressed:border-neutral-100 dark:aria-pressed:bg-neutral-100 dark:aria-pressed:text-neutral-900 ${control} ${focus}`,
   input: `w-full px-3 py-2 placeholder:text-neutral-400 ${control} ${focus}`,
   card: "rounded-lg border border-neutral-200 p-4 dark:border-neutral-800",
   title: "text-2xl font-semibold tracking-tight",

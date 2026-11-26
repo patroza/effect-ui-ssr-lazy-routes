@@ -1,4 +1,4 @@
-import type { Renderer } from "@effect/ui"
+import type * as Renderer from "@effect/ui/Renderer"
 import { afterEach, vi } from "vitest"
 import type { PageAssets } from "../src/assets.ts"
 
@@ -28,9 +28,28 @@ export const loadApp = async () => {
   }
   // `effect` and `@effect/ui` keep per-module registries (the Router's engine, service keys, ...), so the
   // test must use the SAME copies as the app, never ones imported statically by the test file.
-  const [effect, ui, uiHtml, render, bootstrap, pages, routes, loading, prefetch, products, dataset, state] = await Promise.all([
-    import("effect"),
-    import("@effect/ui"),
+  const [
+    [Effect, Exit, Layer, Scope, Logger],
+    Router,
+    uiHtml,
+    render,
+    bootstrap,
+    pages,
+    routes,
+    loading,
+    prefetch,
+    products,
+    dataset,
+    state
+  ] = await Promise.all([
+    Promise.all([
+      import("effect/Effect"),
+      import("effect/Exit"),
+      import("effect/Layer"),
+      import("effect/Scope"),
+      import("effect/Logger")
+    ]),
+    import("@effect/ui/Router"),
     import("@effect/ui/html"),
     import("../src/render.ts"),
     import("../src/bootstrap.ts"),
@@ -54,12 +73,12 @@ export const loadApp = async () => {
     catalogWrites: products.catalogWrites,
     analyticsReads: dataset.analyticsReads,
     lib: {
-      Effect: effect.Effect,
-      Exit: effect.Exit,
-      Layer: effect.Layer,
-      Scope: effect.Scope,
-      Logger: effect.Logger,
-      Router: ui.Router,
+      Effect,
+      Exit,
+      Layer,
+      Scope,
+      Logger,
+      Router,
       ...uiHtml
     }
   }
@@ -158,10 +177,9 @@ export async function hydrateFromServer(
     Layer.buildWithScope(app.platformLayer(app.lib.BrowserRouter.layer({ routes: app.AppRoute })), scope)
   )
   const root = await Effect.runPromise(
-    app.boot({ container, location: window.location.pathname + window.location.search, state }).pipe(
-      Effect.provideContext(platform),
-      Effect.provideService(Scope.Scope, scope)
-    )
+    app
+      .boot({ container, location: window.location.pathname + window.location.search, state })
+      .pipe(Effect.provideContext(platform), Effect.provideService(Scope.Scope, scope))
   )
   const close = async () => {
     observer.disconnect()

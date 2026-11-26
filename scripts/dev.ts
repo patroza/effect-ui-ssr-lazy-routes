@@ -1,19 +1,23 @@
 // Dev server: Vite in middleware mode (HMR, on-demand modules) + the same SSR
 // handler production uses, loaded through Vite so edits apply without restart.
 import { createServer as createHttpServer } from "node:http"
-import { createServer as createViteServer } from "vite"
+import { createServer as createViteServer, createServerModuleRunner } from "vite"
+import type * as Assets from "../src/assets.ts"
+import type * as Server from "../src/server.ts"
 
 const port = Number(process.env.PORT ?? 5173)
 const vite = await createViteServer({ server: { middlewareMode: true }, appType: "custom" })
+// Loads modules through Vite's SSR environment, so edits apply without restarting.
+const runner = createServerModuleRunner(vite.environments.ssr)
 
 const server = createHttpServer((req, res) => {
   vite.middlewares(req, res, async () => {
     try {
       const [{ createAppHandler }, { devAssets }] = await Promise.all([
-        vite.ssrLoadModule("/src/server.ts"),
-        vite.ssrLoadModule("/src/assets.ts")
+        runner.import<typeof Server>("/src/server.ts"),
+        runner.import<typeof Assets>("/src/assets.ts")
       ])
-      await createAppHandler({ assetsFor: () => devAssets })(req, res)
+      createAppHandler({ assetsFor: () => devAssets })(req, res)
     } catch (error) {
       if (error instanceof Error) vite.ssrFixStacktrace(error)
       console.error(error)

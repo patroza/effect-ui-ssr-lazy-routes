@@ -1,14 +1,18 @@
-import { Component, Head, UiSchema } from "@effect/ui"
+import * as Component from "@effect/ui/Component"
+import * as Head from "@effect/ui/Head"
+import * as UiSchema from "@effect/ui/UiSchema"
 import { Html } from "@effect/ui/html"
-import { Collapsible, Tabs } from "@effect/ui-kit"
-import { Option, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
+import { Collapsible } from "@effect/ui-kit/Collapsible"
+import { Tabs } from "@effect/ui-kit/Tabs"
+import * as Option from "effect/Option"
+import * as Schema from "effect/Schema"
+import * as AsyncResult from "effect/reactivity/AsyncResult"
 import { ANALYTICS_CHART_CHUNK, lineChartSvg, svgDataUri } from "../analytics/chart.ts"
 import { ANALYTICS_DATASET_CHUNK, Metric, metrics, metricTitle } from "../analytics/dataset.ts"
 import { GET_ANALYTICS_QUERY_CHUNK, GetAnalytics } from "../analytics/GetAnalytics.ts"
 import { ui } from "../design.ts"
 
-/** Marker proving which chunk this page lands in (see scripts/verify-bundles.mjs). */
+/** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
 export const ANALYTICS_PAGE_CHUNK = "SENTINEL:analytics-page"
 
 export const AnalyticsPageMessage = UiSchema.TaggedEnum({
@@ -48,18 +52,20 @@ export const AnalyticsPageNoDeps = Html.component({
       onFailure: () => undefined,
       onSuccess: ({ value }) => value
     })
-    const content = series === undefined
-      ? h.p.class(ui.muted).children("Loading…")
-      : h.div.class(ui.stack).children(
-        h.img
-          .class("analytics-chart")
-          .attr("src", svgDataUri(lineChartSvg(title, series)))
-          .attr("alt", `${title} by month`)
-          .attr("data-testid", "analytics-chart"),
-        h.p.class(ui.muted).attr("data-testid", "analytics-total").children(
-          `Total ${title}: ${series.reduce((sum, point) => sum + point.value, 0)}`
-        )
-      )
+    const content =
+      series === undefined
+        ? h.p.class(ui.muted).children("Loading…")
+        : h.div.class(ui.stack).children(
+            h.img
+              .class("analytics-chart")
+              .attr("src", svgDataUri(lineChartSvg(title, series)))
+              .attr("alt", `${title} by month`)
+              .attr("data-testid", "analytics-chart"),
+            h.p
+              .class(ui.muted)
+              .attr("data-testid", "analytics-total")
+              .children(`Total ${title}: ${series.reduce((sum, point) => sum + point.value, 0)}`)
+          )
     return h.section
       .attr("data-page-chunk", ANALYTICS_PAGE_CHUNK)
       .attr("data-chart", ANALYTICS_CHART_CHUNK)
@@ -72,7 +78,8 @@ export const AnalyticsPageNoDeps = Html.component({
           props: { value: model.metric, tabs: metrics.map((value) => ({ value })) },
           onEmit: {
             // Tab values are plain strings: only the metrics we declared above can come back.
-            Selected: ({ value }) => isMetric(value) ? AnalyticsPageMessage.SelectedMetricTab({ metric: value }) : undefined
+            Selected: ({ value }) =>
+              isMetric(value) ? AnalyticsPageMessage.SelectedMetricTab({ metric: value }) : undefined
           },
           view: (tabs) =>
             tabs.root(h.div.class(ui.stack)).children(
