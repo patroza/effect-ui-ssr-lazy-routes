@@ -1,4 +1,4 @@
-import * as Schema from "effect/Schema"
+import { Schema } from "effect"
 
 /**
  * A tiny in-memory catalog. It is imported by the Products and ProductDetail

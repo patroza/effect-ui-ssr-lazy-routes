@@ -87,7 +87,7 @@
           "unnecessaryPipe": "error",
           "unnecessaryPipeChain": "error"
         },
-        "namespaceImportPackages": ["effect", "@effect/*"],
+        "namespaceImportPackages": [],
         "topLevelNamedReexports": "follow"
       }
     ]

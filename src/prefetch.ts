@@ -1,7 +1,6 @@
-import * as Effect from "effect/Effect"
-import * as Option from "effect/Option"
-import { preloadRoute } from "./pages.ts"
-import { AppRoute } from "./routes.ts"
+import { Effect, Option } from "effect"
+import * as Pages from "./pages.ts"
+import * as Routes from "./routes.ts"
 
 /**
  * Preload a route's chunk when the pointer enters, or keyboard focus lands
@@ -20,8 +19,8 @@ export const installLinkPrefetch = (doc: Document) =>
         if (anchor === null) return
         const url = new URL(anchor.getAttribute("href") ?? "", doc.location.href)
         if (url.origin !== doc.location.origin) return
-        const route = AppRoute.parse(url.pathname + url.search)
-        if (Option.isSome(route)) void preloadRoute(route.value)
+        const route = Routes.AppRoute.parse(url.pathname + url.search)
+        if (Option.isSome(route)) void Pages.preloadRoute(route.value)
       }
       doc.addEventListener("pointerover", onIntent)
       doc.addEventListener("focusin", onIntent)

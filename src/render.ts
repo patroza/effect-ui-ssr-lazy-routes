@@ -1,28 +1,27 @@
-import * as Router from "@effect/ui/Router"
+import { Router } from "@effect/ui"
 import { HtmlServer } from "@effect/ui/html"
-import * as Effect from "effect/Effect"
-import * as Option from "effect/Option"
-import { App } from "./App.ts"
-import { type PageAssets, renderAssetTags } from "./assets.ts"
-import { findProduct } from "./data/products.ts"
-import { AppRoute, type AppRouteValue } from "./routes.ts"
+import { Effect, Option } from "effect"
+import * as App from "./App.ts"
+import * as Assets from "./assets.ts"
+import * as Products from "./data/products.ts"
+import * as Routes from "./routes.ts"
 
 export interface RenderedPage {
   readonly status: number
   readonly html: string
-  readonly route: AppRouteValue
+  readonly route: Routes.AppRouteValue
 }
 
 /** Resolves the URL with the same route union the client uses. `/*` makes it total. */
-export const routeOf = (url: string): AppRouteValue =>
-  Option.getOrThrowWith(AppRoute.parse(url), () => new Error(`Unparseable URL: ${url}`))
+export const routeOf = (url: string): Routes.AppRouteValue =>
+  Option.getOrThrowWith(Routes.AppRoute.parse(url), () => new Error(`Unparseable URL: ${url}`))
 
-const statusOf = (route: AppRouteValue): number => {
+const statusOf = (route: Routes.AppRouteValue): number => {
   switch (route._tag) {
     case "NotFound":
       return 404
     case "ProductDetail":
-      return findProduct(route.params.id) === undefined ? 404 : 200
+      return Products.findProduct(route.params.id) === undefined ? 404 : 200
     default:
       return 200
   }
@@ -40,12 +39,12 @@ const statusOf = (route: AppRouteValue): number => {
  */
 export const renderPage = async (
   url: string,
-  assetsFor: (route: AppRouteValue) => PageAssets
+  assetsFor: (route: Routes.AppRouteValue) => Assets.PageAssets
 ): Promise<RenderedPage> => {
   const route = routeOf(url)
   const page = await Effect.runPromise(
-    HtmlServer.renderToHtml(App, Router.props(AppRoute), { budget: "1 second" }).pipe(
-      Effect.provide(Router.static({ routes: AppRoute, url }))
+    HtmlServer.renderToHtml(App.App, Router.props(Routes.AppRoute), { budget: "1 second" }).pipe(
+      Effect.provide(Router.static({ routes: Routes.AppRoute, url }))
     )
   )
   const html = `<!doctype html>
@@ -54,7 +53,7 @@ export const renderPage = async (
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     ${page.head}
-    ${renderAssetTags(assetsFor(route))}
+    ${Assets.renderAssetTags(assetsFor(route))}
   </head>
   <body ${page.bodyAttributes}>
     <div id="app">${page.html}</div>

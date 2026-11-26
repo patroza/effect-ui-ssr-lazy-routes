@@ -1,5 +1,5 @@
-import * as Schema from "effect/Schema"
-import type { AppRouteTag } from "./routes.ts"
+import { Schema } from "effect"
+import type * as Routes from "./routes.ts"
 
 /** The subset of Vite's `.vite/manifest.json` chunk entries this app reads. */
 export const ManifestChunk = Schema.Struct({
@@ -38,7 +38,7 @@ export const routeSources = {
   ProductDetail: "src/pages/ProductDetailPage.ts",
   Analytics: "src/pages/AnalyticsPage.ts",
   NotFound: "src/pages/NotFoundPage.ts"
-} as const satisfies Record<AppRouteTag, string>
+} as const satisfies Record<Routes.AppRouteTag, string>
 
 const url = (file: string): string => `/${file}`
 
@@ -66,7 +66,7 @@ const unique = <A>(items: Iterable<A>): ReadonlyArray<A> => [...new Set(items)]
  * to fetch the page chunk (and the shared chunks it needs) in parallel with
  * the entry, instead of discovering them only after the entry has run.
  */
-export const resolveRouteAssets = (manifest: Manifest, tag: AppRouteTag): PageAssets => {
+export const resolveRouteAssets = (manifest: Manifest, tag: Routes.AppRouteTag): PageAssets => {
   const entry = staticClosure(manifest, ENTRY_SOURCE)
   const entryChunk = entry[0]
   if (entryChunk === undefined) throw new Error("Manifest has no entry chunk")

@@ -1,14 +1,11 @@
-import * as Router from "@effect/ui/Router"
-import type * as Renderer from "@effect/ui/Renderer"
+import { type Renderer, Router } from "@effect/ui"
 import { BrowserHost, HtmlHydrate } from "@effect/ui/html"
-import * as Effect from "effect/Effect"
-import * as Layer from "effect/Layer"
-import * as Option from "effect/Option"
-import * as FetchHttpClient from "effect/http/FetchHttpClient"
-import { App } from "./App.ts"
-import { preloadRoute } from "./pages.ts"
-import { installLinkPrefetch, installPreloadErrorReload } from "./prefetch.ts"
-import { AppRoute, type AppRouteValue } from "./routes.ts"
+import { Effect, Layer, Option } from "effect"
+import { FetchHttpClient } from "effect/http"
+import * as App from "./App.ts"
+import * as Pages from "./pages.ts"
+import * as Prefetch from "./prefetch.ts"
+import * as Routes from "./routes.ts"
 
 export interface BootOptions {
   /** The element the server rendered into (`#app`). */
@@ -19,9 +16,9 @@ export interface BootOptions {
   readonly state: Renderer.State | undefined
 }
 
-export const parseLocation = (location: string): AppRouteValue =>
+export const parseLocation = (location: string): Routes.AppRouteValue =>
   // `/*` is a catch-all, so every URL parses to some route.
-  Option.getOrThrowWith(AppRoute.parse(location), () => new Error(`Unparseable URL: ${location}`))
+  Option.getOrThrowWith(Routes.AppRoute.parse(location), () => new Error(`Unparseable URL: ${location}`))
 
 /**
  * The platform services the app needs: a Router (`BrowserRouter.layer(...)` in
@@ -48,18 +45,18 @@ export const platformLayer = (router: Layer.Layer<Router.Services>) => Layer.mer
  */
 export const boot = Effect.fn("boot")(function* (options: BootOptions) {
   const route = parseLocation(options.location)
-  yield* Effect.promise(() => preloadRoute(route))
+  yield* Effect.promise(() => Pages.preloadRoute(route))
 
   // After the initial preload, so a failed first load surfaces as itself.
   const doc = options.container.ownerDocument
   const win = doc.defaultView
-  if (win !== null) yield* installPreloadErrorReload(win)
-  yield* installLinkPrefetch(doc)
+  if (win !== null) yield* Prefetch.installPreloadErrorReload(win)
+  yield* Prefetch.installLinkPrefetch(doc)
 
   const root =
     options.state === undefined
-      ? yield* BrowserHost.mountEffect(App, Router.props(AppRoute), options.container)
-      : yield* HtmlHydrate.hydrateEffect(App, Router.props(AppRoute), options.container, options.state)
+      ? yield* BrowserHost.mountEffect(App.App, Router.props(Routes.AppRoute), options.container)
+      : yield* HtmlHydrate.hydrateEffect(App.App, Router.props(Routes.AppRoute), options.container, options.state)
 
   // Completes once every instance that adopts server state is live.
   yield* root.adopted

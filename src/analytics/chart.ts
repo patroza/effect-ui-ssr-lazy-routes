@@ -1,4 +1,4 @@
-import type { SeriesPoint } from "./dataset.ts"
+import type * as Dataset from "./dataset.ts"
 import "./chart.css"
 
 /**
@@ -13,7 +13,7 @@ const PAD = { top: 16, right: 16, bottom: 28, left: 48 } as const
 
 const round = (value: number): number => Math.round(value * 10) / 10
 
-export const lineChartSvg = (title: string, points: ReadonlyArray<SeriesPoint>): string => {
+export const lineChartSvg = (title: string, points: ReadonlyArray<Dataset.SeriesPoint>): string => {
   const values = points.map((point) => point.value)
   const max = Math.max(1, ...values)
   const innerWidth = WIDTH - PAD.left - PAD.right

@@ -1,15 +1,13 @@
-import * as Head from "@effect/ui/Head"
-import * as Router from "@effect/ui/Router"
-import * as UiSchema from "@effect/ui/UiSchema"
+import { Head, Router, UiSchema } from "@effect/ui"
 import { Html, HtmlHead } from "@effect/ui/html"
-import * as Schema from "effect/Schema"
-import { ui } from "./design.ts"
-import { pageFallback } from "./loading.ts"
-import { pages } from "./pages.ts"
-import { AppRoute } from "./routes.ts"
+import { Schema } from "effect"
+import * as Design from "./design.ts"
+import * as Loading from "./loading.ts"
+import * as Pages from "./pages.ts"
+import * as Routes from "./routes.ts"
 
 export const AppMessage = UiSchema.TaggedEnum({
-  ChangedRoute: { route: AppRoute }
+  ChangedRoute: { route: Routes.AppRoute }
 })
 
 /**
@@ -20,8 +18,8 @@ export const AppMessage = UiSchema.TaggedEnum({
  */
 export const App = Html.component({
   name: "App",
-  props: Schema.Struct({ route: AppRoute }),
-  model: Schema.Struct({ route: AppRoute }),
+  props: Schema.Struct({ route: Routes.AppRoute }),
+  model: Schema.Struct({ route: Routes.AppRoute }),
   message: AppMessage
 }).make({
   init: ($) => ({ route: $.props.route }),
@@ -30,15 +28,15 @@ export const App = Html.component({
       ChangedRoute: ({ route }) => ({ route })
     }),
   subscriptions: ({ model }) => [
-    Router.subscription(AppRoute, model.route, (route) => AppMessage.ChangedRoute({ route }))
+    Router.subscription(Routes.AppRoute, model.route, (route) => AppMessage.ChangedRoute({ route }))
   ],
   head: () => [Head.titleTemplate((title) => `${title} · Effect UI lazy routes`), HtmlHead.lang("en")],
   view: (h, { route }) => {
-    const fallback = pageFallback(h)
+    const fallback = Loading.pageFallback(h)
     const links = [
-      { tag: "Home", href: AppRoute.print(AppRoute.Home()), label: "Home" },
-      { tag: "Products", href: AppRoute.print(AppRoute.Products({ search: {} })), label: "Products" },
-      { tag: "Analytics", href: AppRoute.print(AppRoute.Analytics()), label: "Analytics" }
+      { tag: "Home", href: Routes.AppRoute.print(Routes.AppRoute.Home()), label: "Home" },
+      { tag: "Products", href: Routes.AppRoute.print(Routes.AppRoute.Products({ search: {} })), label: "Products" },
+      { tag: "Analytics", href: Routes.AppRoute.print(Routes.AppRoute.Analytics()), label: "Analytics" }
     ] as const
     return h.div(
       h.header.class("border-b border-neutral-200 pb-3 dark:border-neutral-800").children(
@@ -49,7 +47,7 @@ export const App = Html.component({
             links.map((link) =>
               h.a
                 .key(link.tag)
-                .class(ui.navLink)
+                .class(Design.ui.navLink)
                 .attr("href", link.href)
                 .attr("aria-current", link.tag === route._tag ? "page" : undefined)
                 .children(link.label)
@@ -59,20 +57,21 @@ export const App = Html.component({
       h.main.class("pt-6").children(
         // Key by `printPath` (no search): a new path mounts a fresh page, while
         // a search change updates the live page in place with new props.
-        AppRoute.match(route, {
-          Home: (r) => pages.Home(h, { key: AppRoute.printPath(r), fallback }),
-          Products: (r) => pages.Products(h, { key: AppRoute.printPath(r), props: { route: r }, fallback }),
+        Routes.AppRoute.match(route, {
+          Home: (r) => Pages.pages.Home(h, { key: Routes.AppRoute.printPath(r), fallback }),
+          Products: (r) =>
+            Pages.pages.Products(h, { key: Routes.AppRoute.printPath(r), props: { route: r }, fallback }),
           ProductDetail: (r) =>
-            pages.ProductDetail(h, {
-              key: AppRoute.printPath(r),
+            Pages.pages.ProductDetail(h, {
+              key: Routes.AppRoute.printPath(r),
               props: { id: r.params.id },
               fallback
             }),
-          Analytics: (r) => pages.Analytics(h, { key: AppRoute.printPath(r), fallback }),
+          Analytics: (r) => Pages.pages.Analytics(h, { key: Routes.AppRoute.printPath(r), fallback }),
           NotFound: (r) =>
-            pages.NotFound(h, {
-              key: AppRoute.printPath(r),
-              props: { path: AppRoute.printPath(r) },
+            Pages.pages.NotFound(h, {
+              key: Routes.AppRoute.printPath(r),
+              props: { path: Routes.AppRoute.printPath(r) },
               fallback
             })
         })

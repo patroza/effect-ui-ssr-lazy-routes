@@ -1,6 +1,6 @@
-import type * as Renderer from "@effect/ui/Renderer"
+import type { Renderer } from "@effect/ui"
 import { afterEach, vi } from "vitest"
-import type { PageAssets } from "../src/assets.ts"
+import type * as Assets from "../src/assets.ts"
 
 /**
  * Which page modules have been imported since the latest `loadApp()`. The mock
@@ -10,7 +10,7 @@ import type { PageAssets } from "../src/assets.ts"
 export const loadedPages = new Set<string>()
 const pageModules = ["Home", "Products", "ProductDetail", "Analytics", "NotFound"] as const
 
-export const noAssets: PageAssets = { scripts: [], modulePreloads: [], stylesheets: [] }
+export const noAssets: Assets.PageAssets = { scripts: [], modulePreloads: [], stylesheets: [] }
 
 /**
  * A freshly loaded copy of every app module, with its own `Component.lazy`

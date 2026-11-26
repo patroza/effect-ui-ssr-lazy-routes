@@ -1,5 +1,5 @@
-import type * as Renderer from "@effect/ui/Renderer"
-import * as Schema from "effect/Schema"
+import type { Renderer } from "@effect/ui"
+import { Schema } from "effect"
 
 // `#state` holds the JSON that `HtmlServer.serializeState` wrote: an object keyed by instance path
 // (plus the `~query` cache entries and friends).

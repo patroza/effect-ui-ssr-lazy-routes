@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { loadApp } from "./helpers.ts"
+import * as Helpers from "./helpers.ts"
 
 /** A `ReloadTarget` over the real `window`'s event system, with a spy for `reload` and an in-memory storage. */
 const target = (stored: Record<string, string> = {}) => {
@@ -25,7 +25,7 @@ const target = (stored: Record<string, string> = {}) => {
 const preloadError = () => new Event("vite:preloadError", { cancelable: true })
 
 const install = async (win: ReturnType<typeof target>["win"]) => {
-  const app = await loadApp()
+  const app = await Helpers.loadApp()
   const { Effect, Exit, Scope } = app.lib
   const scope = await Effect.runPromise(Scope.make())
   await Effect.runPromise(app.installPreloadErrorReload(win).pipe(Effect.provideService(Scope.Scope, scope)))

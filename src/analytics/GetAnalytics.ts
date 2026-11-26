@@ -1,7 +1,6 @@
-import * as Query from "@effect/ui/Query"
-import * as Effect from "effect/Effect"
-import * as Schema from "effect/Schema"
-import { analyticsReads, Metric, metricSeries, SeriesPoint } from "./dataset.ts"
+import { Query } from "@effect/ui"
+import { Effect, Schema } from "effect"
+import * as Dataset from "./dataset.ts"
 
 /** Marker proving this page-only query lands in the Analytics chunk (see scripts/verify-bundles.ts). */
 export const GET_ANALYTICS_QUERY_CHUNK = "SENTINEL:get-analytics-query"
@@ -12,16 +11,16 @@ export const GET_ANALYTICS_QUERY_CHUNK = "SENTINEL:get-analytics-query"
  * the dataset all ship in the Analytics chunk and nowhere else.
  */
 export class GetAnalytics extends Query.Service<GetAnalytics>()("analytics/GetAnalytics", {
-  args: { metric: Metric },
-  success: Schema.Array(SeriesPoint),
+  args: { metric: Dataset.Metric },
+  success: Schema.Array(Dataset.SeriesPoint),
   error: Schema.Never,
   staleTime: "5 minutes"
 }) {
   static readonly layer = this.toLayer(
     Effect.fnUntraced(function* ({ metric }) {
       yield* Effect.sleep("5 millis")
-      analyticsReads.getAnalytics += 1
-      return metricSeries(metric)
+      Dataset.analyticsReads.getAnalytics += 1
+      return Dataset.metricSeries(metric)
     })
   )
 }

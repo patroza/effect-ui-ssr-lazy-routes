@@ -49,26 +49,6 @@
           {
             "name": "./index",
             "message": "Please import from the specific file instead. Imports from index in the same directory are almost always wrong (circular)."
-          },
-          {
-            "name": "effect",
-            "message": "Import from a submodule instead, e.g. `import * as Effect from \"effect/Effect\"`."
-          },
-          {
-            "name": "effect/http",
-            "message": "Import from the specific HTTP submodule instead, e.g. `import * as FetchHttpClient from \"effect/http/FetchHttpClient\"`."
-          },
-          {
-            "name": "effect/reactivity",
-            "message": "Import from the specific submodule instead, e.g. `import * as AsyncResult from \"effect/reactivity/AsyncResult\"`."
-          },
-          {
-            "name": "@effect/ui",
-            "message": "Import from a submodule instead, e.g. `import * as Component from \"@effect/ui/Component\"`."
-          },
-          {
-            "name": "@effect/ui-kit",
-            "message": "Import from a submodule instead, e.g. `import { Button } from \"@effect/ui-kit/Button\"`."
           }
         ]
       }

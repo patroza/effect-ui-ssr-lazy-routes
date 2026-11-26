@@ -6,12 +6,12 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { gzipSync } from "node:zlib"
-import { type ManifestChunk, parseManifest, routeSources } from "../src/assets.ts"
-import type { AppRouteTag } from "../src/routes.ts"
+import * as Assets from "../src/assets.ts"
+import type * as Routes from "../src/routes.ts"
 
 const root = new URL("..", import.meta.url).pathname
 const clientDir = process.argv[2] ?? join(root, "dist/client")
-const manifest = parseManifest(readFileSync(join(clientDir, ".vite/manifest.json"), "utf8"))
+const manifest = Assets.parseManifest(readFileSync(join(clientDir, ".vite/manifest.json"), "utf8"))
 
 const failures: Array<string> = []
 const check = (ok: boolean, message: string): void => {
@@ -21,7 +21,7 @@ const check = (ok: boolean, message: string): void => {
 // --- Page-only things, each with the page that owns it and a string that is unique to it in the build. ---
 // Sentinels are exported by our own modules. Query/Command services carry their key into the build as a
 // string literal. A @effect/ui-kit primitive is identified by a data attribute only its module writes.
-type Owned = readonly [needle: string, label: string, owner: AppRouteTag]
+type Owned = readonly [needle: string, label: string, owner: Routes.AppRouteTag]
 const owned: ReadonlyArray<Owned> = [
   // [needle, label, owner route]
   ["SENTINEL:home-page", "Home page", "Home"],
@@ -83,7 +83,7 @@ check(entryCode.length > 0, `entry chunk ${entry.file} not found in assets/`)
 for (const [needle, label] of [...owned, ...sharedNeedles]) {
   check(!entryCode.includes(needle), `ENTRY chunk ${entry.file} contains ${label} (${needle})`)
 }
-const pageSources: ReadonlyArray<string> = Object.values(routeSources)
+const pageSources: ReadonlyArray<string> = Object.values(Assets.routeSources)
 for (const imported of entry.imports ?? []) {
   check(!pageSources.includes(imported), `entry statically imports page module ${imported}`)
 }
@@ -95,8 +95,8 @@ for (const source of pageSources) {
 }
 
 // --- Pages. ---
-const pageChunks = Object.entries(routeSources).map(([route, source]) => {
-  const chunk: ManifestChunk | undefined = manifest[source]
+const pageChunks = Object.entries(Assets.routeSources).map(([route, source]) => {
+  const chunk: Assets.ManifestChunk | undefined = manifest[source]
   check(chunk !== undefined, `manifest has no chunk for ${route} (${source})`)
   check(chunk?.isDynamicEntry === true, `${route} (${source}) is not a dynamic-entry chunk`)
   check(chunk?.file !== entry.file, `${route} shares the entry chunk file`)
@@ -119,14 +119,14 @@ for (const [needle] of sharedNeedles) {
   const holders = [...code].filter(([, text]) => text.includes(needle)).map(([file]) => file)
   check(holders.length === 1, `${needle} should live in exactly one shared chunk, found ${holders.length}`)
   for (const route of ["Products", "ProductDetail"] as const) {
-    const imports = manifest[routeSources[route]]?.imports ?? []
+    const imports = manifest[Assets.routeSources[route]]?.imports ?? []
     check(
       imports.some((key) => manifest[key]?.file === holders[0]),
       `${route} chunk doesn't import the shared catalog chunk ${holders[0]}`
     )
   }
   for (const route of ["Home", "Analytics", "NotFound"] as const) {
-    const imports = manifest[routeSources[route]]?.imports ?? []
+    const imports = manifest[Assets.routeSources[route]]?.imports ?? []
     check(
       !imports.some((key) => manifest[key]?.file === holders[0]),
       `${route} chunk imports the catalog chunk it doesn't need`

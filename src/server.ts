@@ -2,9 +2,9 @@ import { createReadStream } from "node:fs"
 import { stat } from "node:fs/promises"
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http"
 import { extname, join, normalize, sep } from "node:path"
-import { type PageAssets } from "./assets.ts"
-import { renderPage } from "./render.ts"
-import type { AppRouteValue } from "./routes.ts"
+import type * as Assets from "./assets.ts"
+import * as Render from "./render.ts"
+import type * as Routes from "./routes.ts"
 
 const contentTypes: Readonly<Record<string, string>> = {
   ".js": "text/javascript; charset=utf-8",
@@ -18,7 +18,7 @@ const contentTypes: Readonly<Record<string, string>> = {
 
 export interface AppHandlerOptions {
   /** Decides which assets the document loads for the matched route. */
-  readonly assetsFor: (route: AppRouteValue) => PageAssets
+  readonly assetsFor: (route: Routes.AppRouteValue) => Assets.PageAssets
   /** The built client directory (`dist/client`) to serve files from. Omit in dev (Vite serves them). */
   readonly clientDir?: string | undefined
 }
@@ -63,7 +63,7 @@ export const createAppHandler =
       if (url.pathname === "/favicon.ico") return void res.writeHead(204).end()
       if (options.clientDir !== undefined && (await serveStatic(options.clientDir, url.pathname, req, res))) return
 
-      const page = await renderPage(url.pathname + url.search, options.assetsFor)
+      const page = await Render.renderPage(url.pathname + url.search, options.assetsFor)
       send(
         res,
         page.status,

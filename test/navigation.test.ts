@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { byTestId, click, hydrateFromServer, loadedPages, text } from "./helpers.ts"
+import * as Helpers from "./helpers.ts"
 
 const link = (container: Element, href: string): Element => {
   const anchor = container.querySelector(`a[href="${href}"]`)
@@ -9,29 +9,29 @@ const link = (container: Element, href: string): Element => {
 
 describe("client-side navigation to a route that was not preloaded", () => {
   it("loads the page's chunk lazily on navigation, and keeps the surrounding DOM", async () => {
-    const browser = await hydrateFromServer("/", {
+    const browser = await Helpers.hydrateFromServer("/", {
       beforeBoot: (container) => container.querySelector("header")
     })
-    expect([...loadedPages]).toEqual(["Home"])
+    expect([...Helpers.loadedPages]).toEqual(["Home"])
 
-    click(link(browser.container, "/analytics"))
+    Helpers.click(link(browser.container, "/analytics"))
     await expect
       .poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:analytics-page"]'))
       .not.toBeNull()
 
-    expect([...loadedPages].sort()).toEqual(["Analytics", "Home"]) // only the visited page was imported
+    expect([...Helpers.loadedPages].sort()).toEqual(["Analytics", "Home"]) // only the visited page was imported
     expect(window.location.pathname).toBe("/analytics")
     expect(browser.container.querySelector("header")).toBe(browser.before) // the shell was not rebuilt
     expect(browser.container.querySelector('[data-page-chunk="SENTINEL:home-page"]')).toBeNull()
   })
 
   it("does not remount the page on state or search updates", async () => {
-    const browser = await hydrateFromServer("/", {})
-    click(link(browser.container, "/products"))
+    const browser = await Helpers.hydrateFromServer("/", {})
+    Helpers.click(link(browser.container, "/products"))
     await expect
       .poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:products-page"]'))
       .not.toBeNull()
-    expect(loadedPages.has("Products")).toBe(true)
+    expect(Helpers.loadedPages.has("Products")).toBe(true)
     await expect.poll(() => browser.container.querySelectorAll("li").length).toBe(6)
 
     const section = browser.container.querySelector("section")
@@ -41,8 +41,10 @@ describe("client-side navigation to a route that was not preloaded", () => {
     // 1. A Model update (compare product "1") keeps the very same nodes.
     const compare = browser.container.querySelector("li button")
     if (compare === null) throw new Error("no compare button")
-    click(compare)
-    await expect.poll(() => text(browser.container, '[data-testid="products-compared"]')).toBe("Comparing 1 product(s)")
+    Helpers.click(compare)
+    await expect
+      .poll(() => Helpers.text(browser.container, '[data-testid="products-compared"]'))
+      .toBe("Comparing 1 product(s)")
     expect(browser.container.querySelector("section")).toBe(section)
 
     // 2. A search update (`?q=mug`) changes the props (and so the query's args), not the instance.
@@ -54,53 +56,55 @@ describe("client-side navigation to a route that was not preloaded", () => {
     expect(browser.container.querySelector("section")).toBe(section)
     expect(browser.container.querySelector("input[type=search]")).toBe(input)
     // The Model survived the search update; a remount would have reset it to 0.
-    expect(text(browser.container, '[data-testid="products-compared"]')).toBe("Comparing 1 product(s)")
+    expect(Helpers.text(browser.container, '[data-testid="products-compared"]')).toBe("Comparing 1 product(s)")
   })
 
   it("can still navigate back to the page the server rendered (no remount issues)", async () => {
-    const browser = await hydrateFromServer("/")
-    click(link(browser.container, "/analytics"))
+    const browser = await Helpers.hydrateFromServer("/")
+    Helpers.click(link(browser.container, "/analytics"))
     await expect
       .poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:analytics-page"]'))
       .not.toBeNull()
-    click(link(browser.container, "/"))
+    Helpers.click(link(browser.container, "/"))
     await expect.poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:home-page"]')).not.toBeNull()
     const counter = browser.container.querySelector('[data-testid="home-counter"]')
     if (counter === null) throw new Error("no counter")
-    click(counter)
+    Helpers.click(counter)
     await expect.poll(() => counter.textContent).toBe("Clicked 1 times")
   })
 
   it("keeps a lazily navigated page mounted across its own state updates", async () => {
-    const browser = await hydrateFromServer("/")
-    click(link(browser.container, "/analytics"))
+    const browser = await Helpers.hydrateFromServer("/")
+    Helpers.click(link(browser.container, "/analytics"))
     await expect
       .poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:analytics-page"]'))
       .not.toBeNull()
     const section = browser.container.querySelector("section")
-    const revenueTab = byTestId(browser.container, "tab-revenue")
+    const revenueTab = Helpers.byTestId(browser.container, "tab-revenue")
 
-    click(byTestId(browser.container, "tab-orders"))
-    await expect.poll(() => text(browser.container, '[data-testid="analytics-total"]')).toBe("Total Orders: 5664")
+    Helpers.click(Helpers.byTestId(browser.container, "tab-orders"))
+    await expect
+      .poll(() => Helpers.text(browser.container, '[data-testid="analytics-total"]'))
+      .toBe("Total Orders: 5664")
     // The page and its tabs are the same nodes: only the active panel's content changed.
     expect(browser.container.querySelector("section")).toBe(section)
-    expect(byTestId(browser.container, "tab-revenue")).toBe(revenueTab)
+    expect(Helpers.byTestId(browser.container, "tab-revenue")).toBe(revenueTab)
     expect(revenueTab.getAttribute("aria-selected")).toBe("false")
-    expect(byTestId(browser.container, "tab-orders").getAttribute("aria-selected")).toBe("true")
+    expect(Helpers.byTestId(browser.container, "tab-orders").getAttribute("aria-selected")).toBe("true")
   })
 
   it("fetches a navigated Query.Service page's queries on the client", async () => {
-    const browser = await hydrateFromServer("/")
+    const browser = await Helpers.hydrateFromServer("/")
     expect(browser.app.catalogReads).toEqual({ searchProducts: 0, getProduct: 0 })
-    click(link(browser.container, "/products"))
+    Helpers.click(link(browser.container, "/products"))
     await expect.poll(() => browser.container.querySelectorAll("li").length).toBe(6)
     expect(browser.app.catalogReads.searchProducts).toBe(1) // nothing was shipped for this page, so it fetched
-    click(link(browser.container, "/products/42"))
-    await expect.poll(() => text(browser.container, "h1")).toBe("Field notebook")
+    Helpers.click(link(browser.container, "/products/42"))
+    await expect.poll(() => Helpers.text(browser.container, "h1")).toBe("Field notebook")
     expect(browser.app.catalogReads.getProduct).toBe(1)
-    click(link(browser.container, "/analytics"))
+    Helpers.click(link(browser.container, "/analytics"))
     await expect
-      .poll(() => text(browser.container, '[data-testid="analytics-total"]'))
+      .poll(() => Helpers.text(browser.container, '[data-testid="analytics-total"]'))
       .toBe("Total Revenue (USD): 237500")
     expect(browser.app.analyticsReads.getAnalytics).toBe(1)
   })
@@ -109,25 +113,25 @@ describe("client-side navigation to a route that was not preloaded", () => {
 // `boot` installs the link prefetch inside the app scope and removes it when the scope closes.
 describe("link prefetch", () => {
   it("preloads a page's chunk on pointer intent, without changing what renders", async () => {
-    const browser = await hydrateFromServer("/")
-    expect(loadedPages.has("Analytics")).toBe(false)
+    const browser = await Helpers.hydrateFromServer("/")
+    expect(Helpers.loadedPages.has("Analytics")).toBe(false)
 
     link(browser.container, "/analytics").dispatchEvent(new Event("pointerover", { bubbles: true }))
-    await expect.poll(() => loadedPages.has("Analytics")).toBe(true)
+    await expect.poll(() => Helpers.loadedPages.has("Analytics")).toBe(true)
 
     // Nothing visible changed, and nothing else was fetched.
     expect(browser.container.querySelector('[data-page-chunk="SENTINEL:analytics-page"]')).toBeNull()
     expect(browser.container.querySelector('[data-page-chunk="SENTINEL:home-page"]')).not.toBeNull()
-    expect(loadedPages.has("Products")).toBe(false)
+    expect(Helpers.loadedPages.has("Products")).toBe(false)
   })
 
   it("preloads on keyboard focus too, and then navigates with no loading fallback", async () => {
-    const browser = await hydrateFromServer("/")
+    const browser = await Helpers.hydrateFromServer("/")
     const products = link(browser.container, "/products")
     products.dispatchEvent(new Event("focusin", { bubbles: true }))
-    await expect.poll(() => loadedPages.has("Products")).toBe(true)
+    await expect.poll(() => Helpers.loadedPages.has("Products")).toBe(true)
 
-    click(products)
+    Helpers.click(products)
     await expect
       .poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:products-page"]'))
       .not.toBeNull()
@@ -137,12 +141,12 @@ describe("link prefetch", () => {
   })
 
   it("stops preloading once the app's scope is closed", async () => {
-    const browser = await hydrateFromServer("/")
+    const browser = await Helpers.hydrateFromServer("/")
     const analytics = link(browser.container, "/analytics") // closing the scope unmounts the app's nodes
     await browser.close()
     document.body.append(analytics) // still an `<a href>` in the document, now with no app listening
     analytics.dispatchEvent(new Event("pointerover", { bubbles: true }))
     await new Promise((resolve) => setTimeout(resolve, 50))
-    expect(loadedPages.has("Analytics")).toBe(false)
+    expect(Helpers.loadedPages.has("Analytics")).toBe(false)
   })
 })

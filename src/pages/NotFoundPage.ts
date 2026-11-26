@@ -1,9 +1,8 @@
-import * as Head from "@effect/ui/Head"
-import * as UiSchema from "@effect/ui/UiSchema"
+import { Head, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import * as Schema from "effect/Schema"
-import { ui } from "../design.ts"
-import { AppRoute } from "../routes.ts"
+import { Schema } from "effect"
+import * as Design from "../design.ts"
+import * as Routes from "../routes.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
 export const NOT_FOUND_PAGE_CHUNK = "SENTINEL:not-found-page"
@@ -21,10 +20,10 @@ export const NotFoundPage = Html.component({
   view: (h) =>
     h.section
       .attr("data-page-chunk", NOT_FOUND_PAGE_CHUNK)
-      .class(ui.stack)
+      .class(Design.ui.stack)
       .children(
-        h.h1.class(ui.title).children("Page not found"),
-        h.p.class(ui.muted).children(`Nothing lives at ${h.props.path}.`),
-        h.a.class(ui.link).attr("href", AppRoute.print(AppRoute.Home())).children("Back home")
+        h.h1.class(Design.ui.title).children("Page not found"),
+        h.p.class(Design.ui.muted).children(`Nothing lives at ${h.props.path}.`),
+        h.a.class(Design.ui.link).attr("href", Routes.AppRoute.print(Routes.AppRoute.Home())).children("Back home")
       )
 })

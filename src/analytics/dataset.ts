@@ -1,4 +1,4 @@
-import * as Schema from "effect/Schema"
+import { Schema } from "effect"
 
 /**
  * Analytics-only dataset. Nothing outside `AnalyticsPage` imports it, so it
