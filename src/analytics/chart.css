@@ -1,0 +1,7 @@
+.analytics-chart {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid #d8dee9;
+  border-radius: 6px;
+}
