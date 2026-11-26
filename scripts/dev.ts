@@ -1,6 +1,6 @@
 // Dev server: Vite in middleware mode (HMR, on-demand modules) + the same Effect
 // HTTP + RPC + SSR handler production uses, loaded through Vite so edits apply without restart.
-import { createServer as createHttpServer, type Server as HttpServer } from "node:http"
+import { createServer as createHttpServer, type RequestListener, type Server as HttpServer } from "node:http"
 import { createServer as createViteServer, createServerModuleRunner, type ViteDevServer } from "vite-plus"
 import type * as Assets from "../src/server/assets.ts"
 import type * as Handler from "../src/server/handler.ts"
@@ -32,7 +32,19 @@ const closeHttpServer = (server: HttpServer): Promise<void> =>
   })
 
 const requestedPort = parseAppPort(process.env["PORT"])
-const server = createHttpServer()
+let requestHandler: RequestListener | undefined
+const server = createHttpServer((req, res) => {
+  if (requestHandler === undefined) {
+    res.writeHead(503, {
+      "content-type": "text/plain; charset=utf-8",
+      "retry-after": "1",
+      connection: "close"
+    })
+    res.end("Dev server starting")
+    return
+  }
+  requestHandler(req, res)
+})
 const actualPort = await listenHttpServer(server, requestedPort)
 
 let vite: ViteDevServer
@@ -49,6 +61,7 @@ try {
     appType: "custom"
   })
 } catch (error) {
+  server.closeAllConnections()
   await closeHttpServer(server)
   throw error
 }
@@ -78,7 +91,7 @@ const getAppServer = async (): Promise<Handler.ManagedNodeHandler> => {
   return currentAppServer
 }
 
-server.on("request", (req, res) => {
+requestHandler = (req, res) => {
   vite.middlewares(req, res, async () => {
     try {
       const app = await getAppServer()
@@ -90,11 +103,12 @@ server.on("request", (req, res) => {
       res.end("Internal Server Error")
     }
   })
-})
+}
 
 console.log(`dev server on http://localhost:${actualPort}`)
 
 const shutdown = () => {
+  server.closeAllConnections()
   void Promise.all([
     currentAppServer?.then((app) => app.dispose()).catch(() => undefined),
     vite.close(),

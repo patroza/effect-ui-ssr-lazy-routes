@@ -13,28 +13,25 @@ const getErrorCode = (error: unknown): string | undefined =>
     ? error.code
     : undefined
 
-export const parseAppPort = (raw: string | undefined): number => {
-  if (raw === undefined || raw === "") return DEFAULT_APP_PORT
+const parseStrictPort = (raw: string, min: number, name: string): number => {
   if (!STRICT_DIGITS_RE.test(raw)) {
-    throw new RangeError(`Invalid PORT "${raw}": expected integer between 0 and 65535`)
+    throw new RangeError(`Invalid ${name} "${raw}": expected integer between ${min} and 65535`)
   }
   const parsed = Number(raw)
-  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65535) {
-    throw new RangeError(`Invalid PORT "${raw}": expected integer between 0 and 65535`)
+  if (!Number.isInteger(parsed) || parsed < min || parsed > 65535) {
+    throw new RangeError(`Invalid ${name} "${raw}": expected integer between ${min} and 65535`)
   }
   return parsed
 }
 
+export const parseAppPort = (raw: string | undefined): number => {
+  if (raw === undefined || raw === "") return DEFAULT_APP_PORT
+  return parseStrictPort(raw, 0, "PORT")
+}
+
 export const parseDevToolsPort = (raw: string | undefined): number | undefined => {
   if (raw === undefined || raw === "") return undefined
-  if (!STRICT_DIGITS_RE.test(raw)) {
-    throw new RangeError(`Invalid DEVTOOLS_PORT "${raw}": expected integer between 1 and 65535`)
-  }
-  const parsed = Number(raw)
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
-    throw new RangeError(`Invalid DEVTOOLS_PORT "${raw}": expected integer between 1 and 65535`)
-  }
-  return parsed
+  return parseStrictPort(raw, 1, "DEVTOOLS_PORT")
 }
 
 export const isPortAvailable = (port: number, host: string = DEVTOOLS_HOST): Promise<boolean> =>
@@ -91,11 +88,7 @@ export const resolveDevToolsPort = async (options: ResolveDevToolsPortOptions): 
   } = options
 
   if (devToolsPortEnv !== undefined && devToolsPortEnv !== "" && devToolsPortEnv !== "0") {
-    const explicit = parseDevToolsPort(devToolsPortEnv)
-    if (explicit === undefined) {
-      throw new RangeError(`Invalid DEVTOOLS_PORT "${devToolsPortEnv}": expected integer between 1 and 65535`)
-    }
-    return explicit
+    return parseStrictPort(devToolsPortEnv, 1, "DEVTOOLS_PORT")
   }
 
   const hasExplicitAppPort = appPortEnv !== undefined && appPortEnv !== ""

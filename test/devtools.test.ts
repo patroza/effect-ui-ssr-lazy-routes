@@ -455,6 +455,7 @@ describe("dev server port parsing and automatic DevTools port selection", () => 
       devToolsPortEnv: undefined
     })
     expect(wrapped).toBeGreaterThanOrEqual(DEFAULT_DEVTOOLS_PORT)
+    expect(wrapped).toBeLessThan(DEFAULT_DEVTOOLS_PORT + 20)
   })
 })
 

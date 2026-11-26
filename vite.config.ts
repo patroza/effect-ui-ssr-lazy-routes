@@ -13,7 +13,7 @@ const sharedOxlintConfig = EffectDiagnostics.loadOxlintJsonConfig(
 )
 const strictOxlintConfig = EffectDiagnostics.loadOxlintJsonConfig(join(root, "config/oxlint.strict.json"))
 
-export default defineConfig(({ isSsrBuild, mode }) => ({
+export default defineConfig(({ command, isSsrBuild, mode }) => ({
   run: {
     cache: {
       scripts: true,
@@ -35,6 +35,7 @@ export default defineConfig(({ isSsrBuild, mode }) => ({
     mode === "test"
       ? []
       : lazyPlugins(() => {
+          if (command !== "serve") return [tailwindcss()]
           const devToolsPort = parseDevToolsPort(process.env["DEVTOOLS_PORT"])
           return [
             tailwindcss(),
