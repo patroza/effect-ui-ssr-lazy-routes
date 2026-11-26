@@ -1,135 +1,150 @@
-import type { Renderer } from "@effect/ui"
-import { afterEach, vi } from "vitest"
+import { Router, type Renderer } from "@effect/ui"
+import { BrowserRouter } from "@effect/ui/html"
+import { ssr } from "@effect/ui/html/testing"
+import { TestHost } from "@effect/ui/testing"
+import { Context, type Duration, Effect, Exit, Fiber, Layer, Option, Scope } from "effect"
+import { TestClock } from "effect/testing"
+import * as App from "../src/App.ts"
+import * as Bootstrap from "../src/browser/bootstrap.ts"
+import * as State from "../src/browser/state.ts"
+import * as Pages from "../src/pages.ts"
+import * as Routes from "../src/routes.ts"
+import * as Render from "../src/server/render.ts"
 import type * as Assets from "../src/server/assets.ts"
-import type * as Routes from "../src/routes.ts"
-
-/**
- * Which page modules have been imported since the latest `loadApp()`. The mock
- * factory below runs exactly when a page module is first imported, so this
- * observes the real `import()` that `Component.lazy` does.
- */
-export const loadedPages = new Set<string>()
-const pageModules = {
-  Home: "../src/pages/HomePage.ts",
-  Products: "../src/pages/ProductsPage.ts",
-  ProductDetail: "../src/pages/product/ProductDetailPage.ts",
-  Analytics: "../src/pages/AnalyticsPage.ts",
-  NotFound: "../src/pages/NotFoundPage.ts"
-} as const
+import * as Frames from "./support/frames.ts"
+import * as Ports from "./support/ports.ts"
 
 export const noAssets: Assets.PageAssets = { scripts: [], modulePreloads: [], stylesheets: [] }
 
 /**
- * A freshly loaded copy of every app module, with its own `Component.lazy`
- * caches. The server and the browser are different processes in production,
- * so tests load one copy to render on the "server" and another for the "client".
+ * What every test of the app runs on: the Router at `url` (`Router.memory`, no `window`), the `TestHost` (test
+ * scheduler, `TestClock`), and the counting ports. Provide it around the test body with `Effect.provide`.
  */
-export const loadApp = async () => {
-  vi.resetModules()
-  loadedPages.clear()
-  for (const [name, modulePath] of Object.entries(pageModules)) {
-    vi.doMock(modulePath, async (importOriginal) => {
-      loadedPages.add(name)
-      return await importOriginal()
-    })
-  }
-  // `effect` and `@effect/ui` keep per-module registries (the Router's engine, service keys, ...), so the
-  // test must use the SAME copies as the app, never ones imported statically by the test file.
-  const [
-    [Effect, Exit, Layer, Scope, Logger],
-    Router,
-    uiHtml,
-    render,
-    bootstrap,
-    pages,
-    routes,
-    loading,
-    prefetch,
-    products,
-    dataset,
-    state
-  ] = await Promise.all([
-    Promise.all([
-      import("effect/Effect"),
-      import("effect/Exit"),
-      import("effect/Layer"),
-      import("effect/Scope"),
-      import("effect/Logger")
-    ]),
-    import("@effect/ui/Router"),
-    import("@effect/ui/html"),
-    import("../src/server/render.ts"),
-    import("../src/browser/bootstrap.ts"),
-    import("../src/pages.ts"),
-    import("../src/routes.ts"),
-    import("../src/design/loading.ts"),
-    import("../src/browser/prefetch.ts"),
-    import("../src/product/domain/Product.ts"),
-    import("../src/analytics/domain/Analytics.ts"),
-    import("../src/browser/state.ts")
-  ])
-  return {
-    ...render,
-    ...bootstrap,
-    ...pages,
-    ...routes,
-    ...loading,
-    ...prefetch,
-    ...state,
-    catalogReads: products.catalogReads,
-    catalogWrites: products.catalogWrites,
-    analyticsReads: dataset.analyticsReads,
-    lib: {
-      Effect,
-      Exit,
-      Layer,
-      Scope,
-      Logger,
-      Router,
-      ...uiHtml
-    }
-  }
-}
-export type App = Awaited<ReturnType<typeof loadApp>>
+export const appAt = (url: string) =>
+  Layer.mergeAll(Router.memory({ routes: Routes.AppRoute, url }), TestHost.layer()).pipe(
+    Layer.provideMerge(Ports.countingPorts)
+  )
 
-/** `renderPage` for a URL that must render a document (not a redirect or a 400). */
-export const renderDocument = async (
-  app: App,
+/**
+ * What a test that boots the real browser entry (`hydrateFromServer`) runs on: the `TestHost` and the counting
+ * ports. The Router is `BrowserRouter` (happy-dom's `window`), which `hydrateFromServer` builds itself.
+ */
+export const browserEnv = TestHost.layer().pipe(Layer.provideMerge(Ports.countingPorts))
+
+/** How many port operations ran in this test's Env (the server's and the client's together). */
+export const portCounts = Effect.gen(function* () {
+  const calls = yield* Ports.PortCalls
+  return yield* calls.counts
+})
+
+/**
+ * Runs `effect`, which sleeps on the Clock (a port's 5 ms round trip, the render budget) and queues its work on the
+ * `TestHost`'s scheduler, on the `TestClock`: it settles the host (so the fibers register their sleeps), then moves
+ * virtual time forward, until `effect` is done. No real time is waited for, and a render that never finishes fails
+ * after a bounded number of steps.
+ */
+export const onTestClock = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const fiber = yield* Effect.forkChild(effect)
+    for (let step = 0; fiber.pollUnsafe() === undefined; step++) {
+      if (step === 100) return yield* Effect.die(new Error("the effect still sleeps after 100 clock steps"))
+      yield* TestHost.settle
+      yield* TestClock.adjust("5 millis")
+    }
+    return yield* Fiber.join(fiber)
+  })
+
+/** A fresh set of pages and the app over them: what ONE side (server or browser) of a test uses. */
+export const makeSide = () => {
+  const loaded: Array<Routes.AppRouteTag> = []
+  const pages = Pages.createPages({ onLoad: (tag) => loaded.push(tag) })
+  return { loaded, pages, app: App.createApp(pages) }
+}
+export type Side = ReturnType<typeof makeSide>
+
+/** Starts (and awaits) the chunk of the route `url` resolves to, as `boot` does before hydrating. */
+export const preloadFor = (side: Side, url: string) =>
+  Option.match(Routes.routeOf(url), {
+    onNone: () => Effect.void,
+    onSome: (route) => Effect.promise(() => Pages.preloadRoute(route, side.pages))
+  })
+
+/**
+ * Waits for the chunk of the route `url` resolves to to be loaded by `side`'s pages (the load a `Component.lazy`
+ * child started is the one `preload()` shares), then settles the host so the page it unblocked is rendered. A
+ * lazy `import()` is a real Promise: `TestHost.settle` cannot see one that a browser-hosted root started.
+ */
+export const chunkLoaded = (side: Side, url: string) => Effect.andThen(preloadFor(side, url), TestHost.settle)
+
+/** An `ssr` frame: whether the loading fallback was in the container after that commit. */
+const pageOrFallback = (container: globalThis.Element): "page" | "fallback" =>
+  container.querySelector("[data-fallback]") === null ? "page" : "fallback"
+
+/**
+ * `Ssr.ssr` of the app at `url` (provide `appAt(url)` around the test): it renders on the server, hydrates the
+ * HTML in a fresh document, and fails with `SsrError` unless hydration adopted every server node, Model and
+ * `~query` entry and the heads agree. Its client root is registered with `TestHost`, so `TestHost.settle` waits
+ * for it: `result.root.fetches()` lists the client's fetches and `result.root.frames()` each commit as
+ * `"page"` or `"fallback"`.
+ *
+ * The landing page's chunk is preloaded first, as `boot` does before it hydrates (see the negative control in
+ * `hydration.test.ts`).
+ */
+export const ssrAt = Effect.fn("ssrAt")(function* (url: string, options?: { readonly budget?: Duration.Input }) {
+  const side = makeSide()
+  yield* preloadFor(side, url)
+  const result = yield* ssr(side.app, Router.props(Routes.AppRoute), { ...options, frames: pageOrFallback })
+  return { side, result }
+})
+
+/** `renderPageEffect` for a URL that must render a document (not a redirect or a 400). */
+export const renderDocument = Effect.fn("renderDocument")(function* (
   url: string,
   assetsFor: (route: Routes.AppRouteValue) => Assets.PageAssets = () => noAssets
-) => {
-  const outcome = await app.renderPage(url, assetsFor)
+) {
+  const side = makeSide()
+  yield* preloadFor(side, url)
+  const outcome = yield* onTestClock(Render.renderPageEffect(url, assetsFor, { app: side.app }))
   if (outcome._tag !== "Page") throw new Error(`expected a page for ${url}, got ${outcome._tag} ${outcome.status}`)
   return outcome
-}
+})
+
+/** The outcome of rendering `url` on a fresh "server": a page, a redirect or a 400. */
+export const renderOutcome = Effect.fn("renderOutcome")(function* (url: string) {
+  const side = makeSide()
+  yield* preloadFor(side, url)
+  return yield* onTestClock(Render.renderPageEffect(url, () => noAssets, { app: side.app }))
+})
 
 export interface ServerDocument {
   readonly status: number
   readonly html: string
   readonly appHtml: string
   readonly state: Renderer.State
+  /** The port operations the server ran for this render (its own counters, apart from the browser's). */
+  readonly serverCalls: Ports.PortCounts
 }
 
-/** Server-renders `url` with its own module copy and splits the document the way a browser would see it. */
-export const serverRender = async (url: string): Promise<ServerDocument> => {
-  const server = await loadApp()
-  const page = await renderDocument(server, url)
+/** Server-renders `url` with its own pages and app, and splits the document the way a browser would see it. */
+export const serverRender = Effect.fn("serverRender")(function* (url: string) {
+  const ports = yield* Layer.build(Layer.fresh(Ports.countingPorts))
+  const page = yield* renderDocument(url).pipe(Effect.provideContext(ports))
   const parsed = new DOMParser().parseFromString(page.html, "text/html")
-  const state = server.readState(parsed.getElementById("state")?.textContent)
+  const state = State.readState(parsed.getElementById("state")?.textContent)
   if (state === undefined) throw new Error("server HTML has no #state")
+  const serverCalls = yield* Context.get(ports, Ports.PortCalls).counts
   return {
     status: page.status,
     html: page.html,
     appHtml: parsed.getElementById("app")?.innerHTML ?? "",
-    state
-  }
-}
+    state,
+    serverCalls
+  } satisfies ServerDocument
+})
 
 export interface Browser<Before> {
-  /** The client's module copy: its `pages`, `loadingStats`, ... */
-  readonly app: App
-  /** The app root: `root.model()` is the root component's Model. */
-  readonly root: { readonly model: () => unknown }
+  /** The browser's own pages and app: `loaded` lists the page modules ITS `Component.lazy` imported. */
+  readonly side: Side
   readonly container: Element
   /** The state the server serialized, after `editState` (what the client hydrated from). */
   readonly serverState: Renderer.State
@@ -137,43 +152,27 @@ export interface Browser<Before> {
   readonly before: Before
   /** Every element with `data-fallback` that was ever inserted under the container. */
   readonly fallbacksSeen: ReadonlyArray<Element>
-  readonly close: () => Promise<void>
+  /** Closes the app's scope: its listeners (link prefetch, reload guard, the Router's) are removed. */
+  readonly close: Effect.Effect<void>
 }
-
-const open: Array<() => Promise<void>> = []
-afterEach(async () => {
-  await Promise.all(open.splice(0).map((close) => close()))
-})
 
 interface HydrateOptions {
   readonly editState?: (state: Renderer.State) => Renderer.State
 }
 
-/**
- * Puts the server's HTML in the document at `url`, then runs the real client
- * `boot` against it, exactly as `src/main.ts` does (BrowserRouter included).
- * The browser is closed automatically after each test.
- *
- * `beforeBoot` runs on the server's DOM before the client boots: capture node
- * references there to prove they are the ones the client adopts.
- */
-export async function hydrateFromServer(url: string, options?: HydrateOptions): Promise<Browser<undefined>>
-export async function hydrateFromServer<Before>(
+const hydrate = Effect.fn("hydrateFromServer")(function* <Before>(
   url: string,
-  options: HydrateOptions & { readonly beforeBoot: (container: Element) => Before }
-): Promise<Browser<Before>>
-export async function hydrateFromServer(
-  url: string,
-  options: HydrateOptions & { readonly beforeBoot?: (container: Element) => unknown } = {}
-): Promise<Browser<unknown>> {
-  const server = await serverRender(url)
-  const app = await loadApp() // a different module graph: the "browser"
+  capture: (container: Element) => Before,
+  options: HydrateOptions
+) {
+  const server = yield* serverRender(url)
+  const side = makeSide() // the "browser": its lazy pages start unloaded
 
   window.history.replaceState(null, "", url)
   document.body.innerHTML = `<div id="app">${server.appHtml}</div>`
   const container = document.getElementById("app")
   if (container === null) throw new Error("#app missing")
-  const before = options.beforeBoot?.(container)
+  const before = capture(container)
 
   const fallbacksSeen: Array<Element> = []
   const observer = new MutationObserver((records) => {
@@ -188,37 +187,98 @@ export async function hydrateFromServer(
   observer.observe(container, { childList: true, subtree: true })
 
   const state = options.editState?.(server.state) ?? server.state
-  const { Effect, Exit, Layer, Scope } = app.lib
-  const scope = await Effect.runPromise(Scope.make())
-  // Like main.ts: the platform layers live as long as the app's scope, not just as long as `boot`.
-  const platform = await Effect.runPromise(
-    Layer.buildWithScope(app.platformLayer(app.lib.BrowserRouter.layer({ routes: app.AppRoute })), scope)
-  )
-  const root = await Effect.runPromise(
-    app
-      .boot({ container, location: window.location.pathname + window.location.search, state })
-      .pipe(Effect.provideContext(platform), Effect.provideService(Scope.Scope, scope))
-  )
-  const close = async () => {
+  const scope = yield* Scope.make()
+  const close = Effect.suspend(() => {
     observer.disconnect()
-    await Effect.runPromise(Scope.close(scope, Exit.void))
+    return Scope.close(scope, Exit.void)
+  })
+  yield* Effect.addFinalizer(() => close)
+  // Like main.ts: the platform layers live as long as the app's scope, not just as long as `boot`.
+  const platform = yield* Layer.buildWithScope(
+    Bootstrap.platformLayer(BrowserRouter.layer({ routes: Routes.AppRoute })),
+    scope
+  )
+  yield* Bootstrap.boot({
+    container,
+    location: window.location.pathname + window.location.search,
+    state,
+    app: side.app,
+    pages: side.pages
+  }).pipe(
+    Effect.provideContext(platform),
+    Effect.provideService(Scope.Scope, scope),
+    Effect.tap(() => TestHost.settle)
+  )
+  const browser: Browser<Before> = {
+    side,
+    container,
+    before,
+    serverState: state,
+    fallbacksSeen,
+    close
   }
-  open.push(close)
-  return { app, root, container, before, serverState: state, fallbacksSeen, close }
-}
+  return browser
+})
 
 /**
- * Lets the app run for `SETTLE_MS` of real time, to assert that something did NOT happen (a refetch, a late
- * fallback, a second send). The app's slowest stand-in "network" call sleeps 5 ms, so this is 10x that; every
- * "did not happen" assertion has a positive twin that polls for the same thing happening, which proves the
- * wait is long enough to see it. Positive conditions use `expect.poll`, never this.
+ * Puts the server's HTML in the document at `url`, then runs the real client `boot` against it, exactly as
+ * `src/main.ts` does (`BrowserRouter` included, so `<a href>` clicks are intercepted and `history.pushState` runs).
+ *
+ * The server and the browser are two sides in ONE module graph, each with its own `createPages()` (its own lazy
+ * caches) and its own `createApp(pages)`: no module is reset. Everything runs on `TestHost`: end each step with
+ * `TestHost.settle`. The app's scope closes with the test.
+ *
+ * `capture` runs on the server's DOM before the client boots: take node references there to prove they are the
+ * ones the client adopts. It is `Browser.before`.
  */
-const SETTLE_MS = 50
-export const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, SETTLE_MS))
+export const hydrateCapturing = <Before>(
+  url: string,
+  capture: (container: Element) => Before,
+  options: HydrateOptions = {}
+) => hydrate(url, capture, options)
+
+/** `hydrateCapturing` without capturing anything. */
+export const hydrateFromServer = (url: string, options: HydrateOptions = {}) => hydrate(url, () => undefined, options)
 
 export const click = (element: Element): void => {
   element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }))
 }
+
+/** The `<a href>` to `href` under `container`, or a thrown error. */
+export const link = (container: Element, href: string): Element => {
+  const anchor = container.querySelector(`a[href="${href}"]`)
+  if (anchor === null) throw new Error(`no link to ${href}`)
+  return anchor
+}
+
+/**
+ * Follows the `<a href>` to `href` in the hydrated page like a user: the click is intercepted by `BrowserRouter`
+ * (`history.pushState`), the target's chunk loads, and its first fetch (the ports' 5 ms round trip) completes.
+ * All of it on virtual time.
+ */
+export const follow = (browser: Browser<unknown>, href: string) =>
+  Effect.gen(function* () {
+    click(link(browser.container, href))
+    yield* TestHost.settle
+    yield* chunkLoaded(browser.side, href)
+    yield* TestClock.adjust("5 millis")
+    yield* TestHost.settle
+  })
+
+/**
+ * Settles the host, then runs the animation frames the kit's transitions asked for (a closing Dialog or
+ * Collapsible unmounts on one), until nothing is left to run.
+ */
+export const settleFrames = Effect.gen(function* () {
+  yield* TestHost.settle
+  for (let frame = 0; frame < 10; frame++) {
+    const ran = Frames.flushFrames()
+    // A transition that has no animation left to wait for finishes on a resolved Promise, one microtask later.
+    yield* Effect.promise(() => Promise.resolve())
+    yield* TestHost.settle
+    if (ran === 0) return
+  }
+})
 
 /** The element with `data-testid`, or a thrown error naming it (so tests never need a non-null assertion). */
 export const byTestId = (container: Element, id: string): Element => {

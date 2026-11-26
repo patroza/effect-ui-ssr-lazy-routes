@@ -1,14 +1,16 @@
 import { Query } from "@effect/ui"
 import { Effect, Schema } from "effect"
 import * as Products from "../../product/domain/Product.ts"
+import * as CatalogPort from "../../product/services/CatalogPort.ts"
 
 /** Marker proving this page-only query lands in the Products chunk (see scripts/verify-bundles.ts). */
 export const SEARCH_PRODUCTS_QUERY_CHUNK = "SENTINEL:search-products-query"
 
 /**
- * The products matching the search text. Only `ProductsPage` imports it (and
- * provides `SearchProducts.layer` with `Component.provide`), so the query and
- * its Layer live in the Products chunk, never in the entry chunk.
+ * The products matching the search text, read through `CatalogPort`. Only
+ * `ProductsPage` imports it (and provides `SearchProducts.layer` with
+ * `Component.provide`), so the query and its Layer live in the Products chunk,
+ * never in the entry chunk.
  */
 export class SearchProducts extends Query.Service<SearchProducts>()("catalog/SearchProducts", {
   args: { q: Schema.optional(Schema.String) },
@@ -16,12 +18,11 @@ export class SearchProducts extends Query.Service<SearchProducts>()("catalog/Sea
   error: Schema.Never,
   staleTime: "5 minutes"
 }) {
+  /** Requires `CatalogPort`. */
   static readonly layer = this.toLayer(
-    Effect.fnUntraced(function* ({ q }) {
-      // A stand-in for a network round trip, so the cache has something to wait for.
-      yield* Effect.sleep("5 millis")
-      Products.catalogReads.searchProducts += 1
-      return Products.searchProducts(q)
+    Effect.gen(function* () {
+      const port = yield* CatalogPort.CatalogPort
+      return ({ q }) => port.search(q)
     })
   )
 }

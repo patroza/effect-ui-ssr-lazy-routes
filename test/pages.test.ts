@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest"
-import type * as Routes from "../src/routes.ts"
+import { describe, expect, it } from "@effect/vitest"
+import { Effect } from "effect"
+import * as Pages from "../src/pages.ts"
+import * as Routes from "../src/routes.ts"
 
 // The name given to `Component.lazy(name, ...)` becomes part of the instance path
 // (`/App/<name>[<path>]`) the server serializes and the client looks up. If it
@@ -31,14 +33,38 @@ describe("pages", () => {
     "NotFound"
   ] as const satisfies ReadonlyArray<Routes.AppRouteTag>
 
-  it("has a lazy page for every route", async () => {
-    const { pages } = await import("../src/pages.ts")
-    expect(Object.keys(pages).sort()).toEqual([...tags].sort())
+  it("has a lazy page for every route", () => {
+    expect(Object.keys(Pages.pages).sort()).toEqual([...tags].sort())
+    expect(Object.keys(Pages.createPages()).sort()).toEqual([...tags].sort())
   })
 
-  it.each(tags)("%s: the lazy name is the loaded component's name", async (tag) => {
-    const { pages } = await import("../src/pages.ts")
-    const component = await loaded[tag]()
-    expect(lazyName(pages[tag])).toBe(component.definition.name)
-  })
+  for (const tag of tags) {
+    it.effect(`${tag}: the lazy name is the loaded component's name`, () =>
+      Effect.gen(function* () {
+        const component = yield* Effect.promise(loaded[tag])
+        expect(lazyName(Pages.pages[tag])).toBe(component.definition.name)
+        expect(lazyName(Pages.createPages()[tag])).toBe(component.definition.name)
+      })
+    )
+  }
+
+  it.effect("createPages gives every call its own load cache, so no module needs resetting", () =>
+    Effect.gen(function* () {
+      const loadedA: Array<Routes.AppRouteTag> = []
+      const loadedB: Array<Routes.AppRouteTag> = []
+      const a = Pages.createPages({ onLoad: (tag) => loadedA.push(tag) })
+      const b = Pages.createPages({ onLoad: (tag) => loadedB.push(tag) })
+      const route = Routes.AppRoute.Home()
+
+      yield* Effect.promise(() => Pages.preloadRoute(route, a))
+      expect(loadedA).toEqual(["Home"])
+      expect(loadedB).toEqual([]) // `b` never loaded it, though the module is already imported
+
+      yield* Effect.promise(() => Pages.preloadRoute(route, a))
+      expect(loadedA).toEqual(["Home"]) // a page loads once per set
+
+      yield* Effect.promise(() => Pages.preloadRoute(route, b))
+      expect(loadedB).toEqual(["Home"])
+    })
+  )
 })

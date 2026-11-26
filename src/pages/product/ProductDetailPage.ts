@@ -1,11 +1,14 @@
 import { Command, Component, Head, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Button, Dialog, Input } from "@effect/ui-kit"
-import { Effect, Layer, Option, Schema } from "effect"
+import { Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import * as Products from "../../product/domain/Product.ts"
 import * as Design from "../../design/classes.ts"
+import * as BookmarkProduct from "../../product/commands/BookmarkProduct.ts"
 import * as GetProduct from "../../product/queries/GetProduct.ts"
+import * as BookmarkPort from "../../product/services/BookmarkPort.ts"
+import * as CatalogPort from "../../product/services/CatalogPort.ts"
 import * as Routes from "../../routes.ts"
 import * as Status from "../../lib/status.ts"
 
@@ -22,26 +25,6 @@ export const ProductDetailPageMessage = UiSchema.TaggedEnum({
   UpdatedQuestion: { value: Schema.String },
   ClickedSendQuestion: {}
 })
-
-/**
- * Bookmarks a product. The body returns the page's own message, so the page's
- * `update` hears the result; it can't fail (`error` defaults to `Schema.Never`).
- * Defined next to the component that runs it and provided with
- * `Component.provide`, so it ships in this page's chunk.
- */
-export class BookmarkProduct extends Command.Service<BookmarkProduct>()("catalog/BookmarkProduct", {
-  args: { id: Schema.String },
-  success: ProductDetailPageMessage
-}) {
-  static readonly layer = this.toLayer(
-    Effect.fnUntraced(function* ({ id }) {
-      // A stand-in for a network round trip.
-      yield* Effect.sleep("5 millis")
-      Products.catalogWrites.bookmarkProduct += 1
-      return ProductDetailPageMessage.CompletedBookmarkProduct({ id })
-    })
-  )
-}
 
 const backdropClass =
   "fixed inset-0 bg-black/40 transition-opacity data-starting-style:opacity-0 data-ending-style:opacity-0"
@@ -71,7 +54,12 @@ export const ProductDetailPageNoDeps = Html.component({
       ClickedLessQuantity: () => $.evolve({ quantity: (n) => Math.max(1, n - 1) }),
       ClickedBookmark: () =>
         $.model.bookmark === "Idle"
-          ? $.evolve({ bookmark: "Saving" as const }).run(BookmarkProduct.make({ id: $.props.id }))
+          ? $.evolve({ bookmark: "Saving" as const }).run(
+              BookmarkProduct.BookmarkProduct.make({ id: $.props.id }).pipe(
+                // The command's domain result becomes this page's message here, so the command never imports the page.
+                Command.map(() => ProductDetailPageMessage.CompletedBookmarkProduct({ id: $.props.id }))
+              )
+            )
           : $.model,
       CompletedBookmarkProduct: () => $.evolve({ bookmark: "Saved" as const }),
       RequestedOpenInquiry: () => $.evolve({ inquiryOpen: true }),
@@ -211,9 +199,13 @@ export const ProductDetailPageNoDeps = Html.component({
 })
 
 /**
- * The page with its own Layers: the `GetProduct` query and the `BookmarkProduct`
- * Command both ship in this page's chunk.
+ * The page with its own Layers: the `GetProduct` query over `CatalogPort` and the `BookmarkProduct`
+ * Command over `BookmarkPort`. All four ship in this page's chunk.
  */
 export const ProductDetailPage = ProductDetailPageNoDeps.pipe(
-  Component.provide(Layer.mergeAll(GetProduct.GetProduct.layer, BookmarkProduct.layer))
+  Component.provide(
+    Layer.mergeAll(GetProduct.GetProduct.layer, BookmarkProduct.BookmarkProduct.layer).pipe(
+      Layer.provide(Layer.mergeAll(CatalogPort.CatalogPort.layer, BookmarkPort.BookmarkPort.layer))
+    )
+  )
 )

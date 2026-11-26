@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest"
-import * as Helpers from "./helpers.ts"
+import { describe, expect, it, vi } from "@effect/vitest"
+import { Effect, Exit, Scope } from "effect"
+import * as Prefetch from "../src/browser/prefetch.ts"
 
 /** A `ReloadTarget` over the real `window`'s event system, with a spy for `reload` and an in-memory storage. */
 const target = (stored: Record<string, string> = {}) => {
@@ -24,86 +25,73 @@ const target = (stored: Record<string, string> = {}) => {
 
 const preloadError = () => new Event("vite:preloadError", { cancelable: true })
 
-const install = async (win: ReturnType<typeof target>["win"]) => {
-  const app = await Helpers.loadApp()
-  const { Effect, Exit, Scope } = app.lib
-  const scope = await Effect.runPromise(Scope.make())
-  await Effect.runPromise(app.installPreloadErrorReload(win).pipe(Effect.provideService(Scope.Scope, scope)))
-  return () => Effect.runPromise(Scope.close(scope, Exit.void))
-}
-
 describe("installPreloadErrorReload", () => {
-  it("reloads and prevents the default on the first preload error", async () => {
-    const { win, reload, stored } = target()
-    const close = await install(win)
-    try {
+  it.effect("reloads and prevents the default on the first preload error", () =>
+    Effect.gen(function* () {
+      const { win, reload, stored } = target()
+      yield* Prefetch.installPreloadErrorReload(win) // released with the test's scope
       const event = preloadError()
       window.dispatchEvent(event)
       expect(reload).toHaveBeenCalledTimes(1)
       expect(event.defaultPrevented).toBe(true)
       expect(Object.keys(stored)).toHaveLength(1)
-    } finally {
-      await close()
-    }
-  })
+    })
+  )
 
-  it("leaves the real chunk error alone (no preventDefault, no reload) when it just reloaded", async () => {
-    const { win, reload } = target({ "effect-ui-ssr-lazy-routes:reloaded-at": String(Date.now()) })
-    const close = await install(win)
-    try {
+  it.effect("leaves the real chunk error alone (no preventDefault, no reload) when it just reloaded", () =>
+    Effect.gen(function* () {
+      const { win, reload } = target({ "effect-ui-ssr-lazy-routes:reloaded-at": String(Date.now()) })
+      yield* Prefetch.installPreloadErrorReload(win)
       const event = preloadError()
       window.dispatchEvent(event)
       expect(reload).not.toHaveBeenCalled()
       expect(event.defaultPrevented).toBe(false)
-    } finally {
-      await close()
-    }
-  })
+    })
+  )
 
-  it("reloads once per event when sessionStorage throws (private mode, blocked storage)", async () => {
-    const { win, reload } = target()
-    const throwing = {
-      ...win,
-      sessionStorage: {
-        getItem: () => {
-          throw new Error("SecurityError")
-        },
-        setItem: () => {
-          throw new Error("SecurityError")
+  it.effect("reloads once per event when sessionStorage throws (private mode, blocked storage)", () =>
+    Effect.gen(function* () {
+      const { win, reload } = target()
+      const throwing = {
+        ...win,
+        sessionStorage: {
+          getItem: () => {
+            throw new Error("SecurityError")
+          },
+          setItem: () => {
+            throw new Error("SecurityError")
+          }
         }
       }
-    }
-    const close = await install(throwing)
-    try {
+      yield* Prefetch.installPreloadErrorReload(throwing)
       const event = preloadError()
       window.dispatchEvent(event)
       expect(reload).toHaveBeenCalledTimes(1)
       expect(event.defaultPrevented).toBe(true)
-    } finally {
-      await close()
-    }
-  })
+    })
+  )
 
-  it("treats a stored timestamp older than the loop window as no recent reload", async () => {
-    const { win, reload } = target({ "effect-ui-ssr-lazy-routes:reloaded-at": String(Date.now() - 60_000) })
-    const close = await install(win)
-    try {
+  it.effect("treats a stored timestamp older than the loop window as no recent reload", () =>
+    Effect.gen(function* () {
+      const { win, reload } = target({ "effect-ui-ssr-lazy-routes:reloaded-at": String(Date.now() - 60_000) })
+      yield* Prefetch.installPreloadErrorReload(win)
       const event = preloadError()
       window.dispatchEvent(event)
       expect(reload).toHaveBeenCalledTimes(1)
       expect(event.defaultPrevented).toBe(true)
-    } finally {
-      await close()
-    }
-  })
+    })
+  )
 
-  it("removes its listener when the scope closes", async () => {
-    const { win, reload } = target()
-    const close = await install(win)
-    await close()
-    const event = preloadError()
-    window.dispatchEvent(event)
-    expect(reload).not.toHaveBeenCalled()
-    expect(event.defaultPrevented).toBe(false)
-  })
+  it.effect("removes its listener when the scope closes", () =>
+    Effect.gen(function* () {
+      const { win, reload } = target()
+      const scope = yield* Scope.make()
+      yield* Prefetch.installPreloadErrorReload(win).pipe(Effect.provideService(Scope.Scope, scope))
+      yield* Scope.close(scope, Exit.void)
+      const event = preloadError()
+      window.dispatchEvent(event)
+      expect(reload).not.toHaveBeenCalled()
+      expect(event.defaultPrevented).toBe(false)
+    })
+  )
 })

@@ -14,6 +14,10 @@ export interface BootOptions {
   readonly location: string
   /** The server's serialized state (`#state`), or `undefined` when nothing was server-rendered. */
   readonly state: Renderer.State | undefined
+  /** The root to mount. Defaults to the production `App`; a test passes one built over its own `pages`. */
+  readonly app?: App.AppComponent | undefined
+  /** The `pages` that `app` was created over (and whose chunk is preloaded). Defaults to the production `pages`. */
+  readonly pages?: Pages.Pages | undefined
 }
 
 /**
@@ -42,18 +46,20 @@ export const platformLayer = (router: Layer.Layer<Router.Services>) => Layer.mer
 export const boot = Effect.fn("boot")(function* (options: BootOptions) {
   // `/*` is a catch-all, so the server only serves URLs that resolve; an undecodable one has no page to preload.
   const route = Routes.routeOf(options.location)
-  if (Option.isSome(route)) yield* Effect.promise(() => Pages.preloadRoute(route.value))
+  const pages = options.pages ?? Pages.pages
+  if (Option.isSome(route)) yield* Effect.promise(() => Pages.preloadRoute(route.value, pages))
 
   // After the initial preload, so a failed first load surfaces as itself.
   const doc = options.container.ownerDocument
   const win = doc.defaultView
   if (win !== null) yield* Prefetch.installPreloadErrorReload(win)
-  yield* Prefetch.installLinkPrefetch(doc)
+  yield* Prefetch.installLinkPrefetch(doc, pages)
 
+  const app = options.app ?? App.App
   const root =
     options.state === undefined
-      ? yield* BrowserHost.mountEffect(App.App, Router.props(Routes.AppRoute), options.container)
-      : yield* HtmlHydrate.hydrateEffect(App.App, Router.props(Routes.AppRoute), options.container, options.state)
+      ? yield* BrowserHost.mountEffect(app, Router.props(Routes.AppRoute), options.container)
+      : yield* HtmlHydrate.hydrateEffect(app, Router.props(Routes.AppRoute), options.container, options.state)
 
   // Completes once every instance that adopts server state is live.
   yield* root.adopted

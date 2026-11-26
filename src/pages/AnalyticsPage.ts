@@ -1,11 +1,12 @@
 import { Component, Head, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Collapsible, Tabs } from "@effect/ui-kit"
-import { Option, Schema } from "effect"
+import { Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import * as Chart from "../analytics/components/Chart.ts"
 import * as Dataset from "../analytics/domain/Analytics.ts"
 import * as GetAnalytics from "../analytics/queries/GetAnalytics.ts"
+import * as AnalyticsPort from "../analytics/services/AnalyticsPort.ts"
 import * as Design from "../design/classes.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
@@ -115,5 +116,7 @@ export const AnalyticsPageNoDeps = Html.component({
   }
 })
 
-/** The page with its own query Layer, so `GetAnalytics` ships in this page's chunk. */
-export const AnalyticsPage = AnalyticsPageNoDeps.pipe(Component.provide(GetAnalytics.GetAnalytics.layer))
+/** The page with its own Layers: the `GetAnalytics` query over `AnalyticsPort`, both shipped in this page's chunk. */
+export const AnalyticsPage = AnalyticsPageNoDeps.pipe(
+  Component.provide(GetAnalytics.GetAnalytics.layer.pipe(Layer.provide(AnalyticsPort.AnalyticsPort.layer)))
+)

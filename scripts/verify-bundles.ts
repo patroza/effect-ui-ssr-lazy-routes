@@ -33,12 +33,14 @@ const owned: ReadonlyArray<Owned> = [
   ["SENTINEL:get-product-query", "GetProduct marker", "ProductDetail"],
   ["catalog/GetProduct", "GetProduct query", "ProductDetail"],
   ["catalog/BookmarkProduct", "BookmarkProduct command", "ProductDetail"],
+  ["catalog/BookmarkPort", "BookmarkPort port", "ProductDetail"],
   ["data-dialog-backdrop", "ui-kit Dialog", "ProductDetail"],
   ["SENTINEL:analytics-page", "Analytics page", "Analytics"],
   ["SENTINEL:analytics-chart", "Analytics chart", "Analytics"],
   ["SENTINEL:analytics-dataset", "Analytics dataset", "Analytics"],
   ["SENTINEL:get-analytics-query", "GetAnalytics marker", "Analytics"],
   ["analytics/GetAnalytics", "GetAnalytics query", "Analytics"],
+  ["analytics/AnalyticsPort", "AnalyticsPort port", "Analytics"],
   ["data-activation-direction", "ui-kit Tabs", "Analytics"],
   ["data-panel-open", "ui-kit Collapsible", "Analytics"],
   ["SENTINEL:not-found-page", "NotFound page", "NotFound"]
@@ -53,7 +55,8 @@ const pageOnlyFramework: ReadonlyArray<readonly [needle: string, label: string]>
 ]
 // Imported by exactly the Products and ProductDetail chunks: one shared chunk, never the entry.
 const sharedNeedles: ReadonlyArray<readonly [needle: string, label: string]> = [
-  ["SENTINEL:catalog-data", "catalog data"]
+  ["SENTINEL:catalog-data", "catalog data"],
+  ["catalog/CatalogPort", "CatalogPort port"]
 ]
 
 // Every SENTINEL a source file declares must be known here, so a new marker can't escape the check.
@@ -198,7 +201,10 @@ const owns = (file: string): string =>
   owned
     .filter(([needle]) => (code.get(file) ?? "").includes(needle))
     .map(([, label]) => label)
-    .filter((label) => label.startsWith("ui-kit") || label.endsWith("query") || label.endsWith("command"))
+    .filter(
+      (label) =>
+        label.startsWith("ui-kit") || label.endsWith("query") || label.endsWith("command") || label.endsWith("port")
+    )
     .join(", ")
 interface Row {
   readonly role: string

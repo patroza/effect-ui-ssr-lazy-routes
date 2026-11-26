@@ -1,9 +1,10 @@
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Button, Input } from "@effect/ui-kit"
-import { Option, Schema } from "effect"
+import { Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import * as Products from "../product/domain/Product.ts"
+import * as CatalogPort from "../product/services/CatalogPort.ts"
 import * as Design from "../design/classes.ts"
 import * as SearchProducts from "../search/queries/SearchProducts.ts"
 import * as Routes from "../routes.ts"
@@ -115,7 +116,9 @@ export const ProductsPageNoDeps = Html.component({
 })
 
 /**
- * The page with its own query Layer. `Component.provide` keeps `SearchProducts.layer`
- * inside this module, so it ships in the Products chunk with the page.
+ * The page with its own Layers: the `SearchProducts` query over `CatalogPort`.
+ * `Component.provide` keeps both inside this module, so they ship in the Products chunk with the page.
  */
-export const ProductsPage = ProductsPageNoDeps.pipe(Component.provide(SearchProducts.SearchProducts.layer))
+export const ProductsPage = ProductsPageNoDeps.pipe(
+  Component.provide(SearchProducts.SearchProducts.layer.pipe(Layer.provide(CatalogPort.CatalogPort.layer)))
+)

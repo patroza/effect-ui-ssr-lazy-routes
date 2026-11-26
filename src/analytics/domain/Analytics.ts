@@ -12,13 +12,6 @@ export type Metric = typeof Metric.Type
 export const SeriesPoint = Schema.Struct({ label: Schema.String, value: Schema.Finite })
 export type SeriesPoint = typeof SeriesPoint.Type
 
-/**
- * How many times the dataset was actually read by a query fetcher. Production
- * code never reads it; the tests assert it stays 0 on the client while a
- * server-rendered page hydrates from the state's `~query` entries.
- */
-export const analyticsReads = { getAnalytics: 0 }
-
 export const metrics: ReadonlyArray<Metric> = ["revenue", "orders"]
 
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const

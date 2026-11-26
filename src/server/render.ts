@@ -31,6 +31,11 @@ export interface RenderedBadRequest {
   readonly status: 400
 }
 
+export interface RenderOptions {
+  /** The root to render. Defaults to the production `App`; a test passes one built over its own `pages`. */
+  readonly app?: App.AppComponent | undefined
+}
+
 export type RenderOutcome = RenderedPage | RenderedRedirect | RenderedBadRequest
 
 /**
@@ -46,27 +51,29 @@ export type RenderOutcome = RenderedPage | RenderedRedirect | RenderedBadRequest
  *
  * `assetsFor` is called with the matched route, so the document can preload
  * exactly that route's chunks.
+ *
+ * This is the Effect: it runs on whatever Clock it is given, so a test drives
+ * it with `TestClock`. `renderPage` below is what the HTTP handler awaits.
  */
-export const renderPage = async (
+export const renderPageEffect = Effect.fn("renderPage")(function* (
   url: string,
-  assetsFor: (route: Routes.AppRouteValue) => Assets.PageAssets
-): Promise<RenderOutcome> => {
+  assetsFor: (route: Routes.AppRouteValue) => Assets.PageAssets,
+  options: RenderOptions = {}
+) {
   const resolved = Routes.AppRoute.resolve(url)
-  if (Option.isNone(resolved)) return { _tag: "BadRequest", status: 400 }
+  if (Option.isNone(resolved)) return { _tag: "BadRequest", status: 400 } satisfies RenderOutcome
   const { invalid, notFound, redirected, route } = resolved.value
   if (redirected || invalid.length > 0) {
     return {
       _tag: "Redirect",
       status: invalid.length > 0 ? 302 : 301,
       location: Routes.AppRoute.print(route)
-    }
+    } satisfies RenderOutcome
   }
 
-  const page = await Effect.runPromise(
-    HtmlServer.renderToHtml(App.App, Router.props(Routes.AppRoute), { budget: "1 second" }).pipe(
-      Effect.provide(Router.static({ routes: Routes.AppRoute, url }))
-    )
-  )
+  const page = yield* HtmlServer.renderToHtml(options.app ?? App.App, Router.props(Routes.AppRoute), {
+    budget: "1 second"
+  }).pipe(Effect.provide(Router.static({ routes: Routes.AppRoute, url })))
   const html = `<!doctype html>
 <html ${page.htmlAttributes}>
   <head>
@@ -81,5 +88,17 @@ export const renderPage = async (
   </body>
 </html>
 `
-  return { _tag: "Page", status: notFound || Status.renderedNotFound(page.html) ? 404 : 200, html, route }
-}
+  return {
+    _tag: "Page",
+    status: notFound || Status.renderedNotFound(page.html) ? 404 : 200,
+    html,
+    route
+  } satisfies RenderOutcome
+})
+
+/** `renderPageEffect` on the real clock, for the HTTP handler. */
+export const renderPage = (
+  url: string,
+  assetsFor: (route: Routes.AppRouteValue) => Assets.PageAssets,
+  options: RenderOptions = {}
+): Promise<RenderOutcome> => Effect.runPromise(renderPageEffect(url, assetsFor, options))

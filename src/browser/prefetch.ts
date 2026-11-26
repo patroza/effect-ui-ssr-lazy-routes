@@ -9,7 +9,7 @@ import * as Routes from "../routes.ts"
  * native `Component.lazy(...).preload()`), so it only warms the module cache
  * and never changes what renders. The listeners go away when the scope closes.
  */
-export const installLinkPrefetch = (doc: Document) =>
+export const installLinkPrefetch = (doc: Document, pageMap: Pages.Pages = Pages.pages) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const onIntent = (event: Event) => {
@@ -24,7 +24,7 @@ export const installLinkPrefetch = (doc: Document) =>
         const url = new URL(href, doc.location.href)
         if (url.origin !== doc.location.origin) return
         const route = Routes.routeOf(url.pathname + url.search)
-        if (Option.isSome(route)) void Pages.preloadRoute(route.value)
+        if (Option.isSome(route)) void Pages.preloadRoute(route.value, pageMap)
       }
       doc.addEventListener("pointerover", onIntent)
       doc.addEventListener("focusin", onIntent)
