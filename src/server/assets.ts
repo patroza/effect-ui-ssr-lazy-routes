@@ -81,9 +81,9 @@ export const resolveRouteAssets = (manifest: Manifest, tag: Routes.AppRouteTag):
   }
 }
 
-/** Dev assets: Vite serves modules on demand, so there is nothing to preload. */
+/** Dev assets: Vite serves modules on demand and injects `/@vite/client` via `transformIndexHtml`. */
 export const devAssets: PageAssets = {
-  scripts: ["/@vite/client", `/${ENTRY_SOURCE}`],
+  scripts: [`/${ENTRY_SOURCE}`],
   modulePreloads: [],
   stylesheets: []
 }

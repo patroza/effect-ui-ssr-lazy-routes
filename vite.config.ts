@@ -12,6 +12,17 @@ const sharedOxlintConfig = EffectDiagnostics.loadOxlintJsonConfig(
 )
 const strictOxlintConfig = EffectDiagnostics.loadOxlintJsonConfig(join(root, "config/oxlint.strict.json"))
 
+const parseDevToolsPort = (raw: string | undefined): number | undefined => {
+  if (raw === undefined || raw.trim() === "") return undefined
+  const parsed = Number(raw)
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+    throw new RangeError(`Invalid DEVTOOLS_PORT "${raw}": expected integer between 1 and 65535`)
+  }
+  return parsed
+}
+
+const devToolsPort = parseDevToolsPort(process.env["DEVTOOLS_PORT"])
+
 export default defineConfig(({ isSsrBuild, mode }) => ({
   run: {
     cache: {
@@ -30,7 +41,17 @@ export default defineConfig(({ isSsrBuild, mode }) => ({
   // DevToolsVite.plugin only applies during `vite dev` (never during `vp build`, preview, or Vitest).
   // Skip Tailwind & DevTools during `vp test` (matching the former standalone `vitest.config.ts`),
   // and use `lazyPlugins` to skip plugin initialization during `vp check` / `vp lint` / `vp fmt`.
-  plugins: mode === "test" ? [] : lazyPlugins(() => [tailwindcss(), DevToolsVite.plugin({ dispatch: true })]),
+  plugins:
+    mode === "test"
+      ? []
+      : lazyPlugins(() => [
+          tailwindcss(),
+          DevToolsVite.plugin({
+            dispatch: true,
+            overlay: false,
+            ...(devToolsPort === undefined ? {} : { port: devToolsPort })
+          })
+        ]),
   build: isSsrBuild
     ? {
         // `vp build --ssr src/server/serve.ts --outDir dist/server`
