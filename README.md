@@ -86,7 +86,7 @@ src/
   design.ts        Tailwind class recipes (plain strings, found by Tailwind's source scan)
   styles.css       @import "tailwindcss" + a tiny base layer (the entry's only global CSS)
   bootstrap.ts     boot(): parse URL → await preloadRoute → install guards → hydrate / mount
-  client.ts        browser entry: decode #state (Schema.fromJsonString), run boot in the app scope
+  client.ts        browser entry: decode #state (`JsonString.jsonString`), run boot in the app scope
   prefetch.ts      scoped (Effect.acquireRelease) hover/focus prefetch + vite:preloadError reload
   render.ts        renderPage(url, assetsFor): renderToHtml + serializeState + Router.static
   assets.ts        manifest → per-route <link rel="modulepreload"> / stylesheet tags
@@ -174,7 +174,7 @@ What that buys, each proven by a test or by `verify:bundles`:
 - **SSR + hydration:** `renderToHtml` waits for the query and serializes the settled entry under `~query`; the client seeds its cache from it, adopts the server's nodes and the fetchers run **0** times (`catalogReads` / `analyticsReads` stay 0). Strip `~query` from the state and it fetches once, so the assertion can fail.
 - **Navigation:** a page the server didn't render fetches on the client; a `?q=` change re-keys the query on the live instance (same nodes, last results stay up).
 
-Other Effect UI practices used: `Effect.fn` for `boot`; `UiSchema.TaggedEnum` messages named for the fact (`SelectedMetricTab`, `CompletedBookmarkProduct`); `Router.patchSearch` with a `Route.subset` prop for the search box; `Head.titleTemplate`; link prefetch and the `vite:preloadError` reload guard as `Effect.acquireRelease` resources in the app scope (the guard calls `preventDefault()` only when it actually reloads); `#state` decoded with `Schema.fromJsonString`; and no `manualChunks`.
+Other Effect UI practices used: `Effect.fn` for `boot`; `UiSchema.TaggedEnum` messages named for the fact (`SelectedMetricTab`, `CompletedBookmarkProduct`); `Router.patchSearch` with a `Route.subset` prop for the search box; `Head.titleTemplate`; link prefetch and the `vite:preloadError` reload guard as `Effect.acquireRelease` resources in the app scope (the guard calls `preventDefault()` only when it actually reloads); `#state` decoded with `JsonString.jsonString` (`Schema.fromJsonString` over `Schema.toCodecJson`); and no `manualChunks`.
 
 ## Bundle splitting you can verify
 

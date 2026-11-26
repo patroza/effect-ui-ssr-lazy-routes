@@ -1,9 +1,10 @@
 import type { Renderer } from "@effect/ui"
 import { Schema } from "effect"
+import * as JsonString from "./jsonString.ts"
 
 // `#state` holds the JSON that `HtmlServer.serializeState` wrote: an object keyed by instance path
 // (plus the `~query` cache entries and friends).
-const StateFromJson = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
+const StateFromJson = JsonString.jsonString(Schema.Record(Schema.String, Schema.Unknown))
 
 /**
  * Decodes the server's serialized state, or `undefined` when nothing was

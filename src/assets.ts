@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import * as JsonString from "./jsonString.ts"
 import type * as Routes from "./routes.ts"
 
 /** The subset of Vite's `.vite/manifest.json` chunk entries this app reads. */
@@ -17,7 +18,7 @@ export const Manifest = Schema.Record(Schema.String, ManifestChunk)
 export type Manifest = typeof Manifest.Type
 
 /** Decodes the text of Vite's `.vite/manifest.json`; throws a Schema error when the shape is wrong. */
-export const parseManifest = Schema.decodeSync(Schema.fromJsonString(Manifest))
+export const parseManifest = Schema.decodeSync(JsonString.jsonString(Manifest))
 
 /** What one HTML response needs to load: the entry, the active route's chunks, and CSS. */
 export interface PageAssets {
