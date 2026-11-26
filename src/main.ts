@@ -1,9 +1,9 @@
 import { BrowserRouter } from "@effect/ui/html"
 import { Effect } from "effect"
-import * as Bootstrap from "./bootstrap.ts"
+import * as Bootstrap from "./browser/bootstrap.ts"
 import * as Routes from "./routes.ts"
-import * as State from "./state.ts"
-import "./styles.css"
+import * as State from "./browser/state.ts"
+import "./index.css"
 
 const container = document.getElementById("app")
 if (container === null) throw new Error("#app not found")

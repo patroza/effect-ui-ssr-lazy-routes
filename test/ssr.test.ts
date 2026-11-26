@@ -121,7 +121,7 @@ describe("renderPage outcomes", () => {
 
 describe("Status.renderedNotFound", () => {
   it("only trusts the marker on an element, never in text", async () => {
-    const Status = await import("../src/status.ts")
+    const Status = await import("../src/lib/status.ts")
     expect(Status.renderedNotFound('<section class="x" data-http-status="404">')).toBe(true)
     expect(Status.renderedNotFound('<p>data-http-status="404"</p>')).toBe(false)
     expect(Status.renderedNotFound("<p>&lt;b data-http-status=&quot;404&quot;&gt;</p>")).toBe(false)

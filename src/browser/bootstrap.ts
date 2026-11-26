@@ -2,10 +2,10 @@ import { type Renderer, Router } from "@effect/ui"
 import { BrowserHost, HtmlHydrate } from "@effect/ui/html"
 import { Effect, Layer, Option } from "effect"
 import { FetchHttpClient } from "effect/http"
-import * as App from "./App.ts"
-import * as Pages from "./pages.ts"
+import * as App from "../App.ts"
+import * as Pages from "../pages.ts"
 import * as Prefetch from "./prefetch.ts"
-import * as Routes from "./routes.ts"
+import * as Routes from "../routes.ts"
 
 export interface BootOptions {
   /** The element the server rendered into (`#app`). */
@@ -21,7 +21,7 @@ export interface BootOptions {
  * the browser, `Router.memory(...)` in tests) and an HTTP client.
  *
  * Provide this layer AROUND the scope that keeps the app alive (as
- * `src/client.ts` does), never inside `boot`: the Router layer owns the
+ * `src/main.ts` does), never inside `boot`: the Router layer owns the
  * document's click listeners and removes them when the layer closes.
  */
 export const platformLayer = (router: Layer.Layer<Router.Services>) => Layer.mergeAll(router, FetchHttpClient.layer)

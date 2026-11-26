@@ -2,8 +2,8 @@
 // handler production uses, loaded through Vite so edits apply without restart.
 import { createServer as createHttpServer } from "node:http"
 import { createServer as createViteServer, createServerModuleRunner } from "vite"
-import type * as Assets from "../src/assets.ts"
-import type * as Server from "../src/server.ts"
+import type * as Assets from "../src/server/assets.ts"
+import type * as Server from "../src/server/handler.ts"
 
 const port = Number(process.env["PORT"] ?? 5173)
 const vite = await createViteServer({ server: { middlewareMode: true }, appType: "custom" })
@@ -14,8 +14,8 @@ const server = createHttpServer((req, res) => {
   vite.middlewares(req, res, async () => {
     try {
       const [{ handleRequest }, { devAssets }] = await Promise.all([
-        runner.import<typeof Server>("/src/server.ts"),
-        runner.import<typeof Assets>("/src/assets.ts")
+        runner.import<typeof Server>("/src/server/handler.ts"),
+        runner.import<typeof Assets>("/src/server/assets.ts")
       ])
       await handleRequest({ assetsFor: () => devAssets })(req, res)
     } catch (error) {

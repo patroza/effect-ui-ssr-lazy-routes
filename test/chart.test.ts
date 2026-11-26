@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import * as Chart from "../src/analytics/chart.ts"
+import * as Chart from "../src/analytics/components/Chart.ts"
 
 describe("escapeXml", () => {
   it("escapes the five XML special characters", () => {

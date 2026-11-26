@@ -15,7 +15,7 @@ export const pages = {
   Home: Component.lazy("HomePage", () => import("./pages/HomePage.ts").then((m) => m.HomePage)),
   Products: Component.lazy("ProductsPage", () => import("./pages/ProductsPage.ts").then((m) => m.ProductsPage)),
   ProductDetail: Component.lazy("ProductDetailPage", () =>
-    import("./pages/ProductDetailPage.ts").then((m) => m.ProductDetailPage)
+    import("./pages/product/ProductDetailPage.ts").then((m) => m.ProductDetailPage)
   ),
   Analytics: Component.lazy("AnalyticsPage", () => import("./pages/AnalyticsPage.ts").then((m) => m.AnalyticsPage)),
   NotFound: Component.lazy("NotFoundPage", () => import("./pages/NotFoundPage.ts").then((m) => m.NotFoundPage))

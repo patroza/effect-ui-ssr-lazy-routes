@@ -1,6 +1,6 @@
 import { Schema } from "effect"
-import * as JsonString from "./jsonString.ts"
-import type * as Routes from "./routes.ts"
+import * as JsonString from "../lib/jsonString.ts"
+import type * as Routes from "../routes.ts"
 
 /** The subset of Vite's `.vite/manifest.json` chunk entries this app reads. */
 export const ManifestChunk = Schema.Struct({
@@ -30,13 +30,13 @@ export interface PageAssets {
   readonly stylesheets: ReadonlyArray<string>
 }
 
-export const ENTRY_SOURCE = "src/client.ts"
+export const ENTRY_SOURCE = "src/main.ts"
 
 /** Manifest key of each route's page module. `satisfies` makes a new route fail to compile until mapped. */
 export const routeSources = {
   Home: "src/pages/HomePage.ts",
   Products: "src/pages/ProductsPage.ts",
-  ProductDetail: "src/pages/ProductDetailPage.ts",
+  ProductDetail: "src/pages/product/ProductDetailPage.ts",
   Analytics: "src/pages/AnalyticsPage.ts",
   NotFound: "src/pages/NotFoundPage.ts"
 } as const satisfies Record<Routes.AppRouteTag, string>

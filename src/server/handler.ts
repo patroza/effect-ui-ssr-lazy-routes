@@ -5,7 +5,7 @@ import { extname, join, normalize, relative, sep } from "node:path"
 import { pipeline } from "node:stream"
 import type * as Assets from "./assets.ts"
 import * as Render from "./render.ts"
-import type * as Routes from "./routes.ts"
+import type * as Routes from "../routes.ts"
 
 const contentTypes: Readonly<Record<string, string>> = {
   ".js": "text/javascript; charset=utf-8",

@@ -75,26 +75,43 @@ pnpm dev              # Vite middleware + the same SSR handler, with HMR (PORT=5
 | `/analytics`    | `GetAnalytics` query, dataset, SVG chart, **its own CSS**                  | `Tabs`, `Collapsible`       |
 | `/*`            | not-found (404)                                                            | none                        |
 
-`Button` and `Input` are used by several pages, so Rollup puts them in small shared chunks: `Button` in its own `Button-*.js`, `Input` in the `products-*.js` chunk next to the catalog (only Products and ProductDetail use it). `Tabs`, `Collapsible` and `Dialog` each have exactly one user, so they land in that page's chunk. `App.ts` imports no kit primitive, so the shell never pays for them.
+`Button` and `Input` are used by several pages, so Rollup puts them in small shared chunks: `Button` in its own `Button-*.js`, `Input` in the `Product-*.js` chunk next to the catalog (only Products and ProductDetail use it). `Tabs`, `Collapsible` and `Dialog` each have exactly one user, so they land in that page's chunk. `App.ts` and `Shell.ts` import no kit primitive, so the shell never pays for them.
 
 ```
 src/
-  routes.ts        AppRoute = Route.union({ Home, Products, ProductDetail, Analytics, NotFound }) + routeOf(url)
-  status.ts        the `data-http-status="404"` marker a page sets when its record is missing; the server reads it back
-  App.ts           root component: holds the route, picks the page, Head.titleTemplate (no page imports)
-  pages.ts         the ONLY references to ./pages/*: Component.lazy(name, () => import(...)) + preloadRoute
-  pages/*.ts       one component per route; each ends up in its own chunk
-  queries/*.ts     Products/ProductDetail Query.Service classes + toLayer
-  analytics/*      Analytics-only: GetAnalytics query, dataset, pure SVG chart, chart.css
-  data/products.ts catalog shared by Products + ProductDetail (a small shared chunk)
-  design.ts        Tailwind class recipes (plain strings, found by Tailwind's source scan)
-  styles.css       @import "tailwindcss" + a tiny base layer (the entry's only global CSS)
-  bootstrap.ts     boot(): resolve URL → await preloadRoute → install guards → hydrate / mount
-  client.ts        browser entry: decode #state (`JsonString.jsonString`; unreadable → warn + mount fresh), run boot in the app scope
-  prefetch.ts      scoped (Effect.acquireRelease) hover/focus prefetch + vite:preloadError reload
-  render.ts        renderPage(url, assetsFor) → Page | Redirect | BadRequest (AppRoute.resolve first, like HtmlServerHttp)
-  assets.ts        manifest → per-route <link rel="modulepreload"> / stylesheet tags
-  server.ts, serve.ts   node:http handler (static files, redirects, 400/405, security headers, SSR) and the production entry
+  main.ts                  browser entry: decode #state (`JsonString.jsonString`; unreadable → warn + mount fresh), run boot in the app scope
+  index.css                @import "tailwindcss" + a tiny base layer (the entry's only global CSS)
+  App.ts                   root component: holds the route, Head.titleTemplate, Router subscription; delegates the layout to Shell
+  Shell.ts                 layout: primary nav + the lazy page outlet (a plain view function, so state paths stay `/App/<page>[<path>]`)
+  routes.ts                AppRoute = Route.union({ Home, Products, ProductDetail, Analytics, NotFound }) + routeOf(url)
+  pages.ts                 the ONLY references to ./pages/*: Component.lazy(name, () => import(...)) + preloadRoute
+  pages/                   one component per route; each ends up in its own chunk
+    HomePage.ts · NotFoundPage.ts · ProductsPage.ts · AnalyticsPage.ts
+    product/ProductDetailPage.ts   also holds the BookmarkProduct command and the inquiry Dialog
+  product/
+    domain/Product.ts      Product schema + catalog + find/format helpers, shared by Products + ProductDetail (a small shared chunk)
+    queries/GetProduct.ts  ProductDetail Query.Service + toLayer
+  search/
+    queries/SearchProducts.ts   Products Query.Service + toLayer
+  analytics/               Analytics-only
+    domain/Analytics.ts    dataset + metric types
+    queries/GetAnalytics.ts
+    components/Chart.ts    pure SVG chart (+ chart.css, the only page-specific stylesheet)
+  browser/
+    bootstrap.ts           boot(): resolve URL → await preloadRoute → install guards → hydrate / mount
+    prefetch.ts            scoped (Effect.acquireRelease) hover/focus prefetch + vite:preloadError reload
+    state.ts               #state decoding
+  design/
+    classes.ts             Tailwind class recipes (plain strings, found by Tailwind's source scan)
+    loading.ts             pageFallback for lazy pages
+  lib/
+    jsonString.ts          the central Schema.fromJsonString(Schema.toCodecJson(...))
+    status.ts              the `data-http-status="404"` marker a page sets when its record is missing; the server reads it back
+  server/
+    assets.ts              manifest → per-route <link rel="modulepreload"> / stylesheet tags
+    render.ts              renderPage(url, assetsFor) → Page | Redirect | BadRequest (AppRoute.resolve first, like HtmlServerHttp)
+    handler.ts             node:http handler (static files, redirects, 400/405, security headers, SSR)
+    serve.ts               production server entry
 config/            oxlint.strict.json (the strict type-aware rules .oxlintrc.json extends)
 scripts/           verify-bundles.ts · smoke.ts · dev.ts
 test/              ssr · hydration · ui-kit · navigation · prefetch · assets · server · pages · chart (+ setup.ts, helpers.ts)
@@ -106,11 +123,11 @@ test/              ssr · hydration · ui-kit · navigation · prefetch · asset
 GET /products/42
  └─ server: AppRoute.resolve(url)  → undecodable: 400 · non-canonical: 301/302 to AppRoute.print(route)
     └─ Router.static({url}) → renderToHtml(App)  (Component.lazy pages are awaited)
-    └─ HTML: <head> <link stylesheet client.css> <link modulepreload ProductDetailPage.js …>
-                    <script type=module src=client.js> </head>
+    └─ HTML: <head> <link stylesheet main.css> <link modulepreload ProductDetailPage.js …>
+                    <script type=module src=main.js> </head>
              <body> <div id=app>…full page…</div> <script id=state>{models + ~query}</script>
- └─ browser: downloads client.js AND the page chunks in parallel (no entry → page waterfall)
-    └─ client.ts → boot():
+ └─ browser: downloads main.js AND the page chunks in parallel (no entry → page waterfall)
+    └─ main.ts → boot():
          1. route = routeOf(location)       ← the same AppRoute.resolve the server used
          2. await preloadRoute(route)       ← pages[route._tag].preload(), native Component.lazy
          3. install vite:preloadError reload + link prefetch (released with the app scope)
@@ -130,7 +147,7 @@ export const pages = {
 }
 export const preloadRoute = (route: AppRouteValue): Promise<void> => pages[route._tag].preload()
 
-// src/bootstrap.ts, inside Effect.fn("boot")(function* (options) { … })
+// src/browser/bootstrap.ts, inside Effect.fn("boot")(function* (options) { … })
 yield * Effect.promise(() => Pages.preloadRoute(route)) // await the matched page's chunk…
 yield * HtmlHydrate.hydrateEffect(App.App, props, options.container, options.state) // …then hydrate: nothing is thrown away
 ```
@@ -142,7 +159,7 @@ The lazy name **must equal** the component's `name` (state paths look like `/App
 Each page declares what it reads and writes, and provides the implementations itself, so they are bundled with it:
 
 ```ts
-// src/analytics/GetAnalytics.ts: a page-only query, keyed by the selected tab
+// src/analytics/queries/GetAnalytics.ts: a page-only query, keyed by the selected tab
 export class GetAnalytics extends Query.Service<GetAnalytics>()("analytics/GetAnalytics", {
   args: { metric: Metric },
   success: Schema.Array(SeriesPoint),
@@ -156,7 +173,7 @@ export class GetAnalytics extends Query.Service<GetAnalytics>()("analytics/GetAn
   )
 }
 
-// src/pages/ProductDetailPage.ts: a Command whose body returns the page's own message
+// src/pages/product/ProductDetailPage.ts: a Command whose body returns the page's own message
 export class BookmarkProduct extends Command.Service<BookmarkProduct>()("catalog/BookmarkProduct", {
   args: { id: Schema.String },
   success: ProductDetailPageMessage
@@ -203,18 +220,18 @@ Output (hashes vary):
 ```
 chunk               file                                    raw (B)   gzip (B)  page-only code
 ------------------  ------------------------------------  ---------  ---------  --------------------------------------------------------
-entry               assets/client-DeFseBC2.js                339689     115992
-page:Home           assets/HomePage-DtkQrBCS.js                 964        529
-page:Products       assets/ProductsPage-Co_zUPjx.js            2506       1258  SearchProducts query
-page:ProductDetail  assets/ProductDetailPage-Dsd-el4_.js      22945       8589  GetProduct query, BookmarkProduct command, ui-kit Dialog
-page:Analytics      assets/AnalyticsPage-AqqdScB7.js          21182       8591  GetAnalytics query, ui-kit Tabs, ui-kit Collapsible
-page:NotFound       assets/NotFoundPage-CoCP8gBz.js             537        346
+entry               assets/main-DyRak2pn.js                  339706     116007
+page:Home           assets/HomePage-BSJ7cEQu.js                 962        529
+page:Products       assets/ProductsPage-CIQVzm5S.js            2503       1258  SearchProducts query
+page:ProductDetail  assets/ProductDetailPage-dUwd_IX5.js      22942       8586  GetProduct query, BookmarkProduct command, ui-kit Dialog
+page:Analytics      assets/AnalyticsPage-BIclMgvt.js          21180       8592  GetAnalytics query, ui-kit Tabs, ui-kit Collapsible
+page:NotFound       assets/NotFoundPage-CzezMf1d.js             535        345
 shared              assets/Button-1z9k8cO3.js                   592        384
-shared              assets/Query-BrBDXfGw.js                  48836      16893
+shared              assets/Query-BhrKsXTY.js                  48834      16892
 shared              assets/attributes-BNllm5bX.js               484        306
-shared              assets/products-Bv4ZXKfA.js                1391        801
-shared              assets/transition-DUsfufhy.js              6680       3128
-css                 assets/client-B7Z2OTFH.css                15335       3807
+shared              assets/Product-DPTrVTJF.js                 1389        801
+shared              assets/transition-C-8_3fTo.js              6678       3128
+css                 assets/main-B7Z2OTFH.css                  15335       3807
 css                 assets/AnalyticsPage-BZFaGk-P.css            91        104
 ```
 
@@ -222,18 +239,18 @@ The entry is the framework (`effect` + `@effect/ui`) plus the shell. `Query-*.js
 
 ## No entry → page waterfall
 
-[`src/assets.ts`](src/assets.ts) reads `dist/client/.vite/manifest.json` once and, per request, emits only the matched route's chunk and its transitive static imports as `<link rel="modulepreload">`, the entry as a script tag, and the entry's and the route's CSS as `<link rel="stylesheet">`:
+[`src/server/assets.ts`](src/server/assets.ts) reads `dist/client/.vite/manifest.json` once and, per request, emits only the matched route's chunk and its transitive static imports as `<link rel="modulepreload">`, the entry as a script tag, and the entry's and the route's CSS as `<link rel="stylesheet">`:
 
 ```
-GET /products/42 → css: client.css · modulepreload: ProductDetailPage, Button, products, transition, Query …
-GET /analytics   → css: client.css + AnalyticsPage.css · modulepreload: AnalyticsPage, transition, Query …
+GET /products/42 → css: main.css · modulepreload: ProductDetailPage, Button, Product, transition, Query …
+GET /analytics   → css: main.css + AnalyticsPage.css · modulepreload: AnalyticsPage, transition, Query …
 ```
 
 `pnpm smoke` checks this against the built server: it fetches every `<link rel="modulepreload">` and requires `200`, `text/javascript` and `immutable`. In dev there is no manifest, so there is nothing to preload, and Vite delivers the CSS through the JavaScript modules, so an unstyled flash before the entry runs is expected in dev (production links the stylesheets in `<head>`).
 
 ## HTTP behaviour
 
-`src/server.ts` is a plain `node:http` handler. [`test/server.test.ts`](test/server.test.ts) drives it against a temporary client directory.
+`src/server/handler.ts` is a plain `node:http` handler. [`test/server.test.ts`](test/server.test.ts) drives it against a temporary client directory.
 
 - **URLs** are resolved with `AppRoute.resolve` first, as `HtmlServerHttp.layerHttp` does: an undecodable URL (`/%E0%A4%A`) is `400`; a non-canonical one is a permanent `301` (`/products/` → `/products`), or a temporary `302` when search params were dropped as invalid (`/products?q=a&q=b` → `/products`), with `Location: AppRoute.print(route)`.
 - **Status** is `404` for the catch-all route and for a page that rendered a missing record (an unknown product marks its root with `data-http-status="404"`), so it cannot drift from what the document shows.
@@ -266,7 +283,7 @@ GET /analytics   → css: client.css + AnalyticsPage.css · modulepreload: Analy
 - **One copy of `effect`/`@effect/ui` per test document.** The Router keeps per-module registries; the test helpers import the libraries from the same fresh module graph as the app.
 - **Component name = lazy name**, because state paths are built from it.
 - **Kit primitives are code-split by use, not by config.** Import `Tabs`/`Dialog` only inside the page that draws them; the barrel `@effect/ui-kit` tree-shakes (`sideEffects: []`).
-- **Tailwind scans source files**, so class recipes in `design.ts` must stay whole string literals. The per-route stylesheet (`chart.css`) is plain CSS so it keeps its own `<link>`.
+- **Tailwind scans source files**, so class recipes in `design/classes.ts` must stay whole string literals. The per-route stylesheet (`chart.css`) is plain CSS so it keeps its own `<link>`.
 - **SVG.** `h` has no SVG element builders, so the Analytics chart is a pure function that returns an SVG string, shown through `<img src="data:image/svg+xml,…">`.
 
 ## License

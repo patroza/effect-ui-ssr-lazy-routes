@@ -1,6 +1,6 @@
 import type { Renderer } from "@effect/ui"
 import { Schema } from "effect"
-import * as JsonString from "./jsonString.ts"
+import * as JsonString from "../lib/jsonString.ts"
 
 // `#state` holds the JSON that `HtmlServer.serializeState` wrote: an object keyed by instance path
 // (plus the `~query` cache entries and friends).

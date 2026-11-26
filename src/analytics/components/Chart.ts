@@ -1,4 +1,4 @@
-import type * as Dataset from "./dataset.ts"
+import type * as Dataset from "../domain/Analytics.ts"
 import "./chart.css"
 
 /**

@@ -3,9 +3,9 @@ import { Html } from "@effect/ui/html"
 import { Button, Input } from "@effect/ui-kit"
 import { Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import * as Products from "../data/products.ts"
-import * as Design from "../design.ts"
-import * as SearchProducts from "../queries/SearchProducts.ts"
+import * as Products from "../product/domain/Product.ts"
+import * as Design from "../design/classes.ts"
+import * as SearchProducts from "../search/queries/SearchProducts.ts"
 import * as Routes from "../routes.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */

@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect"
-import * as Pages from "./pages.ts"
-import * as Routes from "./routes.ts"
+import * as Pages from "../pages.ts"
+import * as Routes from "../routes.ts"
 
 /**
  * Preload a route's chunk when the pointer enters, or keyboard focus lands

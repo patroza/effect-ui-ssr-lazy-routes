@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { createServer } from "node:http"
 import { fileURLToPath } from "node:url"
 import * as Assets from "./assets.ts"
-import * as Server from "./server.ts"
+import * as Server from "./handler.ts"
 
 /**
  * Production entry, built to `dist/server/serve.js` (`pnpm build:server`).

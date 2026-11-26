@@ -1,6 +1,6 @@
 import type { Component } from "@effect/ui"
 import type { Html } from "@effect/ui/html"
-import * as Design from "./design.ts"
+import * as Design from "./classes.ts"
 
 /**
  * Counts how many times the page-loading fallback was produced. Production
