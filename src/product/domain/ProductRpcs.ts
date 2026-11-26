@@ -5,13 +5,13 @@ import * as Product from "./Product.ts"
 
 /**
  * Product detail feature RPC group. Imported only by `GetProduct`,
- * `BookmarkProduct` (ProductDetail chunk) and the server's merged `AppRpcs`.
+ * `BookmarkProduct` (ProductDetail chunk) and its server handler/route
+ * (`POST /rpc/product`).
  */
 export class ProductRpcs extends RpcGroup.make(
   Rpc.make("getProduct", {
     payload: { id: Schema.String },
-    success: Schema.Option(Product.Product),
-    error: ApiError.ApiError
+    success: Schema.Option(Product.Product)
   }),
   Rpc.make("bookmarkProduct", {
     payload: { id: Schema.String },

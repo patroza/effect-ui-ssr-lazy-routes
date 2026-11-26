@@ -53,9 +53,9 @@ export const isSafeRelativeLocation = (location: string): boolean =>
  * The status is 404 for the catch-all route (`resolved.notFound`) or when the
  * rendered page says its record is missing.
  *
- * Requires `RpcClient.Protocol` (provided in-process by the server or test
- * composition root) so SSR executes queries directly against `AppRpcs` without
- * a TCP round-trip.
+ * Requires `HttpClient` and `RpcSerialization` (provided in-process by the
+ * server or test composition root) so SSR executes queries directly against
+ * the per-group HTTP RPC routes without a TCP round-trip.
  */
 export const renderPageEffect = Effect.fn("renderPage")(function* (
   url: string,

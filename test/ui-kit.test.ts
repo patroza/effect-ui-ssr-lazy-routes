@@ -1,8 +1,11 @@
+import { Router } from "@effect/ui"
 import { TestHost } from "@effect/ui/testing"
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
+import { HttpClientError } from "effect/http"
 import { TestClock } from "effect/testing"
 import * as ApiError from "../src/rpc/domain/ApiError.ts"
+import * as Routes from "../src/routes.ts"
 import * as Helpers from "./helpers.ts"
 import * as TestRpc from "./support/rpc.ts"
 
@@ -38,6 +41,36 @@ describe("@effect/ui-kit primitives: SSR (Ssr.ssr renders, hydrates and checks t
       expect(doc.querySelector("dialog")).toBeNull()
       expect(doc.querySelector('[data-testid="detail-bookmark"]')?.textContent).toBe("Bookmark")
     }).pipe(Effect.provide(Helpers.appAt("/products/42")))
+  )
+
+  it.effect(
+    "ProductDetail: RpcClientError flows straight through GetProduct, round-trips through SSR ~query JSON, and renders cleanly",
+    () =>
+      Effect.gen(function* () {
+        const { result } = yield* Helpers.ssrAt("/products/42")
+        const doc = serverDocument(result.html)
+        expect(doc.querySelector("h1")?.textContent).toBe("Couldn't load the product")
+        expect(result.html).not.toContain("socket closed")
+        const serializedQuery = JSON.stringify(result.state["~query"])
+        expect(serializedQuery).toContain("RpcClientError")
+        expect(serializedQuery).toContain("TransportError")
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(Router.memory({ routes: Routes.AppRoute, url: "/products/42" }), TestHost.layer()).pipe(
+            Layer.provideMerge(
+              TestRpc.makeCountingRpcProtocol({
+                failRequest: (request) =>
+                  new HttpClientError.HttpClientError({
+                    reason: new HttpClientError.TransportError({
+                      request,
+                      cause: new Error("socket closed")
+                    })
+                  })
+              })
+            )
+          )
+        )
+      )
   )
 })
 
@@ -221,18 +254,20 @@ describe("@effect/ui-kit primitives: interactive after hydration", () => {
       })
     )
 
-    it.effect("Command.Service: BookmarkProduct handles failure and allows retry", () => {
+    it.effect("Command.Service: BookmarkProduct handles ApiError failure and allows retry", () => {
       let attempts = 0
       return Effect.gen(function* () {
         const browser = yield* Helpers.hydrateFromServer("/products/42")
         const button = Helpers.byTestId(browser.container, "detail-bookmark")
         Helpers.click(button)
         yield* Helpers.settleFrames
+        yield* roundTrip
         expect(button.textContent).toBe("Bookmark failed — retry")
         expect(button.hasAttribute("disabled")).toBe(false)
 
         Helpers.click(button)
         yield* Helpers.settleFrames
+        yield* roundTrip
         expect(button.textContent).toBe("Bookmarked ✓")
         expect(attempts).toBe(2)
       }).pipe(
@@ -240,7 +275,47 @@ describe("@effect/ui-kit primitives: interactive after hydration", () => {
           TestRpc.makeCountingRpcProtocol({
             bookmarkProduct: () => {
               attempts++
-              return attempts === 1 ? Effect.fail(new ApiError.ApiError({ message: "offline" })) : Effect.void
+              return attempts === 1
+                ? Effect.fail(new ApiError.ApiError({ message: "offline", cause: new Error("db unreachable") }))
+                : Effect.void
+            }
+          })
+        )
+      )
+    })
+
+    it.effect("Command.Service: BookmarkProduct handles RpcClientError transport failure and allows retry", () => {
+      let attempts = 0
+      return Effect.gen(function* () {
+        const browser = yield* Helpers.hydrateFromServer("/products/42")
+        const button = Helpers.byTestId(browser.container, "detail-bookmark")
+        Helpers.click(button)
+        yield* Helpers.settleFrames
+        yield* roundTrip
+        expect(button.textContent).toBe("Bookmark failed — retry")
+        expect(button.hasAttribute("disabled")).toBe(false)
+
+        Helpers.click(button)
+        yield* Helpers.settleFrames
+        yield* roundTrip
+        expect(button.textContent).toBe("Bookmarked ✓")
+        expect(attempts).toBe(2)
+      }).pipe(
+        Effect.provide(
+          TestRpc.makeCountingRpcProtocol({
+            failRequest: (request) => {
+              if (request.url.includes("/rpc/product")) {
+                attempts++
+                if (attempts === 1) {
+                  return new HttpClientError.HttpClientError({
+                    reason: new HttpClientError.TransportError({
+                      request,
+                      cause: new Error("ECONNREFUSED")
+                    })
+                  })
+                }
+              }
+              return undefined
             }
           })
         )

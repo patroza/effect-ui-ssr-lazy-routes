@@ -53,6 +53,7 @@ const owned: ReadonlyArray<Owned> = [
 const pageOnlyFramework: ReadonlyArray<readonly [needle: string, label: string]> = [
   ["effect/ui/Query/Build", "@effect/ui Query.Service runtime"],
   ["effect/ui/Query/accessor", "@effect/ui Query.Service accessors"],
+  ["~effect/rpc/RpcClientError", "effect/rpc RpcClient runtime"],
   ["Button: the element already handles click", "ui-kit Button"],
   ["Input: the element already handles input", "ui-kit Input"]
 ]
@@ -203,12 +204,16 @@ for (const [needle] of sharedNeedles) {
   )
 }
 
-// Home and NotFound use no queries and no transitions: neither may statically/transitively import Query or transition.
+// Home and NotFound use no queries, no RPC client and no transitions: neither may statically/transitively import them.
 const queryHolders = holdersOf("effect/ui/Query/Build")
+const rpcClientHolders = holdersOf("~effect/rpc/RpcClientError")
 for (const route of ["Home", "NotFound"] as const) {
   const closure = staticClosureFiles(Assets.routeSources[route])
   for (const holder of queryHolders) {
     check(!closure.has(holder), `${route} chunk (transitively) imports Query runtime ${holder}`)
+  }
+  for (const holder of rpcClientHolders) {
+    check(!closure.has(holder), `${route} chunk (transitively) imports RpcClient runtime ${holder}`)
   }
   for (const file of closure) {
     check(!/^assets\/Query-.*\.js$/.test(file), `${route} chunk (transitively) imports ${file}`)

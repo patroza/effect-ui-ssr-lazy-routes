@@ -113,9 +113,18 @@ const parseRequestUrl = (target: string): URL | undefined => {
   return url.origin === "http://localhost" ? url : undefined
 }
 
+const rpcRawPaths: ReadonlySet<string> = new Set([
+  "/rpc/search",
+  "/rpc/search/",
+  "/rpc/product",
+  "/rpc/product/",
+  "/rpc/analytics",
+  "/rpc/analytics/"
+])
+
 const isRpcRawPath = (target: string): boolean => {
   const rawPath = target.split(/[?#]/, 1)[0]
-  return rawPath === "/rpc" || rawPath === "/rpc/"
+  return rawPath !== undefined && rpcRawPaths.has(rawPath)
 }
 
 /**
@@ -217,10 +226,10 @@ export const makeHttpAppEffect = (options: AppHandlerOptions) => {
 
 const handlersLayer = Rpc.HandlersLayer.pipe(Layer.provide(Rpc.ServerStoresLayer))
 
-/** Complete server dependency graph: shared stores + RPC handlers + in-process SSR RPC protocol. */
+/** Complete server dependency graph: shared stores + per-group RPC handlers + in-process SSR HTTP client. */
 export const serverRuntimeLayer = Layer.mergeAll(
   handlersLayer,
-  Rpc.InProcessProtocolLayer.pipe(Layer.provide(handlersLayer))
+  Rpc.InProcessRpcClientLayer.pipe(Layer.provide(handlersLayer))
 )
 
 export interface ManagedNodeHandler {
