@@ -1,12 +1,13 @@
 import { Command, Component, Head, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Button, Dialog, Input } from "@effect/ui-kit"
-import { Cause, Effect, Layer, Option, Schema } from "effect"
+import { Effect, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import * as Products from "../data/products.ts"
 import * as Design from "../design.ts"
 import * as GetProduct from "../queries/GetProduct.ts"
 import * as Routes from "../routes.ts"
+import * as Status from "../status.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
 export const PRODUCT_DETAIL_PAGE_CHUNK = "SENTINEL:product-detail-page"
@@ -105,17 +106,20 @@ export const ProductDetailPageNoDeps = Html.component({
     if (AsyncResult.isFailure(result)) {
       return shell.children(
         h.h1.class(Design.ui.title).children("Couldn't load the product"),
-        h.pre(Cause.pretty(result.cause)),
+        h.p.class(Design.ui.muted).children("Something went wrong while loading this product. Please try again."),
         back
       )
     }
     const product = Option.getOrUndefined(result.value)
     if (product === undefined) {
-      return shell.children(
-        h.h1.class(Design.ui.title).children("Unknown product"),
-        h.p.class(Design.ui.muted).children(`There is no product "${h.props.id}".`),
-        back
-      )
+      // `data-http-status` is what `renderPage` reads back to answer 404 for exactly this render.
+      return shell
+        .attr(Status.NOT_FOUND_ATTRIBUTE, "404")
+        .children(
+          h.h1.class(Design.ui.title).children("Unknown product"),
+          h.p.class(Design.ui.muted).children(`There is no product "${h.props.id}".`),
+          back
+        )
     }
     return shell.attr("data-catalog", Products.CATALOG_CHUNK).children(
       h.h1.class(Design.ui.title).children(product.name),

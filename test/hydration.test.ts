@@ -41,7 +41,7 @@ describe("hydration of native Component.lazy pages after `await preloadRoute(rou
 
   it("never renders the loading fallback, at any point", async () => {
     const browser = await Helpers.hydrateFromServer("/analytics")
-    await new Promise((resolve) => setTimeout(resolve, 50)) // let any late render land
+    await Helpers.settle()
     expect(browser.fallbacksSeen).toEqual([])
     expect(browser.app.loadingStats.rendered).toBe(0)
     expect(browser.container.querySelector("[data-fallback]")).toBeNull()
@@ -109,7 +109,7 @@ describe("Query.Service entries hydrate from the server's `~query`", () => {
     expect(Helpers.text(browser.container, '[data-testid="products-status"]')).toBe("1 product(s).")
 
     // Let anything that would refetch run, then count the catalog reads on the CLIENT's copy.
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await Helpers.settle()
     expect(browser.app.catalogReads.searchProducts).toBe(0)
     expect(browser.fallbacksSeen).toEqual([])
   })
@@ -125,7 +125,7 @@ describe("Query.Service entries hydrate from the server's `~query`", () => {
     expect(browser.container.querySelector("h1")).toBe(browser.before.title)
     expect(Helpers.text(browser.container, "h1")).toBe("Field notebook")
 
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await Helpers.settle()
     expect(browser.app.catalogReads.getProduct).toBe(0)
   })
 
@@ -161,23 +161,27 @@ describe("negative control: native Component.lazy WITHOUT preloadRoute before hy
     })
     observer.observe(container, { childList: true, subtree: true })
 
-    // The page module has NOT been imported: nothing awaited `pages.Products.preload()`.
-    expect([...Helpers.loadedPages]).toEqual([])
+    // Whatever an assertion below does, the observer and the app's scope are released.
     const scope = await Effect.runPromise(Scope.make())
-    await Effect.runPromise(
-      HtmlHydrate.hydrateEffect(App, Router.props(app.AppRoute), container, server.state).pipe(
-        Effect.tap((root) => root.adopted),
-        Effect.provide(BrowserRouter.layer({ routes: app.AppRoute })),
-        Effect.provideService(Scope.Scope, scope)
+    try {
+      // The page module has NOT been imported: nothing awaited `pages.Products.preload()`.
+      expect([...Helpers.loadedPages]).toEqual([])
+      await Effect.runPromise(
+        HtmlHydrate.hydrateEffect(App, Router.props(app.AppRoute), container, server.state).pipe(
+          Effect.tap((root) => root.adopted),
+          Effect.provide(BrowserRouter.layer({ routes: app.AppRoute })),
+          Effect.provideService(Scope.Scope, scope)
+        )
       )
-    )
-    // Once the chunk arrives the page renders, but as a NEW node: the server's was thrown away.
-    await expect.poll(() => container.querySelector('[data-page-chunk="SENTINEL:products-page"]')).not.toBeNull()
-    observer.disconnect()
-    expect(fallbacks.length).toBeGreaterThan(0)
-    expect(app.loadingStats.rendered).toBeGreaterThan(0)
-    expect(serverSection?.isConnected).toBe(false)
-    expect(container.querySelector("section")).not.toBe(serverSection)
-    await Effect.runPromise(Scope.close(scope, Exit.void))
+      // Once the chunk arrives the page renders, but as a NEW node: the server's was thrown away.
+      await expect.poll(() => container.querySelector('[data-page-chunk="SENTINEL:products-page"]')).not.toBeNull()
+      expect(fallbacks.length).toBeGreaterThan(0)
+      expect(app.loadingStats.rendered).toBeGreaterThan(0)
+      expect(serverSection?.isConnected).toBe(false)
+      expect(container.querySelector("section")).not.toBe(serverSection)
+    } finally {
+      observer.disconnect()
+      await Effect.runPromise(Scope.close(scope, Exit.void))
+    }
   })
 })

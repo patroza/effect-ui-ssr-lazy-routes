@@ -5,11 +5,12 @@
 //   node scripts/verify-bundles.ts [distClientDir]
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { gzipSync } from "node:zlib"
 import * as Assets from "../src/assets.ts"
 import type * as Routes from "../src/routes.ts"
 
-const root = new URL("..", import.meta.url).pathname
+const root = fileURLToPath(new URL("..", import.meta.url))
 const clientDir = process.argv[2] ?? join(root, "dist/client")
 const manifest = Assets.parseManifest(readFileSync(join(clientDir, ".vite/manifest.json"), "utf8"))
 
@@ -42,6 +43,14 @@ const owned: ReadonlyArray<Owned> = [
   ["data-panel-open", "ui-kit Collapsible", "Analytics"],
   ["SENTINEL:not-found-page", "NotFound page", "NotFound"]
 ]
+// Framework and kit code that only lazy pages use. It must exist in the build, in a chunk that is neither the
+// entry nor reachable from it by a static import: otherwise every visitor downloads it up front.
+const pageOnlyFramework: ReadonlyArray<readonly [needle: string, label: string]> = [
+  ["effect/ui/Query/Build", "@effect/ui Query.Service runtime"],
+  ["effect/ui/Query/accessor", "@effect/ui Query.Service accessors"],
+  ["Button: the element already handles click", "ui-kit Button"],
+  ["Input: the element already handles input", "ui-kit Input"]
+]
 // Imported by exactly the Products and ProductDetail chunks: one shared chunk, never the entry.
 const sharedNeedles: ReadonlyArray<readonly [needle: string, label: string]> = [
   ["SENTINEL:catalog-data", "catalog data"]
@@ -64,6 +73,24 @@ for (const sentinel of declared) {
 const chunkFiles = readdirSync(join(clientDir, "assets")).filter((name) => name.endsWith(".js"))
 const read = (file: string): Buffer => readFileSync(join(clientDir, file))
 const code = new Map(chunkFiles.map((name) => [`assets/${name}`, read(`assets/${name}`).toString("utf8")]))
+/** EVERY chunk (entry, pages and shared) whose code contains `needle`. */
+const holdersOf = (needle: string): ReadonlyArray<string> =>
+  [...code].filter(([, text]) => text.includes(needle)).map(([file]) => file)
+/** The files of `source`'s chunk and of every chunk it imports statically, transitively. */
+const staticClosureFiles = (source: string): ReadonlySet<string> => {
+  const seen = new Set<string>()
+  const closure = new Set<string>()
+  const visit = (key: string): void => {
+    if (seen.has(key)) return
+    seen.add(key)
+    const chunk = manifest[key]
+    if (chunk === undefined) return
+    closure.add(chunk.file)
+    for (const imported of chunk.imports ?? []) visit(imported)
+  }
+  visit(source)
+  return closure
+}
 const size = (file: string): { readonly raw: number; readonly gzip: number } => {
   const buffer = read(file)
   return { raw: buffer.length, gzip: gzipSync(buffer).length }
@@ -82,6 +109,15 @@ check(entryCode.length > 0, `entry chunk ${entry.file} not found in assets/`)
 
 for (const [needle, label] of [...owned, ...sharedNeedles]) {
   check(!entryCode.includes(needle), `ENTRY chunk ${entry.file} contains ${label} (${needle})`)
+}
+const entryClosure = staticClosureFiles(Assets.ENTRY_SOURCE)
+for (const [needle, label] of pageOnlyFramework) {
+  const holders = holdersOf(needle)
+  check(holders.length > 0, `${label} (${needle}) is in no chunk: the marker is stale`)
+  check(!holders.includes(entry.file), `ENTRY chunk ${entry.file} contains ${label} (${needle})`)
+  for (const holder of holders) {
+    check(!entryClosure.has(holder), `the entry statically imports ${holder}, which holds ${label}`)
+  }
 }
 const pageSources: ReadonlyArray<string> = Object.values(Assets.routeSources)
 for (const imported of entry.imports ?? []) {
@@ -113,25 +149,35 @@ for (const { route, chunk } of pageChunks) {
     else check(!own.includes(needle), `${route} chunk ${chunk?.file} contains ${owner}'s ${label} (${needle})`)
   }
 }
+// Whatever chunk it lands in (page, shared or entry), a page-only needle lives in its owner's chunk and nowhere else.
+for (const [needle, label, owner] of owned) {
+  const ownerFile = pageChunks.find(({ route }) => route === owner)?.chunk?.file
+  const holders = holdersOf(needle)
+  check(
+    ownerFile !== undefined && holders.length === 1 && holders[0] === ownerFile,
+    `${label} (${needle}) should live only in ${owner}'s chunk ${ownerFile}, found in: ${holders.join(", ") || "no chunk"}`
+  )
+}
 
 // The catalog data is shared by exactly the Products and ProductDetail chunks, never the entry.
 for (const [needle] of sharedNeedles) {
-  const holders = [...code].filter(([, text]) => text.includes(needle)).map(([file]) => file)
+  const holders = holdersOf(needle)
   check(holders.length === 1, `${needle} should live in exactly one shared chunk, found ${holders.length}`)
+  const holder = holders[0]
   for (const route of ["Products", "ProductDetail"] as const) {
-    const imports = manifest[Assets.routeSources[route]]?.imports ?? []
     check(
-      imports.some((key) => manifest[key]?.file === holders[0]),
-      `${route} chunk doesn't import the shared catalog chunk ${holders[0]}`
+      holder !== undefined && staticClosureFiles(Assets.routeSources[route]).has(holder),
+      `${route} chunk doesn't import the shared catalog chunk ${holder}`
     )
   }
+  // Transitively: a page that reaches the catalog through ANOTHER shared chunk would load it too.
   for (const route of ["Home", "Analytics", "NotFound"] as const) {
-    const imports = manifest[Assets.routeSources[route]]?.imports ?? []
     check(
-      !imports.some((key) => manifest[key]?.file === holders[0]),
-      `${route} chunk imports the catalog chunk it doesn't need`
+      holder === undefined || !staticClosureFiles(Assets.routeSources[route]).has(holder),
+      `${route} chunk (transitively) imports the catalog chunk it doesn't need`
     )
   }
+  check(holder === undefined || !entryClosure.has(holder), `the entry statically imports the catalog chunk ${holder}`)
 }
 
 // --- CSS: Tailwind (global) rides with the entry; the page-specific stylesheet only with Analytics. ---

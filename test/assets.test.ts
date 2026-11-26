@@ -117,7 +117,7 @@ describe("document head", () => {
     { url: "/nope", expected: ["/assets/NotFoundPage-N1.js"] }
   ])("server HTML for $url preloads exactly the active route's chunks", async ({ url, expected }) => {
     const app = await Helpers.loadApp()
-    const page = await app.renderPage(url, (route) => Assets.resolveRouteAssets(manifest, route._tag))
+    const page = await Helpers.renderDocument(app, url, (route) => Assets.resolveRouteAssets(manifest, route._tag))
     expect(preloads(page.html)).toEqual(expected)
     // The entry is a module script in <head>, so it downloads in parallel with the preloads.
     expect(page.html).toContain('<script type="module" crossorigin src="/assets/client-E1.js"></script>')

@@ -11,6 +11,15 @@ const WIDTH = 640
 const HEIGHT = 260
 const PAD = { top: 16, right: 16, bottom: 28, left: 48 } as const
 
+/** Escapes text for an XML text node or a double-quoted attribute. */
+export const escapeXml = (text: string): string =>
+  text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;")
+
 const round = (value: number): number => Math.round(value * 10) / 10
 
 export const lineChartSvg = (title: string, points: ReadonlyArray<Dataset.SeriesPoint>): string => {
@@ -27,7 +36,7 @@ export const lineChartSvg = (title: string, points: ReadonlyArray<Dataset.Series
   const labels = points
     .map(
       (point, index) =>
-        `<text x="${round(x(index))}" y="${HEIGHT - 8}" font-size="10" text-anchor="middle" fill="#555">${point.label}</text>`
+        `<text x="${round(x(index))}" y="${HEIGHT - 8}" font-size="10" text-anchor="middle" fill="#555">${escapeXml(point.label)}</text>`
     )
     .join("")
   const dots = points
@@ -35,7 +44,7 @@ export const lineChartSvg = (title: string, points: ReadonlyArray<Dataset.Series
     .join("")
 
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="${title}">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="${escapeXml(title)}">` +
     `<rect width="${WIDTH}" height="${HEIGHT}" fill="#fff"/>` +
     `<line x1="${PAD.left}" y1="${PAD.top + innerHeight}" x2="${WIDTH - PAD.right}" y2="${PAD.top + innerHeight}" stroke="#bbb"/>` +
     `<text x="${PAD.left - 6}" y="${PAD.top + 4}" font-size="10" text-anchor="end" fill="#555">${max}</text>` +

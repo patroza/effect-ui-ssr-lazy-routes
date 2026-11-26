@@ -1,7 +1,7 @@
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Button, Input } from "@effect/ui-kit"
-import { Cause, Option, Schema } from "effect"
+import { Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import * as Products from "../data/products.ts"
 import * as Design from "../design.ts"
@@ -30,7 +30,12 @@ export const ProductsPageNoDeps = Html.component({
   // The results are fetched by the query (and shipped in the server's `~query`),
   // never copied into the Model.
   queries: {
-    results: { query: SearchProducts.SearchProducts, args: ({ props }) => ({ q: props.route.search.q }) }
+    results: {
+      query: SearchProducts.SearchProducts,
+      // The input writes every keystroke to the URL; wait for typing to pause before fetching.
+      debounce: "300 millis",
+      args: ({ props }) => ({ q: props.route.search.q })
+    }
   }
 }).make({
   init: () => ({ compared: [] }),
@@ -54,12 +59,11 @@ export const ProductsPageNoDeps = Html.component({
       onFailure: () => undefined,
       onSuccess: ({ value }) => value
     })
-    const failure = AsyncResult.isFailure(h.queries.results) ? Cause.pretty(h.queries.results.cause) : undefined
     const status =
       results === undefined
-        ? failure === undefined
-          ? "Searching…"
-          : "Search failed."
+        ? AsyncResult.isFailure(h.queries.results)
+          ? "Search failed."
+          : "Searching…"
         : results.length === 0
           ? "No products match your search."
           : `${results.length} product(s).`

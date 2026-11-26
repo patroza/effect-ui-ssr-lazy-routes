@@ -16,10 +16,6 @@ export interface BootOptions {
   readonly state: Renderer.State | undefined
 }
 
-export const parseLocation = (location: string): Routes.AppRouteValue =>
-  // `/*` is a catch-all, so every URL parses to some route.
-  Option.getOrThrowWith(Routes.AppRoute.parse(location), () => new Error(`Unparseable URL: ${location}`))
-
 /**
  * The platform services the app needs: a Router (`BrowserRouter.layer(...)` in
  * the browser, `Router.memory(...)` in tests) and an HTTP client.
@@ -33,7 +29,7 @@ export const platformLayer = (router: Layer.Layer<Router.Services>) => Layer.mer
 /**
  * Boots the app in the browser, inside the caller's scope:
  *
- * 1. parse the URL with the same route union the server used,
+ * 1. resolve the URL with the same route union the server used,
  * 2. await `preloadRoute` for the matched route: the native
  *    `Component.lazy(...).preload()` of its page,
  * 3. install the `vite:preloadError` reload guard and the link prefetch (both
@@ -44,8 +40,9 @@ export const platformLayer = (router: Layer.Layer<Router.Services>) => Layer.mer
  * one (same DOM nodes, Model and `~query` entries, no fallback).
  */
 export const boot = Effect.fn("boot")(function* (options: BootOptions) {
-  const route = parseLocation(options.location)
-  yield* Effect.promise(() => Pages.preloadRoute(route))
+  // `/*` is a catch-all, so the server only serves URLs that resolve; an undecodable one has no page to preload.
+  const route = Routes.routeOf(options.location)
+  if (Option.isSome(route)) yield* Effect.promise(() => Pages.preloadRoute(route.value))
 
   // After the initial preload, so a failed first load surfaces as itself.
   const doc = options.container.ownerDocument

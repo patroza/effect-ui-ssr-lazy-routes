@@ -5,7 +5,7 @@ import { createServer as createViteServer, createServerModuleRunner } from "vite
 import type * as Assets from "../src/assets.ts"
 import type * as Server from "../src/server.ts"
 
-const port = Number(process.env.PORT ?? 5173)
+const port = Number(process.env["PORT"] ?? 5173)
 const vite = await createViteServer({ server: { middlewareMode: true }, appType: "custom" })
 // Loads modules through Vite's SSR environment, so edits apply without restarting.
 const runner = createServerModuleRunner(vite.environments.ssr)
@@ -13,11 +13,11 @@ const runner = createServerModuleRunner(vite.environments.ssr)
 const server = createHttpServer((req, res) => {
   vite.middlewares(req, res, async () => {
     try {
-      const [{ createAppHandler }, { devAssets }] = await Promise.all([
+      const [{ handleRequest }, { devAssets }] = await Promise.all([
         runner.import<typeof Server>("/src/server.ts"),
         runner.import<typeof Assets>("/src/assets.ts")
       ])
-      createAppHandler({ assetsFor: () => devAssets })(req, res)
+      await handleRequest({ assetsFor: () => devAssets })(req, res)
     } catch (error) {
       if (error instanceof Error) vite.ssrFixStacktrace(error)
       console.error(error)

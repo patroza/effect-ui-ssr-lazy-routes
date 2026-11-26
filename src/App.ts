@@ -10,6 +10,10 @@ export const AppMessage = UiSchema.TaggedEnum({
   ChangedRoute: { route: Routes.AppRoute }
 })
 
+/** The nav link of the section the route belongs to: a product's page keeps "Products" current. */
+const isCurrent = (linkTag: Routes.AppRouteTag, route: Routes.AppRouteValue): boolean =>
+  linkTag === route._tag || (linkTag === "Products" && route._tag === "ProductDetail")
+
 /**
  * The root. It holds the route and picks the page. It imports no page module
  * statically: every page is a `Component.lazy` child. The browser awaits
@@ -49,7 +53,7 @@ export const App = Html.component({
                 .key(link.tag)
                 .class(Design.ui.navLink)
                 .attr("href", link.href)
-                .attr("aria-current", link.tag === route._tag ? "page" : undefined)
+                .attr("aria-current", isCurrent(link.tag, route) ? "page" : undefined)
                 .children(link.label)
             )
           )

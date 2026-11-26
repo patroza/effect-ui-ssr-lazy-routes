@@ -56,7 +56,7 @@ describe("@effect/ui-kit primitives: zero-flash hydration", () => {
     expect(Helpers.byTestId(container, "analytics-chart")).toBe(before.chart)
     expect(Helpers.byTestId(container, "about-trigger")).toBe(before.about)
 
-    await new Promise((resolve) => setTimeout(resolve, 100)) // let anything that would refetch run
+    await Helpers.settle()
     expect(browser.app.analyticsReads.getAnalytics).toBe(0)
     expect(browser.fallbacksSeen).toEqual([])
     expect(browser.app.loadingStats.rendered).toBe(0)
@@ -83,7 +83,7 @@ describe("@effect/ui-kit primitives: zero-flash hydration", () => {
     expect(Helpers.byTestId(browser.container, "inquiry-trigger")).toBe(browser.before.trigger)
     expect(Helpers.byTestId(browser.container, "detail-more")).toBe(browser.before.more)
     expect(Helpers.byTestId(browser.container, "detail-bookmark")).toBe(browser.before.bookmark)
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await Helpers.settle()
     expect(browser.app.catalogReads.getProduct).toBe(0)
     expect(browser.fallbacksSeen).toEqual([])
   })
@@ -146,7 +146,9 @@ describe("@effect/ui-kit primitives: interactive after hydration", () => {
     Helpers.click(Helpers.byTestId(container, "inquiry-trigger"))
     await expect.poll(() => container.querySelector("dialog")).not.toBeNull()
     expect(Helpers.byTestId(container, "inquiry-trigger")).toBe(trigger) // the trigger was adopted, not rebuilt
-    expect(container.querySelector("dialog [role=dialog], dialog")?.textContent).toContain("About Field notebook")
+    // The popup lives inside the portaled <dialog>, and is labelled by the product's name.
+    expect(container.querySelector("dialog")?.contains(Helpers.byTestId(container, "inquiry-popup"))).toBe(true)
+    expect(Helpers.byTestId(container, "inquiry-popup").textContent).toContain("About Field notebook")
 
     Helpers.type(Helpers.byTestId(container, "inquiry-input"), "Is it dot grid?")
     await expect.poll(() => Helpers.inputValue(Helpers.byTestId(container, "inquiry-input"))).toBe("Is it dot grid?")
@@ -184,7 +186,7 @@ describe("@effect/ui-kit primitives: interactive after hydration", () => {
     expect(Helpers.byTestId(container, "detail-bookmark")).toBe(button) // same node
 
     Helpers.click(Helpers.byTestId(container, "detail-bookmark")) // a disabled button sends nothing
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await Helpers.settle()
     expect(browser.app.catalogWrites.bookmarkProduct).toBe(1)
   })
 

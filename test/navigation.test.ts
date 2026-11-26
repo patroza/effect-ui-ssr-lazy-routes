@@ -140,13 +140,38 @@ describe("link prefetch", () => {
     expect(browser.app.loadingStats.rendered).toBe(0)
   })
 
+  it("ignores links the browser handles itself (target, download) and other origins", async () => {
+    const browser = await Helpers.hydrateFromServer("/")
+    const anchors: ReadonlyArray<{ readonly attrs: Record<string, string> }> = [
+      { attrs: { href: "/analytics", target: "_blank" } },
+      { attrs: { href: "/analytics", download: "" } },
+      { attrs: { href: "https://example.com/analytics" } },
+      { attrs: { href: "http://[bad" } }
+    ]
+    for (const { attrs } of anchors) {
+      const anchor = document.createElement("a")
+      for (const [name, value] of Object.entries(attrs)) anchor.setAttribute(name, value)
+      browser.container.append(anchor)
+      anchor.dispatchEvent(new Event("pointerover", { bubbles: true }))
+    }
+    await Helpers.settle()
+    expect(Helpers.loadedPages.has("Analytics")).toBe(false)
+
+    // Positive twin: the same href without the attribute does preload, so the wait above could have seen it.
+    const plain = document.createElement("a")
+    plain.setAttribute("href", "/analytics")
+    browser.container.append(plain)
+    plain.dispatchEvent(new Event("pointerover", { bubbles: true }))
+    await expect.poll(() => Helpers.loadedPages.has("Analytics")).toBe(true)
+  })
+
   it("stops preloading once the app's scope is closed", async () => {
     const browser = await Helpers.hydrateFromServer("/")
     const analytics = link(browser.container, "/analytics") // closing the scope unmounts the app's nodes
     await browser.close()
     document.body.append(analytics) // still an `<a href>` in the document, now with no app listening
     analytics.dispatchEvent(new Event("pointerover", { bubbles: true }))
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await Helpers.settle()
     expect(Helpers.loadedPages.has("Analytics")).toBe(false)
   })
 })

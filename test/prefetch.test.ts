@@ -36,22 +36,65 @@ describe("installPreloadErrorReload", () => {
   it("reloads and prevents the default on the first preload error", async () => {
     const { win, reload, stored } = target()
     const close = await install(win)
-    const event = preloadError()
-    window.dispatchEvent(event)
-    expect(reload).toHaveBeenCalledTimes(1)
-    expect(event.defaultPrevented).toBe(true)
-    expect(Object.keys(stored)).toHaveLength(1)
-    await close()
+    try {
+      const event = preloadError()
+      window.dispatchEvent(event)
+      expect(reload).toHaveBeenCalledTimes(1)
+      expect(event.defaultPrevented).toBe(true)
+      expect(Object.keys(stored)).toHaveLength(1)
+    } finally {
+      await close()
+    }
   })
 
   it("leaves the real chunk error alone (no preventDefault, no reload) when it just reloaded", async () => {
     const { win, reload } = target({ "effect-ui-ssr-lazy-routes:reloaded-at": String(Date.now()) })
     const close = await install(win)
-    const event = preloadError()
-    window.dispatchEvent(event)
-    expect(reload).not.toHaveBeenCalled()
-    expect(event.defaultPrevented).toBe(false)
-    await close()
+    try {
+      const event = preloadError()
+      window.dispatchEvent(event)
+      expect(reload).not.toHaveBeenCalled()
+      expect(event.defaultPrevented).toBe(false)
+    } finally {
+      await close()
+    }
+  })
+
+  it("reloads once per event when sessionStorage throws (private mode, blocked storage)", async () => {
+    const { win, reload } = target()
+    const throwing = {
+      ...win,
+      sessionStorage: {
+        getItem: () => {
+          throw new Error("SecurityError")
+        },
+        setItem: () => {
+          throw new Error("SecurityError")
+        }
+      }
+    }
+    const close = await install(throwing)
+    try {
+      const event = preloadError()
+      window.dispatchEvent(event)
+      expect(reload).toHaveBeenCalledTimes(1)
+      expect(event.defaultPrevented).toBe(true)
+    } finally {
+      await close()
+    }
+  })
+
+  it("treats a stored timestamp older than the loop window as no recent reload", async () => {
+    const { win, reload } = target({ "effect-ui-ssr-lazy-routes:reloaded-at": String(Date.now() - 60_000) })
+    const close = await install(win)
+    try {
+      const event = preloadError()
+      window.dispatchEvent(event)
+      expect(reload).toHaveBeenCalledTimes(1)
+      expect(event.defaultPrevented).toBe(true)
+    } finally {
+      await close()
+    }
   })
 
   it("removes its listener when the scope closes", async () => {

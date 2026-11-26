@@ -17,9 +17,13 @@ export const installLinkPrefetch = (doc: Document) =>
         if (!(target instanceof Element)) return
         const anchor = target.closest("a[href]")
         if (anchor === null) return
-        const url = new URL(anchor.getAttribute("href") ?? "", doc.location.href)
+        // Links the router leaves to the browser (new tab, download) aren't navigations.
+        if (anchor.hasAttribute("target") || anchor.hasAttribute("download")) return
+        const href = anchor.getAttribute("href") ?? ""
+        if (!URL.canParse(href, doc.location.href)) return
+        const url = new URL(href, doc.location.href)
         if (url.origin !== doc.location.origin) return
-        const route = Routes.AppRoute.parse(url.pathname + url.search)
+        const route = Routes.routeOf(url.pathname + url.search)
         if (Option.isSome(route)) void Pages.preloadRoute(route.value)
       }
       doc.addEventListener("pointerover", onIntent)

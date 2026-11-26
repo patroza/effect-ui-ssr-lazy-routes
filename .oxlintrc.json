@@ -1,9 +1,6 @@
 {
   "$schema": "./node_modules/@effect/tsgo/oxlint-schema.json",
-  "extends": [
-    "./node_modules/@effect-app/eslint-shared-config/src/oxlintrc.json",
-    "./.agent-tooling/oxlint.strict.json"
-  ],
+  "extends": ["./node_modules/@effect-app/eslint-shared-config/src/oxlintrc.json", "./config/oxlint.strict.json"],
   "options": {
     "typeAware": true,
     "denyWarnings": true

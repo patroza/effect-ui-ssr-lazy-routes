@@ -3,36 +3,46 @@ import { HtmlServer } from "@effect/ui/html"
 import { Effect, Option } from "effect"
 import * as App from "./App.ts"
 import * as Assets from "./assets.ts"
-import * as Products from "./data/products.ts"
 import * as Routes from "./routes.ts"
+import * as Status from "./status.ts"
 
+/** A rendered document and the status the render itself implies. */
 export interface RenderedPage {
+  readonly _tag: "Page"
   readonly status: number
   readonly html: string
   readonly route: Routes.AppRouteValue
 }
 
-/** Resolves the URL with the same route union the client uses. `/*` makes it total. */
-export const routeOf = (url: string): Routes.AppRouteValue =>
-  Option.getOrThrowWith(Routes.AppRoute.parse(url), () => new Error(`Unparseable URL: ${url}`))
-
-const statusOf = (route: Routes.AppRouteValue): number => {
-  switch (route._tag) {
-    case "NotFound":
-      return 404
-    case "ProductDetail":
-      return Products.findProduct(route.params.id) === undefined ? 404 : 200
-    default:
-      return 200
-  }
+/**
+ * The URL isn't the canonical spelling of its route: a trailing slash (`301`,
+ * permanent), or search params dropped as invalid such as a repeated `?q=a&q=b`
+ * (`302`, since the same URL may be valid later). Same rule as `HtmlServerHttp`.
+ */
+export interface RenderedRedirect {
+  readonly _tag: "Redirect"
+  readonly status: 301 | 302
+  readonly location: string
 }
+
+/** The URL can't be decoded at all (a malformed `%` escape): the client's fault, not a missing page. */
+export interface RenderedBadRequest {
+  readonly _tag: "BadRequest"
+  readonly status: 400
+}
+
+export type RenderOutcome = RenderedPage | RenderedRedirect | RenderedBadRequest
 
 /**
  * Server-renders one URL.
  *
- * `HtmlServer.renderToHtml` runs `init`/`update`/`view` of `App` for the route
- * the static Router reports. `Component.lazy` pages are awaited, so the HTML
- * contains the whole page. `serializeState` is what the client adopts.
+ * `AppRoute.resolve` decides first, like `HtmlServerHttp.layerHttp` does: an
+ * undecodable URL is `BadRequest`, a non-canonical one a `Redirect`.
+ * Otherwise `HtmlServer.renderToHtml` runs `init`/`update`/`view` of `App` for
+ * the route the static Router reports. `Component.lazy` pages are awaited, so
+ * the HTML contains the whole page. `serializeState` is what the client adopts.
+ * The status is 404 for the catch-all route (`resolved.notFound`) or when the
+ * rendered page says its record is missing.
  *
  * `assetsFor` is called with the matched route, so the document can preload
  * exactly that route's chunks.
@@ -40,8 +50,18 @@ const statusOf = (route: Routes.AppRouteValue): number => {
 export const renderPage = async (
   url: string,
   assetsFor: (route: Routes.AppRouteValue) => Assets.PageAssets
-): Promise<RenderedPage> => {
-  const route = routeOf(url)
+): Promise<RenderOutcome> => {
+  const resolved = Routes.AppRoute.resolve(url)
+  if (Option.isNone(resolved)) return { _tag: "BadRequest", status: 400 }
+  const { invalid, notFound, redirected, route } = resolved.value
+  if (redirected || invalid.length > 0) {
+    return {
+      _tag: "Redirect",
+      status: invalid.length > 0 ? 302 : 301,
+      location: Routes.AppRoute.print(route)
+    }
+  }
+
   const page = await Effect.runPromise(
     HtmlServer.renderToHtml(App.App, Router.props(Routes.AppRoute), { budget: "1 second" }).pipe(
       Effect.provide(Router.static({ routes: Routes.AppRoute, url }))
@@ -61,5 +81,5 @@ export const renderPage = async (
   </body>
 </html>
 `
-  return { status: statusOf(route), html, route }
+  return { _tag: "Page", status: notFound || Status.renderedNotFound(page.html) ? 404 : 200, html, route }
 }

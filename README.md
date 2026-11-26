@@ -34,8 +34,8 @@ pnpm format:check     # oxfmt --check (pnpm format writes)
 pnpm check            # typecheck + lint + format:check + build + verify:bundles + test + smoke
 pnpm build            # dist/client (+ .vite/manifest.json) and dist/server
 pnpm verify:bundles   # prints the chunk table and proves the per-page split from the built output
-pnpm test             # vitest + happy-dom: SSR, hydration, ui-kit, navigation, assets
-pnpm smoke            # boots the built server, checks SSR HTML, modulepreload and stylesheet tags
+pnpm test             # vitest + happy-dom: SSR, hydration, ui-kit, navigation, assets, HTTP server
+pnpm smoke            # boots the built server, checks SSR HTML, modulepreload fetches, stylesheets, bad URLs
 pnpm start            # production server on http://localhost:3000 (PORT=… to change)
 pnpm dev              # Vite middleware + the same SSR handler, with HMR (PORT=5173)
 ```
@@ -53,12 +53,15 @@ pnpm dev              # Vite middleware + the same SSR handler, with HMR (PORT=5
 - **Effect diagnostics fail the build.** `tsconfig.plugins.json` holds the `@effect/language-service` severity table (every rule `"error"`;
   `unstableApiUsage` and `experimentalApiUsage` are `"off"` because `@effect/ui` is `@stability experimental`). `scripts/oxlint.mjs` derives
   every enabled rule as an `effecttsgo/*` oxlint rule into the git-ignored `.oxlintrc.effect.generated.json`
-  (99 enabled rules) and fails closed if none are enabled. So the same diagnostics run in `pnpm typecheck` and inside `pnpm lint`.
-- **Strict oxlint.** `.oxlintrc.json` extends `@effect-app/eslint-shared-config` plus `.agent-tooling/oxlint.strict.json`
+  and fails closed if none are enabled. Of the 154 rules, **99 are enabled as errors** and the other **55 are off** (rules the schema
+  ships disabled, plus the two experimental-API rules above). So the same diagnostics run in `pnpm typecheck` and inside `pnpm lint`.
+- **Strict oxlint.** `.oxlintrc.json` extends `@effect-app/eslint-shared-config` plus `config/oxlint.strict.json`
   (no `any`, no non-null assertions, no unsafe assertions, no `any` flowing anywhere, `@ts-ignore`/`@ts-nocheck` banned) with
-  `typeAware` and `denyWarnings`. The `effect`, `effect/http`, `effect/reactivity`, `@effect/ui` and `@effect/ui-kit` barrels are
-  banned: import submodules, e.g. `import * as Effect from "effect/Effect"`, `import * as Component from "@effect/ui/Component"`,
-  `import { Button } from "@effect/ui-kit/Button"` (`@effect/ui/html` is a submodule and stays allowed).
+  `typeAware` and `denyWarnings`.
+- **Imports.** Barrel imports for the libraries: `import { Effect, Schema } from "effect"`, `import { Component, Router } from "@effect/ui"`,
+  `import { Button } from "@effect/ui-kit"` (submodule paths such as `effect/http`, `effect/reactivity` and `@effect/ui/html` for what the
+  barrel doesn't carry). Every **local** module is a namespace import, `import * as Routes from "./routes.ts"`, never a named one; the
+  tree-shaking that keeps page code out of the entry comes from the bundler, not from the import style.
 - **Scripts are type-checked too.** `scripts/*.ts` run natively on Node's type stripping; the `scripts/lib/*.mjs` toolchain wrappers are
   checked through JSDoc (`allowJs` + `checkJs`).
 
@@ -72,11 +75,12 @@ pnpm dev              # Vite middleware + the same SSR handler, with HMR (PORT=5
 | `/analytics`    | `GetAnalytics` query, dataset, SVG chart, **its own CSS**                  | `Tabs`, `Collapsible`       |
 | `/*`            | not-found (404)                                                            | none                        |
 
-`Button` and `Input` are used by several pages, so Rollup puts them in small shared chunks. `Tabs`, `Collapsible` and `Dialog` each have exactly one user, so they land in that page's chunk. `App.ts` imports no kit primitive, so the shell never pays for them.
+`Button` and `Input` are used by several pages, so Rollup puts them in small shared chunks: `Button` in its own `Button-*.js`, `Input` in the `products-*.js` chunk next to the catalog (only Products and ProductDetail use it). `Tabs`, `Collapsible` and `Dialog` each have exactly one user, so they land in that page's chunk. `App.ts` imports no kit primitive, so the shell never pays for them.
 
 ```
 src/
-  routes.ts        AppRoute = Route.union({ Home, Products, ProductDetail, Analytics, NotFound })
+  routes.ts        AppRoute = Route.union({ Home, Products, ProductDetail, Analytics, NotFound }) + routeOf(url)
+  status.ts        the `data-http-status="404"` marker a page sets when its record is missing; the server reads it back
   App.ts           root component: holds the route, picks the page, Head.titleTemplate (no page imports)
   pages.ts         the ONLY references to ./pages/*: Component.lazy(name, () => import(...)) + preloadRoute
   pages/*.ts       one component per route; each ends up in its own chunk
@@ -85,27 +89,29 @@ src/
   data/products.ts catalog shared by Products + ProductDetail (a small shared chunk)
   design.ts        Tailwind class recipes (plain strings, found by Tailwind's source scan)
   styles.css       @import "tailwindcss" + a tiny base layer (the entry's only global CSS)
-  bootstrap.ts     boot(): parse URL → await preloadRoute → install guards → hydrate / mount
-  client.ts        browser entry: decode #state (`JsonString.jsonString`), run boot in the app scope
+  bootstrap.ts     boot(): resolve URL → await preloadRoute → install guards → hydrate / mount
+  client.ts        browser entry: decode #state (`JsonString.jsonString`; unreadable → warn + mount fresh), run boot in the app scope
   prefetch.ts      scoped (Effect.acquireRelease) hover/focus prefetch + vite:preloadError reload
-  render.ts        renderPage(url, assetsFor): renderToHtml + serializeState + Router.static
+  render.ts        renderPage(url, assetsFor) → Page | Redirect | BadRequest (AppRoute.resolve first, like HtmlServerHttp)
   assets.ts        manifest → per-route <link rel="modulepreload"> / stylesheet tags
-  server.ts, serve.ts   node:http handler (immutable /assets cache + SSR) and the production entry
+  server.ts, serve.ts   node:http handler (static files, redirects, 400/405, security headers, SSR) and the production entry
+config/            oxlint.strict.json (the strict type-aware rules .oxlintrc.json extends)
 scripts/           verify-bundles.ts · smoke.ts · dev.ts
-test/              ssr · hydration · ui-kit · navigation · prefetch · assets (+ setup.ts, helpers.ts)
+test/              ssr · hydration · ui-kit · navigation · prefetch · assets · server · pages · chart (+ setup.ts, helpers.ts)
 ```
 
 ### Request lifecycle
 
 ```
 GET /products/42
- └─ server: routeOf(url) → Router.static({url}) → renderToHtml(App)  (Component.lazy pages are awaited)
+ └─ server: AppRoute.resolve(url)  → undecodable: 400 · non-canonical: 301/302 to AppRoute.print(route)
+    └─ Router.static({url}) → renderToHtml(App)  (Component.lazy pages are awaited)
     └─ HTML: <head> <link stylesheet client.css> <link modulepreload ProductDetailPage.js …>
                     <script type=module src=client.js> </head>
              <body> <div id=app>…full page…</div> <script id=state>{models + ~query}</script>
  └─ browser: downloads client.js AND the page chunks in parallel (no entry → page waterfall)
     └─ client.ts → boot():
-         1. route = AppRoute.parse(location)
+         1. route = routeOf(location)       ← the same AppRoute.resolve the server used
          2. await preloadRoute(route)       ← pages[route._tag].preload(), native Component.lazy
          3. install vite:preloadError reload + link prefetch (released with the app scope)
          4. HtmlHydrate.hydrateEffect(App, Router.props, #app, state)
@@ -124,9 +130,9 @@ export const pages = {
 }
 export const preloadRoute = (route: AppRouteValue): Promise<void> => pages[route._tag].preload()
 
-// src/bootstrap.ts
-yield * Effect.promise(() => preloadRoute(route)) // await the matched page's chunk…
-yield * HtmlHydrate.hydrateEffect(App, props, container, state) // …then hydrate: nothing is thrown away
+// src/bootstrap.ts, inside Effect.fn("boot")(function* (options) { … })
+yield * Effect.promise(() => Pages.preloadRoute(route)) // await the matched page's chunk…
+yield * HtmlHydrate.hydrateEffect(App.App, props, options.container, options.state) // …then hydrate: nothing is thrown away
 ```
 
 The lazy name **must equal** the component's `name` (state paths look like `/App/ProductsPage[/products]`). Only the matched route's chunk is imported before hydration. `test/hydration.test.ts` has a **negative control**: hydrating _without_ `await preloadRoute(route)` renders the fallback and replaces the server's `<section>`.
@@ -162,7 +168,8 @@ export class BookmarkProduct extends Command.Service<BookmarkProduct>()("catalog
   )
 }
 
-update: ClickedBookmark: () => $.evolve({ bookmark: "Saving" }).run(BookmarkProduct.make({ id: $.props.id }))
+// in the page's `update`:
+//   ClickedBookmark: () => $.evolve({ bookmark: "Saving" as const }).run(BookmarkProduct.make({ id: $.props.id }))
 export const ProductDetailPage = ProductDetailPageNoDeps.pipe(
   Component.provide(Layer.mergeAll(GetProduct.layer, BookmarkProduct.layer))
 )
@@ -174,7 +181,7 @@ What that buys, each proven by a test or by `verify:bundles`:
 - **SSR + hydration:** `renderToHtml` waits for the query and serializes the settled entry under `~query`; the client seeds its cache from it, adopts the server's nodes and the fetchers run **0** times (`catalogReads` / `analyticsReads` stay 0). Strip `~query` from the state and it fetches once, so the assertion can fail.
 - **Navigation:** a page the server didn't render fetches on the client; a `?q=` change re-keys the query on the live instance (same nodes, last results stay up).
 
-Other Effect UI practices used: `Effect.fn` for `boot`; `UiSchema.TaggedEnum` messages named for the fact (`SelectedMetricTab`, `CompletedBookmarkProduct`); `Router.patchSearch` with a `Route.subset` prop for the search box; `Head.titleTemplate`; link prefetch and the `vite:preloadError` reload guard as `Effect.acquireRelease` resources in the app scope (the guard calls `preventDefault()` only when it actually reloads); `#state` decoded with `JsonString.jsonString` (`Schema.fromJsonString` over `Schema.toCodecJson`); and no `manualChunks`.
+Other Effect UI practices used: `Effect.fn` for `boot`; `UiSchema.TaggedEnum` messages named for the fact (`SelectedMetricTab`, `CompletedBookmarkProduct`); `Router.patchSearch` with a `Route.subset` prop for the search box, whose query is `debounce: "300 millis"` so typing doesn't fetch per keystroke (the first fetch is immediate); `Head.titleTemplate`; link prefetch and the `vite:preloadError` reload guard as `Effect.acquireRelease` resources in the app scope (the guard calls `preventDefault()` only when it actually reloads); `#state` decoded with `JsonString.jsonString` (`Schema.fromJsonString` over `Schema.toCodecJson`); and no `manualChunks`.
 
 ## Bundle splitting you can verify
 
@@ -182,30 +189,32 @@ Other Effect UI practices used: `Effect.fn` for `boot`; `UiSchema.TaggedEnum` me
 
 - the **entry contains none** of the page markers, page-only query/Command names, or page-only `@effect/ui-kit` primitives (`Tabs`, `Collapsible`, `Dialog`, found by data attributes only their modules write);
 - the entry reaches every page through a **dynamic `import()`** and statically imports none;
+- the **`Query.Service` runtime** (`Query-*.js`) and the kit's `Button` and `Input` exist in the build but in no chunk the entry holds or statically imports;
 - each of the 5 pages is its **own** chunk, holds its own markers, queries, Command and kit primitives, and none of another page's (`Tabs` + `Collapsible` in Analytics, `Dialog` in ProductDetail);
-- the shared catalog is in exactly one shared chunk, imported only by the two product pages;
+- every page-only needle is found in **every** chunk of the build (shared chunks included) and that set is exactly its owner's chunk;
+- the shared catalog is in exactly one shared chunk, reached (through static imports, transitively) by the two product pages and by no other page or the entry;
 - the entry owns exactly one stylesheet (Tailwind), and only Analytics owns a second one;
 - every JS file in `assets/` is accounted for by the manifest.
 
-Add a static `import { Tabs } from "@effect/ui-kit"` to `App.ts` and it fails with `ENTRY chunk … contains ui-kit Tabs`.
+Use `Tabs` in `App.ts` (an import that is never used is tree-shaken away, so it has to be rendered) and it fails with `ENTRY chunk … contains ui-kit Tabs`.
 
 Output (hashes vary):
 
 ```
 chunk               file                                    raw (B)   gzip (B)  page-only code
 ------------------  ------------------------------------  ---------  ---------  --------------------------------------------------------
-entry               assets/client-DtxFJfLe.js                339417     115974
-page:Home           assets/HomePage-BzQcH1AS.js                 964        530
-page:Products       assets/ProductsPage-DJxQelSC.js            2539       1259  SearchProducts query
-page:ProductDetail  assets/ProductDetailPage-Cj7Rv1kQ.js      22795       8500  GetProduct query, BookmarkProduct command, ui-kit Dialog
-page:Analytics      assets/AnalyticsPage-C6uFF-oH.js          21046       8541  GetAnalytics query, ui-kit Tabs, ui-kit Collapsible
-page:NotFound       assets/NotFoundPage-CQfFQH9g.js             537        346
+entry               assets/client-DeFseBC2.js                339689     115992
+page:Home           assets/HomePage-DtkQrBCS.js                 964        529
+page:Products       assets/ProductsPage-Co_zUPjx.js            2506       1258  SearchProducts query
+page:ProductDetail  assets/ProductDetailPage-Dsd-el4_.js      22945       8589  GetProduct query, BookmarkProduct command, ui-kit Dialog
+page:Analytics      assets/AnalyticsPage-AqqdScB7.js          21182       8591  GetAnalytics query, ui-kit Tabs, ui-kit Collapsible
+page:NotFound       assets/NotFoundPage-CoCP8gBz.js             537        346
 shared              assets/Button-1z9k8cO3.js                   592        384
-shared              assets/Query-BiBxgmQv.js                  48832      16974
+shared              assets/Query-BrBDXfGw.js                  48836      16893
 shared              assets/attributes-BNllm5bX.js               484        306
-shared              assets/products-CyL9_5xN.js                1391        802
-shared              assets/transition-rOotwPOI.js              6680       3123
-css                 assets/client-6tlNFTRI.css                15314       3800
+shared              assets/products-Bv4ZXKfA.js                1391        801
+shared              assets/transition-DUsfufhy.js              6680       3128
+css                 assets/client-B7Z2OTFH.css                15335       3807
 css                 assets/AnalyticsPage-BZFaGk-P.css            91        104
 ```
 
@@ -220,7 +229,18 @@ GET /products/42 → css: client.css · modulepreload: ProductDetailPage, Button
 GET /analytics   → css: client.css + AnalyticsPage.css · modulepreload: AnalyticsPage, transition, Query …
 ```
 
-`pnpm smoke` checks this against the built server. In dev there is no manifest, so there is nothing to preload.
+`pnpm smoke` checks this against the built server: it fetches every `<link rel="modulepreload">` and requires `200`, `text/javascript` and `immutable`. In dev there is no manifest, so there is nothing to preload, and Vite delivers the CSS through the JavaScript modules, so an unstyled flash before the entry runs is expected in dev (production links the stylesheets in `<head>`).
+
+## HTTP behaviour
+
+`src/server.ts` is a plain `node:http` handler. [`test/server.test.ts`](test/server.test.ts) drives it against a temporary client directory.
+
+- **URLs** are resolved with `AppRoute.resolve` first, as `HtmlServerHttp.layerHttp` does: an undecodable URL (`/%E0%A4%A`) is `400`; a non-canonical one is a permanent `301` (`/products/` → `/products`), or a temporary `302` when search params were dropped as invalid (`/products?q=a&q=b` → `/products`), with `Location: AppRoute.print(route)`.
+- **Status** is `404` for the catch-all route and for a page that rendered a missing record (an unknown product marks its root with `data-http-status="404"`), so it cannot drift from what the document shows.
+- **Static files** come from `dist/client` only: `..` segments, malformed escapes and any dotfile segment (`/.vite/manifest.json`, in any letter case) are never served. `/assets/*` is `immutable`; files stream through `stream.pipeline`, so a file that vanishes mid-request never raises an unhandled stream error.
+- **Methods:** `GET` and `HEAD` only (`405` otherwise). `HEAD` carries the GET's real `content-length` and no body.
+- **Headers:** `x-content-type-options: nosniff` always. The production server (the one with a `clientDir`) also sends `content-security-policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:`. The dev server doesn't, because Vite's HMR client and injected styles need more.
+- **Errors never show internals:** a failed query renders a plain message, not `Cause.pretty`.
 
 ## What the tests prove
 
@@ -228,12 +248,15 @@ GET /analytics   → css: client.css + AnalyticsPage.css · modulepreload: Analy
 
 | File                 | Proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ssr.test.ts`        | Each route renders full HTML (never a loading placeholder) with the right `<title>`, search/params applied, per-page state under `/App/<Page>[<path>]`, 404 for unknown URLs / product ids.                                                                                                                                                                                                                                                                                                                            |
+| `ssr.test.ts`        | Each route renders full HTML (never a loading placeholder) with the right `<title>`, search/params applied, per-page state under `/App/<Page>[<path>]` (the NotFound page's too), 404 for unknown URLs / product ids derived from the rendered page, and the `Page` / `Redirect` / `BadRequest` outcomes of `renderPage`.                                                                                                                                                                                              |
 | `hydration.test.ts`  | With `await preloadRoute(route)` the client **adopts the exact server DOM nodes** (`toBe`), **the server's Model**, **never renders the fallback**, imports only the active route's module. For `Query.Service` pages the client adopts the results and fetches **0** times (once when `~query` is stripped). **Negative control:** without `preloadRoute`, the fallback renders and the server `<section>` is replaced.                                                                                               |
 | `ui-kit.test.ts`     | `Tabs`, `Collapsible`, `Dialog`, `Input`, `Button` render on the server (selected tab, closed popup), are **adopted** on hydration (same nodes, 0 refetches, 0 fallbacks, server Collapsible state adopted), and work on the hydrated DOM: switching tabs keeps the tablist nodes and loads only the series the server didn't ship, the Collapsible opens and closes, the Dialog opens, takes input, sends and closes, and `BookmarkProduct` (`Command.Service`) runs once per click and its message reaches `update`. |
-| `navigation.test.ts` | Navigating to a _non-preloaded_ route loads only that page's module, keeps the shell, **doesn't remount** on state, tab or `?q=` updates, fetches navigated pages' queries on the client, and the scoped hover/focus prefetch warms a chunk without changing what renders and stops when the scope closes.                                                                                                                                                                                                             |
+| `navigation.test.ts` | Navigating to a _non-preloaded_ route loads only that page's module, keeps the shell, **doesn't remount** on state, tab or `?q=` updates, fetches navigated pages' queries on the client, and the scoped hover/focus prefetch warms a chunk without changing what renders, ignores `target` / `download` / cross-origin links, and stops when the scope closes.                                                                                                                                                        |
+| `server.test.ts`     | The HTTP handler against a temporary `clientDir`: immutable static assets, path traversal (`/../`, `%2e%2e`, `..%2f`) and dotfiles (`/.vite/…`, any case) never served, malformed `%` is `400` (never `500`), `405` on `POST`, `HEAD` has the GET's `content-length` and no body, `301`/`302` canonical redirects, the 404 status for an unknown product, security headers (CSP only on the production handler).                                                                                                       |
+| `pages.test.ts`      | Every `pages[tag]` has a lazy name equal to the loaded component's `definition.name` (state paths depend on it).                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `chart.test.ts`      | `escapeXml` and that a `&` / `<` in the chart's title or labels keeps the SVG well-formed XML.                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `assets.test.ts`     | `resolveRouteAssets` and the `<head>` contain `modulepreload` for **only** the active route's chunks, CSS handling, cycles, missing-manifest errors.                                                                                                                                                                                                                                                                                                                                                                   |
-| `prefetch.test.ts`   | `installPreloadErrorReload` reloads and calls `preventDefault()` on the first `vite:preloadError`; when a reload just happened it does **neither**, so the real chunk error survives; its listener is released with the scope.                                                                                                                                                                                                                                                                                         |
+| `prefetch.test.ts`   | `installPreloadErrorReload` reloads and calls `preventDefault()` on the first `vite:preloadError`; when a reload just happened it does **neither**, so the real chunk error survives; it still reloads when `sessionStorage` throws, and its listener is released with the scope.                                                                                                                                                                                                                                      |
 
 `test/setup.ts` adds a tiny stand-in for the Popover API, which happy-dom lacks and the kit's top-layer `Dialog` calls.
 

@@ -1,6 +1,7 @@
 import type { Renderer } from "@effect/ui"
 import { afterEach, vi } from "vitest"
 import type * as Assets from "../src/assets.ts"
+import type * as Routes from "../src/routes.ts"
 
 /**
  * Which page modules have been imported since the latest `loadApp()`. The mock
@@ -85,6 +86,17 @@ export const loadApp = async () => {
 }
 export type App = Awaited<ReturnType<typeof loadApp>>
 
+/** `renderPage` for a URL that must render a document (not a redirect or a 400). */
+export const renderDocument = async (
+  app: App,
+  url: string,
+  assetsFor: (route: Routes.AppRouteValue) => Assets.PageAssets = () => noAssets
+) => {
+  const outcome = await app.renderPage(url, assetsFor)
+  if (outcome._tag !== "Page") throw new Error(`expected a page for ${url}, got ${outcome._tag} ${outcome.status}`)
+  return outcome
+}
+
 export interface ServerDocument {
   readonly status: number
   readonly html: string
@@ -95,7 +107,7 @@ export interface ServerDocument {
 /** Server-renders `url` with its own module copy and splits the document the way a browser would see it. */
 export const serverRender = async (url: string): Promise<ServerDocument> => {
   const server = await loadApp()
-  const page = await server.renderPage(url, () => noAssets)
+  const page = await renderDocument(server, url)
   const parsed = new DOMParser().parseFromString(page.html, "text/html")
   const state = server.readState(parsed.getElementById("state")?.textContent)
   if (state === undefined) throw new Error("server HTML has no #state")
@@ -188,6 +200,15 @@ export async function hydrateFromServer(
   open.push(close)
   return { app, root, container, before, serverState: state, fallbacksSeen, close }
 }
+
+/**
+ * Lets the app run for `SETTLE_MS` of real time, to assert that something did NOT happen (a refetch, a late
+ * fallback, a second send). The app's slowest stand-in "network" call sleeps 5 ms, so this is 10x that; every
+ * "did not happen" assertion has a positive twin that polls for the same thing happening, which proves the
+ * wait is long enough to see it. Positive conditions use `expect.poll`, never this.
+ */
+const SETTLE_MS = 50
+export const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, SETTLE_MS))
 
 export const click = (element: Element): void => {
   element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }))

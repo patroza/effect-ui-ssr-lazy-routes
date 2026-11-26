@@ -68,9 +68,63 @@ describe("SSR", () => {
     expect(server.appHtml).toContain("Page not found")
   })
 
+  it("serializes the NotFound page's state under its own instance path", async () => {
+    const server = await Helpers.serverRender("/definitely/not/here")
+    expect(Object.keys(server.state)).toContain("/App")
+    expect(Object.keys(server.state)).toContain("/App/NotFoundPage[/definitely/not/here]")
+    expect(server.appHtml).toContain("Nothing lives at /definitely/not/here.")
+    expect(server.appHtml).not.toContain("data-fallback")
+  })
+
   it("answers 404 for an unknown product id, but still renders the page", async () => {
     const server = await Helpers.serverRender("/products/999")
     expect(server.status).toBe(404)
     expect(server.appHtml).toContain("Unknown product")
+  })
+
+  it("derives the status from what was rendered: a known product is 200, an unknown one 404", async () => {
+    const known = await Helpers.serverRender("/products/42")
+    const unknown = await Helpers.serverRender("/products/999")
+    expect(known.status).toBe(200)
+    expect(known.appHtml).not.toContain('data-http-status="404"')
+    expect(unknown.status).toBe(404)
+    expect(unknown.appHtml).toContain('data-http-status="404"')
+  })
+
+  it("answers 404 for a record that doesn't exist even when the id looks like markup", async () => {
+    const server = await Helpers.serverRender("/products/%3Cb%20data-http-status=%22404%22%3E")
+    expect(server.status).toBe(404)
+    expect(server.appHtml).not.toContain("<b data-http-status")
+  })
+})
+
+describe("renderPage outcomes", () => {
+  const outcome = async (url: string) => (await Helpers.loadApp()).renderPage(url, () => Helpers.noAssets)
+
+  it("answers a malformed percent escape with BadRequest instead of throwing", async () => {
+    expect(await outcome("/%E0%A4%A")).toEqual({ _tag: "BadRequest", status: 400 })
+    expect(await outcome("/products/%E0%A4%A")).toEqual({ _tag: "BadRequest", status: 400 })
+  })
+
+  it("redirects a non-canonical path permanently to the canonical one", async () => {
+    expect(await outcome("/products/")).toEqual({ _tag: "Redirect", status: 301, location: "/products" })
+  })
+
+  it("redirects a URL with invalid search params temporarily, dropping them", async () => {
+    expect(await outcome("/products?q=a&q=b")).toEqual({ _tag: "Redirect", status: 302, location: "/products" })
+  })
+
+  it("renders (no redirect) a canonical URL", async () => {
+    expect((await outcome("/products?q=mug"))._tag).toBe("Page")
+  })
+})
+
+describe("Status.renderedNotFound", () => {
+  it("only trusts the marker on an element, never in text", async () => {
+    const Status = await import("../src/status.ts")
+    expect(Status.renderedNotFound('<section class="x" data-http-status="404">')).toBe(true)
+    expect(Status.renderedNotFound('<p>data-http-status="404"</p>')).toBe(false)
+    expect(Status.renderedNotFound("<p>&lt;b data-http-status=&quot;404&quot;&gt;</p>")).toBe(false)
+    expect(Status.renderedNotFound('<section data-http-status="200">')).toBe(false)
   })
 })
