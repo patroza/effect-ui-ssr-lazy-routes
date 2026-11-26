@@ -138,9 +138,21 @@ const stripJsonComments = (input) => {
  */
 const readJson = (filePath) => JSON.parse(stripJsonComments(readFileSync(filePath, "utf8")))
 
+const ALLOWED_OXLINT_TOP_LEVEL_KEYS = new Set([
+  "$schema",
+  "extends",
+  "ignorePatterns",
+  "plugins",
+  "jsPlugins",
+  "categories",
+  "options",
+  "rules"
+])
+
 /**
  * Load an Oxlint JSON/JSONC config file as a typed `OxlintConfig` object for `vite.config.ts`
- * `lint.extends`.
+ * `lint.extends`. Fails closed on unknown top-level keys, unknown plugin names, unknown
+ * categories/options, or malformed rule values.
  *
  * @param {string} filePath
  * @returns {OxlintConfig}
@@ -150,59 +162,95 @@ export const loadOxlintJsonConfig = (filePath) => {
   if (!isRecord(raw)) {
     throw new Error(`${filePath} must be a JSON object`)
   }
+  for (const key of Object.keys(raw)) {
+    if (!ALLOWED_OXLINT_TOP_LEVEL_KEYS.has(key)) {
+      throw new Error(`${filePath} has unsupported top-level key "${key}"`)
+    }
+  }
   /** @type {OxlintConfig} */
   const config = {}
 
-  if (isArray(raw["plugins"])) {
+  if ("plugins" in raw) {
+    if (!isArray(raw["plugins"])) {
+      throw new Error(`${filePath}: "plugins" must be an array`)
+    }
     /** @type {Array<LintPlugin>} */
     const plugins = []
     for (const entry of raw["plugins"]) {
-      if (isLintPlugin(entry)) plugins.push(entry)
+      if (!isLintPlugin(entry)) {
+        throw new Error(`${filePath}: unsupported oxlint plugin ${JSON.stringify(entry)}`)
+      }
+      plugins.push(entry)
     }
     config.plugins = plugins
   }
 
-  if (isArray(raw["jsPlugins"])) {
+  if ("jsPlugins" in raw) {
+    if (!isArray(raw["jsPlugins"])) {
+      throw new Error(`${filePath}: "jsPlugins" must be an array`)
+    }
     /** @type {Array<ExternalPluginEntry>} */
     const jsPlugins = []
     for (const entry of raw["jsPlugins"]) {
-      if (isExternalPlugin(entry)) jsPlugins.push(entry)
+      if (!isExternalPlugin(entry)) {
+        throw new Error(`${filePath}: invalid jsPlugin entry ${JSON.stringify(entry)}`)
+      }
+      jsPlugins.push(entry)
     }
     config.jsPlugins = jsPlugins
   }
 
-  if (isRecord(raw["categories"])) {
+  if ("categories" in raw) {
+    if (!isRecord(raw["categories"])) {
+      throw new Error(`${filePath}: "categories" must be an object`)
+    }
     /** @type {NonNullable<OxlintConfig["categories"]>} */
     const categories = {}
-    for (const key of ["correctness", "nursery", "pedantic", "perf", "restriction", "style", "suspicious"]) {
-      const value = raw["categories"][key]
-      if (isAllowWarnDeny(value)) {
-        if (key === "correctness") categories.correctness = value
-        else if (key === "nursery") categories.nursery = value
-        else if (key === "pedantic") categories.pedantic = value
-        else if (key === "perf") categories.perf = value
-        else if (key === "restriction") categories.restriction = value
-        else if (key === "style") categories.style = value
-        else if (key === "suspicious") categories.suspicious = value
+    for (const [key, value] of Object.entries(raw["categories"])) {
+      if (!isAllowWarnDeny(value)) {
+        throw new Error(`${filePath}: invalid severity for category "${key}": ${JSON.stringify(value)}`)
       }
+      if (key === "correctness") categories.correctness = value
+      else if (key === "nursery") categories.nursery = value
+      else if (key === "pedantic") categories.pedantic = value
+      else if (key === "perf") categories.perf = value
+      else if (key === "restriction") categories.restriction = value
+      else if (key === "style") categories.style = value
+      else if (key === "suspicious") categories.suspicious = value
+      else throw new Error(`${filePath}: unsupported category "${key}"`)
     }
     config.categories = categories
   }
 
-  if (isRecord(raw["options"])) {
+  if ("options" in raw) {
+    if (!isRecord(raw["options"])) {
+      throw new Error(`${filePath}: "options" must be an object`)
+    }
     /** @type {NonNullable<OxlintConfig["options"]>} */
     const options = {}
-    if (typeof raw["options"]["typeAware"] === "boolean") options.typeAware = raw["options"]["typeAware"]
-    if (typeof raw["options"]["typeCheck"] === "boolean") options.typeCheck = raw["options"]["typeCheck"]
-    if (typeof raw["options"]["denyWarnings"] === "boolean") options.denyWarnings = raw["options"]["denyWarnings"]
+    for (const [key, value] of Object.entries(raw["options"])) {
+      if (typeof value !== "boolean") {
+        throw new Error(`${filePath}: option "${key}" must be a boolean`)
+      }
+      if (key === "typeAware") options.typeAware = value
+      else if (key === "typeCheck") options.typeCheck = value
+      else if (key === "denyWarnings") options.denyWarnings = value
+      else throw new Error(`${filePath}: unsupported option "${key}"`)
+    }
     config.options = options
   }
 
-  if (isRecord(raw["rules"])) {
+  if ("rules" in raw) {
+    if (!isRecord(raw["rules"])) {
+      throw new Error(`${filePath}: "rules" must be an object`)
+    }
     /** @type {Record<string, DummyRule>} */
     const rules = {}
     for (const [key, value] of Object.entries(raw["rules"])) {
-      if (isDummyRule(value)) rules[key] = value
+      if (!isDummyRule(value)) {
+        throw new Error(`${filePath}: malformed rule value for "${key}": ${JSON.stringify(value)}`)
+      }
+      rules[key] = value
     }
     config.rules = rules
   }

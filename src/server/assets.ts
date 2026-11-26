@@ -24,7 +24,7 @@ export const parseManifest = Schema.decodeSync(JsonString.jsonString(Manifest))
 export interface PageAssets {
   /** `<script type="module" src>` URLs. */
   readonly scripts: ReadonlyArray<string>
-  /** `<link rel="modulepreload">` URLs: the matched route's chunk and its transitive imports ONLY. */
+  /** `<link rel="modulepreload">` URLs: the matched route's chunk and the entry's/route's transitive static imports. */
   readonly modulePreloads: ReadonlyArray<string>
   /** `<link rel="stylesheet">` URLs: the entry's CSS plus the CSS of the route chunks. */
   readonly stylesheets: ReadonlyArray<string>
@@ -74,7 +74,9 @@ export const resolveRouteAssets = (manifest: Manifest, tag: Routes.AppRouteTag):
   const route = staticClosure(manifest, routeSources[tag])
   return {
     scripts: [url(entryChunk.file)],
-    modulePreloads: unique(route.map((chunk) => url(chunk.file))).filter((href) => href !== url(entryChunk.file)),
+    modulePreloads: unique([...route, ...entry].map((chunk) => url(chunk.file))).filter(
+      (href) => href !== url(entryChunk.file)
+    ),
     stylesheets: unique([...entry, ...route].flatMap((chunk) => (chunk.css ?? []).map(url)))
   }
 }

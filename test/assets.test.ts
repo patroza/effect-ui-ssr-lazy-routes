@@ -100,6 +100,17 @@ describe("resolveRouteAssets", () => {
     ])
   })
 
+  it("preloads the entry's static imports even when the route chunk does not import them", () => {
+    const splitEntry: Assets.Manifest = {
+      "src/main.ts": { file: "assets/main-E1.js", isEntry: true, imports: ["_framework-F1.js"] },
+      "_framework-F1.js": { file: "assets/framework-F1.js" },
+      "src/pages/HomePage.ts": { file: "assets/HomePage-H1.js", isDynamicEntry: true }
+    }
+    const assets = Assets.resolveRouteAssets(splitEntry, "Home")
+    expect(assets.scripts).toEqual(["/assets/main-E1.js"])
+    expect(assets.modulePreloads).toEqual(["/assets/HomePage-H1.js", "/assets/framework-F1.js"])
+  })
+
   it("fails loudly when the manifest lacks a route's module", () => {
     const { "src/pages/HomePage.ts": _removed, ...incomplete } = manifest
     expect(() => Assets.resolveRouteAssets(incomplete, "Home")).toThrow(/src\/pages\/HomePage\.ts/)

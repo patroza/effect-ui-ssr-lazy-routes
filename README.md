@@ -12,18 +12,18 @@ A small, strict-TypeScript reference for **[`@effect/ui`](https://github.com/Eff
 - **Dev-only DevTools**: `@effect/ui-devtools` inspector overlay + Time Travel (`DevTools.layer`) and Vite MCP server (`DevToolsVite.plugin({ dispatch: true })` at `http://127.0.0.1:4774/mcp`) in `pnpm dev`, tree-shaken to **0 bytes** in production (`pnpm verify:bundles`).
 - **Tailwind v4** (`@tailwindcss/vite`) with a neutral light/dark palette (`prefers-color-scheme`, no JS), focus rings and `data-*` / `aria-*` variants on the kit's attributes.
 
-|                                             |                                                                                                            |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `@effect/ui`                                | `https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234`                                                       |
-| `@effect/ui-kit`                            | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234` (same commit)                                     |
-| `@effect/ui-devtools`                       | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7ef6234` (dev-only)                                   |
-| `effect` / `@effect/platform-node`          | `4.1.5`                                                                                                    |
-| Tailwind CSS / `@tailwindcss/vite`          | `4.3.5`                                                                                                    |
-| Vite+ (`vite-plus`)                         | `1.8.0` (bundles Vite `8.3.8`, Vitest `5.1.1`, Oxlint `1.94.0`, Oxfmt `0.79.0`, `tsrs` `7.1.0-beta.tsrs4`) |
-| TypeScript / happy-dom                      | `6.0.3` / `21.0.4`                                                                                         |
-| `@effect/vitest`                            | `4.1.5` (pinned with `effect`)                                                                             |
-| Package manager                             | pnpm 12, Node ≥ 22.18                                                                                      |
-| `@effect/tsgo` / `@effect/language-service` | `0.73.7` / `0.87.5`                                                                                        |
+|                                             |                                                                                                                                        |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `@effect/ui`                                | `https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234`                                                                                   |
+| `@effect/ui-kit`                            | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234` (same commit)                                                                 |
+| `@effect/ui-devtools`                       | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7ef6234` (dev-only)                                                               |
+| `effect` / `@effect/platform-node`          | `4.1.5`                                                                                                                                |
+| Tailwind CSS / `@tailwindcss/vite`          | `4.3.5`                                                                                                                                |
+| Vite+ (`vite-plus`)                         | `1.8.0` (Vite `8.3.8`, Vitest `5.1.1`; `pnpm-workspace.yaml` overrides pin Oxlint `1.95.0`, Oxfmt `0.80.0`, `tsrs` `7.1.0-beta.tsrs5`) |
+| TypeScript / happy-dom                      | `6.0.3` / `21.0.4`                                                                                                                     |
+| `@effect/vitest`                            | `4.1.5` (pinned with `effect`)                                                                                                         |
+| Package manager                             | pnpm 12, Node ≥ 22.18                                                                                                                  |
+| `@effect/tsgo` / `@effect/language-service` | `0.73.7` / `0.87.5`                                                                                                                    |
 
 ## Quick start
 
@@ -43,7 +43,7 @@ pnpm dev              # Vite+ middleware + the same SSR handler, with HMR (PORT=
 
 ## Toolchain
 
-Vite+ (`vite-plus`) unifies Vite, Vitest, Oxlint, Oxfmt, and `tsrs` into a single `vite.config.ts` and local `vp` CLI (no global `vp` install required; `pnpm-workspace.yaml` pins `vite` and `vitest` overrides to the bundled versions).
+Vite+ (`vite-plus`) unifies Vite, Vitest, Oxlint, Oxfmt, and `tsrs` into a single `vite.config.ts` and local `vp` CLI (no global `vp` install required; `pnpm-workspace.yaml` overrides pin `vite`/`vitest` to the bundled versions and keep `oxlint@1.95.0`, `oxfmt@0.80.0`, and `tsrs@7.1.0-beta.tsrs5` so no lint rule is lost). Always invoke `vp lint` and `vp check` through `effect-tsgo` (as `pnpm lint` and `pnpm check` do); plain `vp lint` without `effect-tsgo` fails safe on the `effecttsgo` plugin.
 
 | Command          | Runs                                                                                                           |
 | ---------------- | -------------------------------------------------------------------------------------------------------------- |
@@ -265,17 +265,17 @@ The entry is the framework (`effect` + `@effect/ui`) plus the shell. `Query-*.js
 In development (`pnpm dev`), [`@effect/ui-devtools`](https://github.com/Effect-TS/ui/tree/main/packages/ui-devtools) is wired in two places:
 
 - **Overlay + Time Travel (`src/main.ts`):** when `import.meta.env.DEV` is true, `DevTools.layer({ position: "BottomRight" })` is provided alongside `BrowserRouter.layer` (and `Layer.empty` in production). Open the corner launcher to inspect the message timeline, Model diffs, Command runs, causal chains, and **Time travel** through earlier states.
-- **Vite MCP server (`vite.config.ts`):** `DevToolsVite.plugin({ dispatch: true })` runs only during `vite dev` (never during `vite build`, preview, or Vitest) and exposes a local Streamable HTTP MCP endpoint at `http://127.0.0.1:4774/mcp` for agents to inspect sessions, read state/diffs, time-travel, or dispatch messages.
+- **Vite MCP server (`vite.config.ts`):** `DevToolsVite.plugin({ dispatch: true })` runs only during `pnpm dev` (never during `vp build`, preview, or `vp test`) and exposes a local Streamable HTTP MCP endpoint at `http://127.0.0.1:4774/mcp` for agents to inspect sessions, read state/diffs, time-travel, or dispatch messages.
 
 Production builds replace `import.meta.env.DEV` with `false` and tree-shake `@effect/ui-devtools` completely; `pnpm verify:bundles` asserts 0 references in `dist/client/`.
 
 ## No entry → page waterfall
 
-[`src/server/assets.ts`](src/server/assets.ts) reads `dist/client/.vite/manifest.json` once and, per request, emits only the matched route's chunk and its transitive static imports as `<link rel="modulepreload">`, the entry as a script tag, and the entry's and the route's CSS as `<link rel="stylesheet">`:
+[`src/server/assets.ts`](src/server/assets.ts) reads `dist/client/.vite/manifest.json` once and, per request, emits the matched route's chunk plus the entry's and route's transitive static imports as `<link rel="modulepreload">`, the entry as a script tag, and the entry's and the route's CSS as `<link rel="stylesheet">`:
 
 ```
-GET /products/42 → css: main.css · modulepreload: ProductDetailPage, Button, CatalogPort, transition, Query …
-GET /analytics   → css: main.css + AnalyticsPage.css · modulepreload: AnalyticsPage, transition, Query …
+GET /products/42 → css: main.css · modulepreload: ProductDetailPage, classes, Button, attributes, transition, CatalogPort, Query, Subscription
+GET /analytics   → css: main.css + AnalyticsPage.css · modulepreload: AnalyticsPage, classes, transition, attributes, Subscription, Query
 ```
 
 `pnpm smoke` checks this against the built server: it fetches every `<link rel="modulepreload">` and requires `200`, `text/javascript` and `immutable`. In dev there is no manifest, so there is nothing to preload, and Vite delivers the CSS through the JavaScript modules, so an unstyled flash before the entry runs is expected in dev (production links the stylesheets in `<head>`).
