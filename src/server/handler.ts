@@ -35,6 +35,8 @@ export interface AppHandlerOptions {
   readonly assetsFor: (route: Routes.AppRouteValue) => Assets.PageAssets
   /** The built client directory (`dist/client`) to serve files from. Omit in dev (Vite serves them). */
   readonly clientDir?: string | undefined
+  /** Optional HTML transform (used in dev for Vite's `transformIndexHtml` so DevTools & HMR tags are injected). */
+  readonly transformHtml?: ((url: string, html: string) => Promise<string>) | undefined
 }
 
 const securityHeaders = (clientDir: string | undefined): Record<string, string> => ({
@@ -165,13 +167,19 @@ const handlePageOrStatic = (url: URL, method: string, security: Record<string, s
           { location: page.location, "content-type": "text/plain", "cache-control": "no-cache", ...security },
           ""
         )
-      case "Page":
+      case "Page": {
+        const { transformHtml } = options
+        const html =
+          transformHtml === undefined
+            ? page.html
+            : yield* Effect.tryPromise(() => transformHtml(url.pathname + url.search, page.html))
         return textReply(
           method,
           page.status,
           { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache", ...security },
-          page.html
+          html
         )
+      }
     }
   })
 

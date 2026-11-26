@@ -6,7 +6,11 @@ import type * as Assets from "../src/server/assets.ts"
 import type * as Handler from "../src/server/handler.ts"
 
 const port = Number(process.env["PORT"] ?? 5173)
-const vite = await createViteServer({ server: { middlewareMode: true }, appType: "custom" })
+const server = createHttpServer()
+const vite = await createViteServer({
+  server: { middlewareMode: true, hmr: { server } },
+  appType: "custom"
+})
 // Loads modules through Vite's SSR environment, so edits apply without restarting.
 const runner = createServerModuleRunner(vite.environments.ssr)
 
@@ -21,7 +25,10 @@ const getAppServer = async (): Promise<Handler.ManagedNodeHandler> => {
   if (currentAppServer === undefined || currentHandlerModule !== handlerModule) {
     const previous = currentAppServer
     currentHandlerModule = handlerModule
-    currentAppServer = handlerModule.createAppServer({ assetsFor: () => devAssets })
+    currentAppServer = handlerModule.createAppServer({
+      assetsFor: () => devAssets,
+      transformHtml: (url, html) => vite.transformIndexHtml(url, html)
+    })
     if (previous !== undefined) {
       void previous.then((app) => app.dispose()).catch(() => undefined)
     }
@@ -29,7 +36,7 @@ const getAppServer = async (): Promise<Handler.ManagedNodeHandler> => {
   return currentAppServer
 }
 
-const server = createHttpServer((req, res) => {
+server.on("request", (req, res) => {
   vite.middlewares(req, res, async () => {
     try {
       const app = await getAppServer()
