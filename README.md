@@ -12,61 +12,61 @@ A small, strict-TypeScript reference for **[`@effect/ui`](https://github.com/Eff
 - **Dev-only DevTools**: `@effect/ui-devtools` inspector overlay + Time Travel (`DevTools.layer`) and Vite MCP server (`DevToolsVite.plugin({ dispatch: true })` at `http://127.0.0.1:4774/mcp`) in `pnpm dev`, tree-shaken to **0 bytes** in production (`pnpm verify:bundles`).
 - **Tailwind v4** (`@tailwindcss/vite`) with a neutral light/dark palette (`prefers-color-scheme`, no JS), focus rings and `data-*` / `aria-*` variants on the kit's attributes.
 
-|                                        |                                                                          |
-| -------------------------------------- | ------------------------------------------------------------------------ |
-| `@effect/ui`                           | `https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234`                     |
-| `@effect/ui-kit`                       | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234` (same commit)   |
-| `@effect/ui-devtools`                  | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7ef6234` (dev-only) |
-| `effect` / `@effect/platform-node`     | `4.1.5`                                                                  |
-| Tailwind CSS / `@tailwindcss/vite`     | `4.3.5`                                                                  |
-| Vite / Vitest / TypeScript / happy-dom | `8.0.15` / `5.1.1` / `6.0.3` / `21.0.4`                                  |
-| `@effect/vitest`                       | `4.1.5` (pinned with `effect`)                                           |
-| Package manager                        | pnpm 12, Node ≥ 22.18                                                    |
-| `@effect/tsgo`                         | `0.73.7`                                                                 |
-| `@effect/language-service`             | `0.87.5`                                                                 |
-| `tsrs`                                 | `7.1.0-beta.tsrs5`                                                       |
-| `oxlint`                               | `1.95.0`                                                                 |
-| `oxfmt`                                | `0.80.0`                                                                 |
+|                                             |                                                                                                            |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `@effect/ui`                                | `https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234`                                                       |
+| `@effect/ui-kit`                            | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234` (same commit)                                     |
+| `@effect/ui-devtools`                       | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7ef6234` (dev-only)                                   |
+| `effect` / `@effect/platform-node`          | `4.1.5`                                                                                                    |
+| Tailwind CSS / `@tailwindcss/vite`          | `4.3.5`                                                                                                    |
+| Vite+ (`vite-plus`)                         | `1.8.0` (bundles Vite `8.3.8`, Vitest `5.1.1`, Oxlint `1.94.0`, Oxfmt `0.79.0`, `tsrs` `7.1.0-beta.tsrs4`) |
+| TypeScript / happy-dom                      | `6.0.3` / `21.0.4`                                                                                         |
+| `@effect/vitest`                            | `4.1.5` (pinned with `effect`)                                                                             |
+| Package manager                             | pnpm 12, Node ≥ 22.18                                                                                      |
+| `@effect/tsgo` / `@effect/language-service` | `0.73.7` / `0.87.5`                                                                                        |
 
 ## Quick start
 
 ```sh
 pnpm install
-pnpm typecheck        # tsrs --noEmit with the Effect language service (strict; no `any`, no `@ts-ignore`)
-pnpm lint             # type-aware oxlint + embedded effecttsgo/* diagnostics, warnings denied
-pnpm format:check     # oxfmt --check (pnpm format writes)
-pnpm check            # typecheck + lint + format:check + build + verify:bundles + test + smoke
-pnpm build            # dist/client (+ .vite/manifest.json) and dist/server
+pnpm typecheck        # effect-tsgo tsrs --noEmit (strict; no `any`, no `@ts-ignore`)
+pnpm lint             # effect-tsgo vp lint (type-aware Oxlint + embedded effecttsgo/* diagnostics, warnings denied)
+pnpm format:check     # vp fmt --check (pnpm format writes)
+pnpm check            # effect-tsgo vp check (fmt + lint + type-check) + typecheck + build + verify:bundles + test + smoke
+pnpm build            # vp build (dist/client + .vite/manifest.json) and dist/server
 pnpm verify:bundles   # prints the chunk table and proves the per-page split from the built output
-pnpm test             # @effect/vitest + happy-dom, on the TestClock: SSR, hydration, ui-kit, navigation, assets, HTTP server
+pnpm test             # vp test run (@effect/vitest + happy-dom, on the TestClock)
 pnpm smoke            # boots the built server, checks SSR HTML, modulepreload fetches, stylesheets, bad URLs
 pnpm start            # production server on http://localhost:3000 (PORT=… to change)
-pnpm dev              # Vite middleware + the same SSR handler, with HMR (PORT=5173)
+pnpm dev              # Vite+ middleware + the same SSR handler, with HMR (PORT=5173)
 ```
 
 ## Toolchain
 
-| Command          | Runs                                                                                                 |
-| ---------------- | ---------------------------------------------------------------------------------------------------- |
-| `pnpm typecheck` | `node scripts/tsrs.mjs --noEmit`: `effect-tsgo tsrs@<pin>` (`tsrs`, with `@effect/language-service`) |
-| `pnpm lint`      | `node scripts/oxlint.mjs --type-aware .`: `effect-tsgo --tsrs-lint=<pin> oxlint`                     |
-| `pnpm lint:fix`  | the same with `--fix`, then `pnpm format`                                                            |
-| `pnpm format`    | `oxfmt .` (`pnpm format:check` is the read-only CI variant)                                          |
-| `pnpm check`     | all of the above, then build, bundle verification, tests and the smoke test                          |
+Vite+ (`vite-plus`) unifies Vite, Vitest, Oxlint, Oxfmt, and `tsrs` into a single `vite.config.ts` and local `vp` CLI (no global `vp` install required; `pnpm-workspace.yaml` pins `vite` and `vitest` overrides to the bundled versions).
 
+| Command          | Runs                                                                                                           |
+| ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| `pnpm typecheck` | `effect-tsgo tsrs --noEmit` (Effect-patched `tsrs` with `@effect/language-service`)                            |
+| `pnpm lint`      | `effect-tsgo vp lint` (type-aware Oxlint + type-checking + all 99 `effecttsgo/*` error rules, warnings denied) |
+| `pnpm lint:fix`  | `effect-tsgo vp check --fix` (formats and applies lint autofixes in one pass)                                  |
+| `pnpm format`    | `vp fmt` (`pnpm format:check` runs `vp fmt --check` for CI)                                                    |
+| `pnpm check`     | `effect-tsgo vp check`, `pnpm typecheck`, `pnpm build`, `pnpm verify:bundles`, `pnpm test`, and `pnpm smoke`   |
+
+- **Unified `vite.config.ts`.** Build (`build`, `ssr`), tests (`test`), formatting (`fmt`), and linting (`lint`) all live in `vite.config.ts` via `defineConfig` from `vite-plus` (with `lazyPlugins` so `vp check` / `vp lint` / `vp fmt` skip Vite plugin startup, and `mode === "test"` skipping Tailwind and DevTools during Vitest).
 - **Effect diagnostics fail the build.** `tsconfig.plugins.json` holds the `@effect/language-service` severity table (every rule `"error"`;
-  `unstableApiUsage` and `experimentalApiUsage` are `"off"` because `@effect/ui` is `@stability experimental`). `scripts/oxlint.mjs` derives
-  every enabled rule as an `effecttsgo/*` oxlint rule into the git-ignored `.oxlintrc.effect.generated.json`
-  and fails closed if none are enabled. Of the 154 rules, **99 are enabled as errors** and the other **55 are off** (rules the schema
-  ships disabled, plus the two experimental-API rules above). So the same diagnostics run in `pnpm typecheck` and inside `pnpm lint`.
-- **Strict oxlint.** `.oxlintrc.json` extends `@effect-app/eslint-shared-config` plus `config/oxlint.strict.json`
+  `unstableApiUsage` and `experimentalApiUsage` are `"off"` because `@effect/ui` is `@stability experimental`). `scripts/lib/effect-diagnostics.mjs`
+  derives every enabled rule as an `effecttsgo/*` oxlint rule directly for `vite.config.ts` (extending `@effect/tsgo/oxlint-presets` to register the
+  native `effecttsgo` plugin) and fails closed if none are enabled. Of the 154 rules, **99 are enabled as errors** and the other **55 are off** (rules
+  the schema ships disabled, plus the two experimental-API rules above). So the same diagnostics run in `effect-tsgo vp check`, `pnpm lint`, and `pnpm typecheck`.
+- **Strict oxlint.** `vite.config.ts` extends `@effect-app/eslint-shared-config` plus `config/oxlint.strict.json`
   (no `any`, no non-null assertions, no unsafe assertions, no `any` flowing anywhere, `@ts-ignore`/`@ts-nocheck` banned) with
-  `typeAware` and `denyWarnings`.
+  `typeAware`, `typeCheck`, and `denyWarnings`.
 - **Imports.** Barrel imports for the libraries: `import { Effect, Schema } from "effect"`, `import { Component, Router } from "@effect/ui"`,
   `import { Button } from "@effect/ui-kit"` (submodule paths such as `effect/http`, `effect/reactivity` and `@effect/ui/html` for what the
   barrel doesn't carry). Every **local** module is a namespace import, `import * as Routes from "./routes.ts"`, never a named one; the
   tree-shaking that keeps page code out of the entry comes from the bundler, not from the import style.
-- **Scripts are type-checked too.** `scripts/*.ts` run natively on Node's type stripping; the `scripts/lib/*.mjs` toolchain wrappers are
+- **Scripts are type-checked too.** `scripts/*.ts` run natively on Node's type stripping; `scripts/lib/effect-diagnostics.mjs` is
   checked through JSDoc (`allowJs` + `checkJs`).
 
 ## The pages
@@ -120,7 +120,7 @@ src/
     render.ts              renderPageEffect / renderPage(url, assetsFor, { app? }) → Page | Redirect | BadRequest (AppRoute.resolve first, like HtmlServerHttp)
     handler.ts             node:http handler (static files, redirects, 400/405, security headers, SSR)
     serve.ts               production server entry
-config/            oxlint.strict.json (the strict type-aware rules .oxlintrc.json extends)
+config/            oxlint.strict.json (the strict type-aware rules vite.config.ts extends)
 scripts/           verify-bundles.ts · smoke.ts · dev.ts
 test/              ssr · hydration · ui-kit · navigation · prefetch · assets · server · pages · chart (+ setup.ts, helpers.ts, support/ports.ts, support/frames.ts)
 ```
@@ -241,17 +241,19 @@ Output (hashes vary):
 ```
 chunk               file                                    raw (B)   gzip (B)  page-only code
 ------------------  ------------------------------------  ---------  ---------  ---------------------------------------------------------------------------
-entry               assets/main-Brqyp9AR.js                  309947     106297
-page:Home           assets/HomePage-S8086LBx.js                 962        529
-page:Products       assets/ProductsPage-1j4nTIJn.js            2475       1250  SearchProducts query
-page:ProductDetail  assets/ProductDetailPage-TGwUvtNN.js      23319       8702  GetProduct query, BookmarkProduct command, BookmarkPort port, ui-kit Dialog
-page:Analytics      assets/AnalyticsPage-BuSlAB6o.js          21385       8636  GetAnalytics query, AnalyticsPort port, ui-kit Tabs, ui-kit Collapsible
-page:NotFound       assets/NotFoundPage-CEd3Hwaz.js             535        345
+entry               assets/main-2bxCHxTq.js                   92711      34529
+page:Home           assets/HomePage-WFy3gUdI.js                 997        542
+page:Products       assets/ProductsPage-DNa4V0k8.js            2510       1267  SearchProducts query
+page:ProductDetail  assets/ProductDetailPage-CGXPoCAD.js      23245       8692  GetProduct query, BookmarkProduct command, BookmarkPort port, ui-kit Dialog
+page:Analytics      assets/AnalyticsPage-kQCnga-w.js          21904       8859  GetAnalytics query, AnalyticsPort port, ui-kit Tabs, ui-kit Collapsible
+page:NotFound       assets/NotFoundPage-Due3V8CU.js             570        361
 shared              assets/Button-1z9k8cO3.js                   592        384
-shared              assets/CatalogPort-BQwmG2IS.js             1551        869
-shared              assets/Query-CUWbe1H3.js                  48856      16910
+shared              assets/CatalogPort-DatLY2VF.js             1554        866
+shared              assets/Query-BCbHjrAa.js                  48794      16905
+shared              assets/Subscription-CkJCaYNN.js            3972       1856
 shared              assets/attributes-BNllm5bX.js               484        306
-shared              assets/transition-BTQnqgUk.js              6678       3114
+shared              assets/classes-CO1xBsvr.js               213237      71257
+shared              assets/transition-DVzTqHnK.js              6173       2851
 css                 assets/main-V5nomNgp.css                  15812       3912
 css                 assets/AnalyticsPage-BZFaGk-P.css            91        104
 ```

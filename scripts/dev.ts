@@ -1,7 +1,7 @@
 // Dev server: Vite in middleware mode (HMR, on-demand modules) + the same SSR
 // handler production uses, loaded through Vite so edits apply without restart.
 import { createServer as createHttpServer } from "node:http"
-import { createServer as createViteServer, createServerModuleRunner } from "vite"
+import { createServer as createViteServer, createServerModuleRunner } from "vite-plus"
 import type * as Assets from "../src/server/assets.ts"
 import type * as Handler from "../src/server/handler.ts"
 
