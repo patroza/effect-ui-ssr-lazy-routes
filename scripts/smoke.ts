@@ -1,10 +1,16 @@
 // Boots the BUILT server (dist/server/serve.js) on a free port, requests a few
 // URLs, checks the SSR HTML, <link rel="modulepreload"> tags, redirects, HTTP
-// methods, security headers, and bad/attack URLs, then shuts the server down.
-// Run after `pnpm build`.
+// methods, security headers, bad/attack URLs, and live POST /rpc endpoints,
+// then shuts the server down. Run after `pnpm build`.
 import { spawn } from "node:child_process"
 import { request, type IncomingHttpHeaders } from "node:http"
 import { fileURLToPath } from "node:url"
+import { Effect, Exit, Layer, Option } from "effect"
+import { FetchHttpClient } from "effect/http"
+import { type Rpc, RpcClient, type RpcClientError, type RpcGroup, RpcSerialization } from "effect/rpc"
+import * as AnalyticsRpcs from "../src/analytics/domain/AnalyticsRpcs.ts"
+import * as ProductRpcs from "../src/product/domain/ProductRpcs.ts"
+import * as SearchRpcs from "../src/search/domain/SearchRpcs.ts"
 
 const root = fileURLToPath(new URL("..", import.meta.url))
 const server = spawn("node", ["dist/server/serve.js"], {
@@ -72,6 +78,25 @@ const report = (ok: boolean, label: string, detail: string): void => {
   console.log(`${ok ? "PASS" : "FAIL"}  ${label}  ${detail}`)
   failed ||= !ok
 }
+
+const runRpc = <Rpcs extends Rpc.Any, A, E>(
+  group: RpcGroup.RpcGroup<Rpcs>,
+  path: string,
+  fn: (client: RpcClient.RpcClient<Rpcs, RpcClientError.RpcClientError>) => Effect.Effect<A, E>
+) =>
+  Effect.gen(function* () {
+    const client = yield* RpcClient.make(group)
+    return yield* fn(client)
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(
+      RpcClient.layerProtocolHttp({ url: `${base}${path}` }).pipe(
+        Layer.provide(RpcSerialization.layerJson),
+        Layer.provide(FetchHttpClient.layer)
+      )
+    ),
+    Effect.runPromise
+  )
 
 try {
   for (const check of checks) {
@@ -148,6 +173,52 @@ try {
       attack.statuses.includes(reply.status) && reply.headers.location === undefined && !reply.body.includes('"file"')
     report(ok, attack.path, `${reply.status}${reply.headers.location ? ` location=${reply.headers.location}` : ""}`)
   }
+
+  // Live Effect RPC over HTTP (`POST /rpc/{search,product,analytics}`).
+  const searched = await runRpc(SearchRpcs.SearchRpcs, "/rpc/search", (client) => client.searchProducts({ q: "mug" }))
+  report(
+    searched.length === 1 && searched[0]?.name === "Enamel camp mug",
+    "POST /rpc/search searchProducts",
+    `${searched.length} match (${searched[0]?.name ?? "none"})`
+  )
+
+  const productBefore = await runRpc(ProductRpcs.ProductRpcs, "/rpc/product", (client) =>
+    client.getProduct({ id: "42" })
+  )
+  report(
+    Option.isSome(productBefore) && productBefore.value.name === "Field notebook" && !productBefore.value.bookmarked,
+    "POST /rpc/product getProduct",
+    Option.isSome(productBefore) ? `${productBefore.value.name} bookmarked=${productBefore.value.bookmarked}` : "none"
+  )
+
+  await runRpc(ProductRpcs.ProductRpcs, "/rpc/product", (client) => client.bookmarkProduct({ id: "42" }))
+  const productAfter = await runRpc(ProductRpcs.ProductRpcs, "/rpc/product", (client) =>
+    client.getProduct({ id: "42" })
+  )
+  report(
+    Option.isSome(productAfter) && productAfter.value.bookmarked,
+    "POST /rpc/product bookmarkProduct",
+    Option.isSome(productAfter) ? `bookmarked=${productAfter.value.bookmarked}` : "none"
+  )
+
+  const missingBookmark = await runRpc(ProductRpcs.ProductRpcs, "/rpc/product", (client) =>
+    Effect.exit(client.bookmarkProduct({ id: "999" }))
+  )
+  report(
+    Exit.isFailure(missingBookmark) && String(missingBookmark.cause).includes('Product "999" not found'),
+    "POST /rpc/product bookmarkProduct (ApiError)",
+    Exit.isFailure(missingBookmark) ? "ApiError" : "unexpected success"
+  )
+
+  const orders = await runRpc(AnalyticsRpcs.AnalyticsRpcs, "/rpc/analytics", (client) =>
+    client.getAnalytics({ metric: "orders" })
+  )
+  const ordersTotal = orders.reduce((sum, point) => sum + point.value, 0)
+  report(
+    orders.length === 12 && ordersTotal === 5664,
+    "POST /rpc/analytics getAnalytics",
+    `12 months total=${ordersTotal}`
+  )
 } finally {
   if (server.exitCode === null && server.signalCode === null) {
     server.kill("SIGTERM")

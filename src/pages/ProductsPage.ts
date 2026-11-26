@@ -69,7 +69,7 @@ const ProductsPageNoDeps = Html.component({
           : `${results.length} product(s).`
     return h.section
       .attr("data-page-chunk", PRODUCTS_PAGE_CHUNK)
-      .attr("data-catalog", Product.CATALOG_CHUNK)
+      .attr("data-product-schema", Product.PRODUCT_SCHEMA_CHUNK)
       .attr("data-query", SearchProducts.SEARCH_PRODUCTS_QUERY_CHUNK)
       .class(Design.ui.stack)
       .children(
@@ -115,7 +115,8 @@ const ProductsPageNoDeps = Html.component({
 })
 
 /**
- * The page with its own Layer: `SearchProducts` reads `CatalogPort` (a `Context.Reference`
- * defaulting to `live`). `Component.provide` keeps the query inside the Products chunk.
+ * The page with its own Layer: `SearchProducts` calls `SearchRpcs` over the
+ * root-provided `RpcClient.Protocol`. `Component.provide` keeps the query and
+ * its RPC group inside the Products chunk.
  */
 export const ProductsPage = ProductsPageNoDeps.pipe(Component.provide(SearchProducts.SearchProducts.layer))

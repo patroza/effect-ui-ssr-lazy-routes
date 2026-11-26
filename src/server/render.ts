@@ -2,9 +2,9 @@ import { Router } from "@effect/ui"
 import { HtmlServer } from "@effect/ui/html"
 import { Effect, Option } from "effect"
 import * as App from "../App.ts"
-import * as Assets from "./assets.ts"
-import * as Routes from "../routes.ts"
 import * as Status from "../lib/status.ts"
+import * as Routes from "../routes.ts"
+import * as Assets from "./assets.ts"
 
 /** A rendered document and the status the render itself implies. */
 export interface RenderedPage {
@@ -53,11 +53,9 @@ export const isSafeRelativeLocation = (location: string): boolean =>
  * The status is 404 for the catch-all route (`resolved.notFound`) or when the
  * rendered page says its record is missing.
  *
- * `assetsFor` is called with the matched route, so the document can preload
- * exactly that route's chunks.
- *
- * This is the Effect: it runs on whatever Clock it is given, so a test drives
- * it with `TestClock`. `renderPage` below is what the HTTP handler awaits.
+ * Requires `HttpClient` and `RpcSerialization` (provided in-process by the
+ * server or test composition root) so SSR executes queries directly against
+ * the per-group HTTP RPC routes without a TCP round-trip.
  */
 export const renderPageEffect = Effect.fn("renderPage")(function* (
   url: string,
@@ -94,6 +92,7 @@ export const renderPageEffect = Effect.fn("renderPage")(function* (
   </body>
 </html>
 `
+
   return {
     _tag: "Page",
     status: notFound || Status.renderedNotFound(page.html) ? 404 : 200,
@@ -101,10 +100,3 @@ export const renderPageEffect = Effect.fn("renderPage")(function* (
     route
   } satisfies RenderOutcome
 })
-
-/** `renderPageEffect` on the real clock, for the HTTP handler. */
-export const renderPage = (
-  url: string,
-  assetsFor: (route: Routes.AppRouteValue) => Assets.PageAssets,
-  options: RenderOptions = {}
-): Promise<RenderOutcome> => Effect.runPromise(renderPageEffect(url, assetsFor, options))

@@ -1,14 +1,15 @@
-// Proves, from the BUILT output, that every page is its own chunk and that the
-// entry chunk carries no page code: no page marker, no page-only query or
-// Command, and no page-only @effect/ui-kit primitive. Run after `pnpm build`.
+// Proves, from the BUILT output, that every page is its own chunk, that the
+// entry chunk carries no page code (no page marker, no page-only query,
+// command, feature RPC group, or @effect/ui-kit primitive), and that ZERO
+// server handlers/stores/datasets or @effect/ui-devtools enter dist/client/.
 //
 //   node scripts/verify-bundles.ts [distClientDir]
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { gzipSync } from "node:zlib"
-import * as Assets from "../src/server/assets.ts"
 import type * as Routes from "../src/routes.ts"
+import * as Assets from "../src/server/assets.ts"
 
 const root = fileURLToPath(new URL("..", import.meta.url))
 const clientDir = process.argv[2] ?? join(root, "dist/client")
@@ -20,7 +21,7 @@ const check = (ok: boolean, message: string): void => {
 }
 
 // --- Page-only things, each with the page that owns it and a string that is unique to it in the build. ---
-// Sentinels are exported by our own modules. Query/Command services carry their key into the build as a
+// Sentinels are exported by our own modules. Query/Command services and RPC tags carry their key into the build as a
 // string literal. A @effect/ui-kit primitive is identified by a data attribute only its module writes.
 type Owned = readonly [needle: string, label: string, owner: Routes.AppRouteTag]
 const owned: ReadonlyArray<Owned> = [
@@ -29,18 +30,20 @@ const owned: ReadonlyArray<Owned> = [
   ["SENTINEL:products-page", "Products page", "Products"],
   ["SENTINEL:search-products-query", "SearchProducts marker", "Products"],
   ["search/SearchProducts", "SearchProducts query", "Products"],
+  ["searchProducts", "SearchRpcs rpc", "Products"],
   ["SENTINEL:product-detail-page", "ProductDetail page", "ProductDetail"],
   ["SENTINEL:get-product-query", "GetProduct marker", "ProductDetail"],
   ["product/GetProduct", "GetProduct query", "ProductDetail"],
   ["product/BookmarkProduct", "BookmarkProduct command", "ProductDetail"],
-  ["product/BookmarkPort", "BookmarkPort port", "ProductDetail"],
+  ["getProduct", "ProductRpcs getProduct rpc", "ProductDetail"],
+  ["bookmarkProduct", "ProductRpcs bookmarkProduct rpc", "ProductDetail"],
   ["data-dialog-backdrop", "ui-kit Dialog", "ProductDetail"],
   ["SENTINEL:analytics-page", "Analytics page", "Analytics"],
   ["SENTINEL:analytics-chart", "Analytics chart", "Analytics"],
-  ["SENTINEL:analytics-dataset", "Analytics dataset", "Analytics"],
+  ["SENTINEL:analytics-schema", "Analytics schema", "Analytics"],
   ["SENTINEL:get-analytics-query", "GetAnalytics marker", "Analytics"],
   ["analytics/GetAnalytics", "GetAnalytics query", "Analytics"],
-  ["analytics/AnalyticsPort", "AnalyticsPort port", "Analytics"],
+  ["getAnalytics", "AnalyticsRpcs rpc", "Analytics"],
   ["data-activation-direction", "ui-kit Tabs", "Analytics"],
   ["data-panel-open", "ui-kit Collapsible", "Analytics"],
   ["SENTINEL:not-found-page", "NotFound page", "NotFound"]
@@ -50,13 +53,21 @@ const owned: ReadonlyArray<Owned> = [
 const pageOnlyFramework: ReadonlyArray<readonly [needle: string, label: string]> = [
   ["effect/ui/Query/Build", "@effect/ui Query.Service runtime"],
   ["effect/ui/Query/accessor", "@effect/ui Query.Service accessors"],
+  ["~effect/rpc/RpcClientError", "effect/rpc RpcClient runtime"],
   ["Button: the element already handles click", "ui-kit Button"],
   ["Input: the element already handles input", "ui-kit Input"]
 ]
 // Imported by exactly the Products and ProductDetail chunks: one shared chunk, never the entry.
 const sharedNeedles: ReadonlyArray<readonly [needle: string, label: string]> = [
-  ["SENTINEL:catalog-data", "catalog data"],
-  ["product/CatalogPort", "CatalogPort port"]
+  ["SENTINEL:product-schema", "product schema"]
+]
+// Server-only stores, datasets and RPC server runtime that must never appear in dist/client/.
+const serverOnlyNeedles: ReadonlyArray<readonly [needle: string, label: string]> = [
+  ["server/CatalogStore", "server CatalogStore"],
+  ["server/BookmarkStore", "server BookmarkStore"],
+  ["server/AnalyticsStore", "server AnalyticsStore"],
+  ["Ceramic pour-over", "server seed catalog dataset"],
+  ["effect/rpc/RpcServer", "RpcServer runtime"]
 ]
 // Dev-only code that must never appear in any production chunk (0 bytes in dist/client).
 const devOnlyNeedles: ReadonlyArray<readonly [needle: string, label: string]> = [
@@ -169,7 +180,7 @@ for (const [needle, label, owner] of owned) {
   )
 }
 
-// The catalog data is shared by exactly the Products and ProductDetail chunks, never the entry.
+// The product schema is shared by exactly the Products and ProductDetail chunks, never the entry.
 for (const [needle] of sharedNeedles) {
   const holders = holdersOf(needle)
   check(holders.length === 1, `${needle} should live in exactly one shared chunk, found ${holders.length}`)
@@ -177,30 +188,43 @@ for (const [needle] of sharedNeedles) {
   for (const route of ["Products", "ProductDetail"] as const) {
     check(
       holder !== undefined && staticClosureFiles(Assets.routeSources[route]).has(holder),
-      `${route} chunk doesn't import the shared catalog chunk ${holder}`
+      `${route} chunk doesn't import the shared product schema chunk ${holder}`
     )
   }
-  // Transitively: a page that reaches the catalog through ANOTHER shared chunk would load it too.
+  // Transitively: a page that reaches the product schema through ANOTHER shared chunk would load it too.
   for (const route of ["Home", "Analytics", "NotFound"] as const) {
     check(
       holder === undefined || !staticClosureFiles(Assets.routeSources[route]).has(holder),
-      `${route} chunk (transitively) imports the catalog chunk it doesn't need`
+      `${route} chunk (transitively) imports the product schema chunk it doesn't need`
     )
   }
-  check(holder === undefined || !entryClosure.has(holder), `the entry statically imports the catalog chunk ${holder}`)
+  check(
+    holder === undefined || !entryClosure.has(holder),
+    `the entry statically imports the product schema chunk ${holder}`
+  )
 }
 
-// Home and NotFound use no queries and no transitions: neither may statically/transitively import Query or transition.
+// Home and NotFound use no queries, no RPC client and no transitions: neither may statically/transitively import them.
 const queryHolders = holdersOf("effect/ui/Query/Build")
+const rpcClientHolders = holdersOf("~effect/rpc/RpcClientError")
 for (const route of ["Home", "NotFound"] as const) {
   const closure = staticClosureFiles(Assets.routeSources[route])
   for (const holder of queryHolders) {
     check(!closure.has(holder), `${route} chunk (transitively) imports Query runtime ${holder}`)
   }
+  for (const holder of rpcClientHolders) {
+    check(!closure.has(holder), `${route} chunk (transitively) imports RpcClient runtime ${holder}`)
+  }
   for (const file of closure) {
     check(!/^assets\/Query-.*\.js$/.test(file), `${route} chunk (transitively) imports ${file}`)
     check(!/^assets\/transition-.*\.js$/.test(file), `${route} chunk (transitively) imports ${file}`)
   }
+}
+
+// Server-only stores, datasets and RPC server runtime must be completely absent from every client chunk.
+for (const [needle, label] of serverOnlyNeedles) {
+  const holders = holdersOf(needle)
+  check(holders.length === 0, `client build contains ${label} (${needle}) in: ${holders.join(", ")}`)
 }
 
 // Dev-only @effect/ui-devtools code must be completely absent from every production chunk.
@@ -229,7 +253,7 @@ const owns = (file: string): string =>
     .map(([, label]) => label)
     .filter(
       (label) =>
-        label.startsWith("ui-kit") || label.endsWith("query") || label.endsWith("command") || label.endsWith("port")
+        label.startsWith("ui-kit") || label.endsWith("query") || label.endsWith("command") || label.endsWith("rpc")
     )
     .join(", ")
 interface Row {
@@ -280,5 +304,6 @@ if (failures.length > 0) {
 }
 console.log(
   `\n✓ entry carries no page code; ${pageChunks.length} pages are ${pageChunks.length} separate chunks; ` +
-    `${owned.length} page-only markers, queries, commands and ui-kit primitives each live in exactly their owner chunk.`
+    `${owned.length} page-only markers, queries, commands, RPCs and ui-kit primitives each live in exactly their owner chunk; ` +
+    `0 server stores/datasets and 0 devtools in dist/client/.`
 )

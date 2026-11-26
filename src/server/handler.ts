@@ -1,11 +1,13 @@
-import { createReadStream } from "node:fs"
-import { stat } from "node:fs/promises"
-import type { IncomingMessage, RequestListener, ServerResponse } from "node:http"
+import { readFile, stat } from "node:fs/promises"
+import type { RequestListener } from "node:http"
 import { extname, join, normalize, relative, sep } from "node:path"
-import { pipeline } from "node:stream"
+import { NodeHttpServer } from "@effect/platform-node"
+import { Effect, Exit, Layer, Scope } from "effect"
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
+import type * as Routes from "../routes.ts"
 import type * as Assets from "./assets.ts"
 import * as Render from "./render.ts"
-import type * as Routes from "../routes.ts"
+import * as Rpc from "./rpc.ts"
 
 const contentTypes: Readonly<Record<string, string>> = {
   ".js": "text/javascript; charset=utf-8",
@@ -40,18 +42,6 @@ const securityHeaders = (clientDir: string | undefined): Record<string, string> 
   ...(clientDir === undefined ? {} : { "content-security-policy": contentSecurityPolicy })
 })
 
-const send = (
-  req: IncomingMessage,
-  res: ServerResponse,
-  status: number,
-  headers: Record<string, string>,
-  body: string
-): void => {
-  // A HEAD response carries the headers (and so the length) of the GET, without the body.
-  res.writeHead(status, { "content-length": Buffer.byteLength(body), ...headers })
-  res.end(req.method === "HEAD" ? undefined : body)
-}
-
 /**
  * Maps a request path to a file inside `clientDir`, or `undefined` if it isn't
  * one: malformed `%` escapes, any path that leaves `clientDir`, and any dotfile
@@ -69,88 +59,199 @@ const resolveStaticFile = (clientDir: string, pathname: string): string | undefi
   return file.startsWith(normalize(clientDir + sep)) ? file : undefined
 }
 
-const serveStatic = async (clientDir: string, pathname: string, req: IncomingMessage, res: ServerResponse) => {
+const textReply = (
+  method: string,
+  status: number,
+  headers: Record<string, string>,
+  body: string
+): HttpServerResponse.HttpServerResponse => {
+  const contentLength = Buffer.byteLength(body)
+  if (method === "HEAD") {
+    return HttpServerResponse.empty({
+      status,
+      headers: { "content-length": String(contentLength), ...headers }
+    })
+  }
+  return HttpServerResponse.text(body, {
+    status,
+    headers: { "content-length": String(contentLength), ...headers }
+  })
+}
+
+const serveStaticEffect = Effect.fn("serveStatic")(function* (
+  clientDir: string,
+  pathname: string,
+  method: string,
+  security: Record<string, string>
+) {
   const file = resolveStaticFile(clientDir, pathname)
-  if (file === undefined) return false
-  const info = await stat(file).catch(() => undefined)
-  if (info === undefined || !info.isFile()) return false
-  res.writeHead(200, {
+  if (file === undefined) return undefined
+  const info = yield* Effect.tryPromise(() => stat(file)).pipe(Effect.orElseSucceed(() => undefined))
+  if (info === undefined || !info.isFile()) return undefined
+  const headers: Record<string, string> = {
     "content-type": contentTypes[extname(file)] ?? "application/octet-stream",
-    "content-length": info.size,
+    "content-length": String(info.size),
     // Everything under /assets is content-hashed, so it can be cached forever.
     "cache-control": relative(clientDir, file).startsWith(`assets${sep}`)
       ? "public, max-age=31536000, immutable"
       : "no-cache",
-    ...securityHeaders(clientDir)
-  })
-  if (req.method === "HEAD") res.end()
-  // `pipeline` destroys the response if the file vanishes or the client leaves: never an unhandled stream error.
-  else pipeline(createReadStream(file), res, () => undefined)
-  return true
+    ...security
+  }
+  if (method === "HEAD") {
+    return HttpServerResponse.empty({ status: 200, headers })
+  }
+  const bytes = yield* Effect.tryPromise(() => readFile(file)).pipe(Effect.orElseSucceed(() => undefined))
+  if (bytes === undefined) return undefined
+  return HttpServerResponse.uint8Array(bytes, { status: 200, headers })
+})
+
+const parseRequestUrl = (target: string): URL | undefined => {
+  if (target.startsWith("//") || target.startsWith("/\\") || !URL.canParse(target, "http://localhost")) {
+    return undefined
+  }
+  const url = new URL(target, "http://localhost")
+  return url.origin === "http://localhost" ? url : undefined
+}
+
+const rpcRawPaths: ReadonlySet<string> = new Set([
+  "/rpc/search",
+  "/rpc/search/",
+  "/rpc/product",
+  "/rpc/product/",
+  "/rpc/analytics",
+  "/rpc/analytics/"
+])
+
+const isRpcRawPath = (target: string): boolean => {
+  const rawPath = target.split(/[?#]/, 1)[0]
+  return rawPath !== undefined && rpcRawPaths.has(rawPath)
 }
 
 /**
- * Static files first, then server-rendered pages. The returned promise always
- * resolves: every failure is answered (or the socket destroyed) inside.
+ * Handles static assets and SSR page routes (everything other than `/rpc`),
+ * preserving all URL validation, open-redirect blocking, method checks, and
+ * security headers.
  */
-export const handleRequest =
-  (options: AppHandlerOptions) =>
-  async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    const security = securityHeaders(options.clientDir)
-    try {
-      if (req.method !== "GET" && req.method !== "HEAD") {
-        return send(
-          req,
-          res,
-          405,
-          { allow: "GET, HEAD", "content-type": "text/plain", ...security },
-          "Method Not Allowed"
-        )
-      }
-      const target = req.url ?? "/"
-      if (target.startsWith("//") || target.startsWith("/\\") || !URL.canParse(target, "http://localhost")) {
-        return send(req, res, 400, { "content-type": "text/plain", ...security }, "Bad Request")
-      }
-      const url = new URL(target, "http://localhost")
-      if (url.origin !== "http://localhost") {
-        return send(req, res, 400, { "content-type": "text/plain", ...security }, "Bad Request")
-      }
-      if (options.clientDir !== undefined && (await serveStatic(options.clientDir, url.pathname, req, res))) return
-      if (url.pathname === "/favicon.ico") return void res.writeHead(204, security).end()
-
-      const page = await Render.renderPage(url.pathname + url.search, options.assetsFor)
-      switch (page._tag) {
-        case "BadRequest":
-          return send(req, res, page.status, { "content-type": "text/plain", ...security }, "Bad Request")
-        case "Redirect":
-          if (!Render.isSafeRelativeLocation(page.location)) {
-            return send(req, res, 400, { "content-type": "text/plain", ...security }, "Bad Request")
-          }
-          return send(
-            req,
-            res,
-            page.status,
-            { location: page.location, "content-type": "text/plain", "cache-control": "no-cache", ...security },
-            ""
-          )
-        case "Page":
-          return send(
-            req,
-            res,
-            page.status,
-            { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache", ...security },
-            page.html
-          )
-      }
-    } catch (error) {
-      console.error(error)
-      if (res.headersSent) res.destroy()
-      else send(req, res, 500, { "content-type": "text/plain", ...security }, "Internal Server Error")
+const handlePageOrStatic = (url: URL, method: string, security: Record<string, string>, options: AppHandlerOptions) =>
+  Effect.gen(function* () {
+    if (method !== "GET" && method !== "HEAD") {
+      return textReply(
+        method,
+        405,
+        { allow: "GET, HEAD", "content-type": "text/plain", ...security },
+        "Method Not Allowed"
+      )
     }
-  }
 
-/** `handleRequest` as a plain Node request listener, for `http.createServer`. */
-export const createAppHandler = (options: AppHandlerOptions): RequestListener => {
-  const handle = handleRequest(options)
-  return (req, res) => void handle(req, res)
+    if (options.clientDir !== undefined) {
+      const staticReply = yield* serveStaticEffect(options.clientDir, url.pathname, method, security)
+      if (staticReply !== undefined) return staticReply
+    }
+    if (url.pathname === "/favicon.ico") {
+      return HttpServerResponse.empty({ status: 204, headers: security })
+    }
+
+    const page = yield* Render.renderPageEffect(url.pathname + url.search, options.assetsFor)
+    switch (page._tag) {
+      case "BadRequest":
+        return textReply(method, page.status, { "content-type": "text/plain", ...security }, "Bad Request")
+      case "Redirect":
+        if (!Render.isSafeRelativeLocation(page.location)) {
+          return textReply(method, 400, { "content-type": "text/plain", ...security }, "Bad Request")
+        }
+        return textReply(
+          method,
+          page.status,
+          { location: page.location, "content-type": "text/plain", "cache-control": "no-cache", ...security },
+          ""
+        )
+      case "Page":
+        return textReply(
+          method,
+          page.status,
+          { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache", ...security },
+          page.html
+        )
+    }
+  })
+
+/**
+ * Full Effect HTTP application layer:
+ * - `POST /rpc` via `RpcServer.layerHttp` (`RpcSerialization.layerJson`)
+ * - SSR + static files via `handlePageOrStatic`, sharing the SAME server stores
+ *   through `Rpc.InProcessProtocolLayer` (zero TCP round-trip during SSR)
+ */
+export const makeHttpAppEffect = (options: AppHandlerOptions) => {
+  const security = securityHeaders(options.clientDir)
+
+  return Effect.map(
+    HttpRouter.toHttpEffect(Rpc.RpcHttpLayer).pipe(
+      Effect.provideService(HttpRouter.RouterConfig, { ignoreTrailingSlash: true })
+    ),
+    (rpcEffect) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest
+        const method = request.method
+        const url = parseRequestUrl(request.url)
+        if (url === undefined) {
+          return textReply(method, 400, { "content-type": "text/plain", ...security }, "Bad Request")
+        }
+        if (isRpcRawPath(request.url)) {
+          if (method !== "POST") {
+            return textReply(
+              method,
+              405,
+              { allow: "POST", "content-type": "text/plain", ...security },
+              "Method Not Allowed"
+            )
+          }
+          const response = yield* rpcEffect
+          return HttpServerResponse.setHeaders(response, security)
+        }
+        return yield* handlePageOrStatic(url, method, security, options)
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logError("Unhandled server error", cause).pipe(
+            Effect.as(
+              HttpServerResponse.text("Internal Server Error", {
+                status: 500,
+                headers: { "content-type": "text/plain", ...security }
+              })
+            )
+          )
+        )
+      )
+  )
+}
+
+const handlersLayer = Rpc.HandlersLayer.pipe(Layer.provide(Rpc.ServerStoresLayer))
+
+/** Complete server dependency graph: shared stores + per-group RPC handlers + in-process SSR HTTP client. */
+export const serverRuntimeLayer = Layer.mergeAll(
+  handlersLayer,
+  Rpc.InProcessRpcClientLayer.pipe(Layer.provide(handlersLayer))
+)
+
+export interface ManagedNodeHandler {
+  readonly handler: RequestListener
+  readonly dispose: () => Promise<void>
+}
+
+/**
+ * Builds a Node `RequestListener` backed by the Effect HTTP + RPC server,
+ * sharing one store layer instance for both `POST /rpc` and in-process SSR.
+ * Call `dispose()` on shutdown to close the server scope cleanly.
+ */
+export const createAppServer = async (options: AppHandlerOptions): Promise<ManagedNodeHandler> => {
+  const scope = Scope.makeUnsafe()
+  const handler = await Effect.gen(function* () {
+    const runtimeContext = yield* Layer.buildWithScope(Layer.fresh(serverRuntimeLayer), scope)
+    const httpEffect = yield* makeHttpAppEffect(options).pipe(Effect.provideContext(runtimeContext))
+    return yield* NodeHttpServer.makeHandler(httpEffect, { scope }).pipe(Effect.provideContext(runtimeContext))
+  }).pipe(Effect.provideService(Scope.Scope, scope), Effect.runPromise)
+
+  return {
+    handler: (req, res) => handler(req, res),
+    dispose: () => Effect.runPromise(Scope.close(scope, Exit.void))
+  }
 }

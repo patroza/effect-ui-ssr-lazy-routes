@@ -1,26 +1,25 @@
 import { Command } from "@effect/ui"
-import { Effect, Schema } from "effect"
-import * as BookmarkPort from "../services/BookmarkPort.ts"
+import { Effect, Layer, Schema } from "effect"
+import { RpcClient, RpcClientError } from "effect/rpc"
+import * as ApiError from "../../rpc/domain/ApiError.ts"
+import * as ProductRpcs from "../domain/ProductRpcs.ts"
 
 /**
- * Bookmarks a product. It knows nothing of its caller's messages: its domain
- * result is `void` (or a failure message), and the page maps both channels into
- * its own messages with `Command.match`, so this module never imports the page
- * (no import cycle).
- *
- * The body is a plain arrow over the port: `@effect/ui` already wraps every
- * Command run in a span named by this key, so there is no span of its own.
- * The port's operation carries the span.
+ * Bookmarks a product via `ProductRpcs` at `POST /rpc/product`. It knows
+ * nothing of its caller's messages: its domain result is `void` (or
+ * `ApiError | RpcClientError`), and the page maps both channels into its own
+ * messages with `Command.match`, so this module never imports the page (no
+ * import cycle).
  */
 export class BookmarkProduct extends Command.Service<BookmarkProduct>()("product/BookmarkProduct", {
   args: { id: Schema.String },
   success: Schema.Void,
-  error: Schema.String
+  error: Schema.Union([ApiError.ApiError, RpcClientError.RpcClientError])
 }) {
   static readonly layer = this.toLayer(
     Effect.gen(function* () {
-      const port = yield* BookmarkPort.BookmarkPort
-      return ({ id }) => port.bookmark(id)
+      const client = yield* RpcClient.make(ProductRpcs.ProductRpcs)
+      return ({ id }) => client.bookmarkProduct({ id })
     })
-  )
+  ).pipe(Layer.provide(RpcClient.layerProtocolHttp({ url: "/rpc/product" })))
 }
