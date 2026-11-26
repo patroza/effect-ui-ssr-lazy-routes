@@ -20,6 +20,9 @@ export type Product = typeof Product.Type
  */
 export const catalogReads = { searchProducts: 0, getProduct: 0 }
 
+/** How many times the `BookmarkProduct` Command body ran. The tests assert the click ran it exactly once. */
+export const catalogWrites = { bookmarkProduct: 0 }
+
 /** Marker proving which chunk the catalog landed in (see scripts/verify-bundles.mjs). */
 export const CATALOG_CHUNK = "SENTINEL:catalog-data"
 

@@ -1,5 +1,6 @@
 import type { Component } from "@effect/ui"
 import type { Html } from "@effect/ui/html"
+import { ui } from "./design.ts"
 
 /**
  * Counts how many times the page-loading fallback was produced. Production
@@ -13,5 +14,6 @@ export const pageFallback =
     loadingStats.rendered += 1
     return h.p
       .attr("data-fallback", "loading")
+      .class(`animate-pulse ${ui.muted}`)
       .children(result._tag === "Failure" ? "Couldn't load this page." : "Loading…")
   }

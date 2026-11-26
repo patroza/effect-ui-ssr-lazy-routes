@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { click, hydrateFromServer, loadedPages, text } from "./helpers.ts"
+import { byTestId, click, hydrateFromServer, loadedPages, text } from "./helpers.ts"
 
 const link = (container: Element, href: string): Element => {
   const anchor = container.querySelector(`a[href="${href}"]`)
@@ -69,13 +69,16 @@ describe("client-side navigation to a route that was not preloaded", () => {
     const browser = await hydrateFromServer("/")
     click(link(browser.container, "/analytics"))
     await expect.poll(() => browser.container.querySelector('[data-page-chunk="SENTINEL:analytics-page"]')).not.toBeNull()
-    const chart = browser.container.querySelector('[data-testid="analytics-chart"]')
+    const section = browser.container.querySelector("section")
+    const revenueTab = byTestId(browser.container, "tab-revenue")
 
-    const orders = [...browser.container.querySelectorAll("button")].find((b) => b.textContent === "Orders")
-    if (orders === undefined) throw new Error("no Orders button")
-    click(orders)
+    click(byTestId(browser.container, "tab-orders"))
     await expect.poll(() => text(browser.container, '[data-testid="analytics-total"]')).toBe("Total Orders: 5664")
-    expect(browser.container.querySelector('[data-testid="analytics-chart"]')).toBe(chart) // same node: no remount
+    // The page and its tabs are the same nodes: only the active panel's content changed.
+    expect(browser.container.querySelector("section")).toBe(section)
+    expect(byTestId(browser.container, "tab-revenue")).toBe(revenueTab)
+    expect(revenueTab.getAttribute("aria-selected")).toBe("false")
+    expect(byTestId(browser.container, "tab-orders").getAttribute("aria-selected")).toBe("true")
   })
 
   it("fetches a navigated Query.Service page's queries on the client", async () => {
@@ -87,6 +90,9 @@ describe("client-side navigation to a route that was not preloaded", () => {
     click(link(browser.container, "/products/42"))
     await expect.poll(() => text(browser.container, "h1")).toBe("Field notebook")
     expect(browser.app.catalogReads.getProduct).toBe(1)
+    click(link(browser.container, "/analytics"))
+    await expect.poll(() => text(browser.container, '[data-testid="analytics-total"]')).toBe("Total Revenue (USD): 237500")
+    expect(browser.app.analyticsReads.getAnalytics).toBe(1)
   })
 })
 

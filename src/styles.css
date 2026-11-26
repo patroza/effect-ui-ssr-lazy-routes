@@ -1,25 +1,11 @@
-:root {
-  font-family: system-ui, sans-serif;
-  color: #1c2330;
-}
+@import "tailwindcss";
 
-body {
-  margin: 0 auto;
-  max-width: 48rem;
-  padding: 1rem;
-}
+@layer base {
+  html {
+    color-scheme: light dark;
+  }
 
-header nav {
-  display: flex;
-  gap: 1rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid #d8dee9;
-}
-
-main {
-  padding-top: 1rem;
-}
-
-[data-fallback="loading"] {
-  color: #888;
+  body {
+    @apply mx-auto max-w-3xl bg-white p-4 text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100;
+  }
 }

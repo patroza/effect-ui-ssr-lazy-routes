@@ -1,6 +1,8 @@
+import tailwindcss from "@tailwindcss/vite"
 import { defineConfig } from "vite"
 
 export default defineConfig(({ isSsrBuild }) => ({
+  plugins: [tailwindcss()],
   build: isSsrBuild
     ? {
       // `vite build --ssr src/serve.ts --outDir dist/server`

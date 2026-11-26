@@ -41,7 +41,12 @@ try {
     if (!html.includes(`data-page-chunk="${check.marker}"`)) problems.push("page not server-rendered")
     if (!html.includes('id="state"')) problems.push("no serialized state")
     if (!own.some((href) => check.preload.test(href)) || own.length !== 1) problems.push(`page preloads: ${own.join(", ")}`)
-    console.log(`${problems.length === 0 ? "PASS" : "FAIL"}  ${check.path}  ${response.status}  preloads: ${preloads.map((h) => h.split("/").pop()).join(", ")}${problems.length ? "  ✗ " + problems.join("; ") : ""}`)
+    // Tailwind's stylesheet is global; the Analytics page's own stylesheet loads on /analytics only.
+    const sheets = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((m) => m[1])
+    if (!sheets.some((href) => /\/client-.*\.css$/.test(href))) problems.push("no global stylesheet")
+    const pageSheet = sheets.some((href) => /AnalyticsPage-.*\.css$/.test(href))
+    if (pageSheet !== (check.path === "/analytics")) problems.push(`Analytics stylesheet ${pageSheet ? "present" : "missing"}`)
+    console.log(`${problems.length === 0 ? "PASS" : "FAIL"}  ${check.path}  ${response.status}  preloads: ${preloads.map((h) => h.split("/").pop()).join(", ")}  css: ${sheets.map((h) => h.split("/").pop()).join(", ")}${problems.length ? "  ✗ " + problems.join("; ") : ""}`)
     failed ||= problems.length > 0
   }
 } finally {

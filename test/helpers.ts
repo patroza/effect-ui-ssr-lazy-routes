@@ -28,7 +28,7 @@ export const loadApp = async () => {
   }
   // `effect` and `@effect/ui` keep per-module registries (the Router's engine, service keys, ...), so the
   // test must use the SAME copies as the app, never ones imported statically by the test file.
-  const [effect, ui, uiHtml, render, bootstrap, pages, routes, loading, prefetch, products, state] = await Promise.all([
+  const [effect, ui, uiHtml, render, bootstrap, pages, routes, loading, prefetch, products, dataset, state] = await Promise.all([
     import("effect"),
     import("@effect/ui"),
     import("@effect/ui/html"),
@@ -39,6 +39,7 @@ export const loadApp = async () => {
     import("../src/loading.ts"),
     import("../src/prefetch.ts"),
     import("../src/data/products.ts"),
+    import("../src/analytics/dataset.ts"),
     import("../src/state.ts")
   ])
   return {
@@ -50,6 +51,8 @@ export const loadApp = async () => {
     ...prefetch,
     ...state,
     catalogReads: products.catalogReads,
+    catalogWrites: products.catalogWrites,
+    analyticsReads: dataset.analyticsReads,
     lib: {
       Effect: effect.Effect,
       Exit: effect.Exit,
@@ -170,6 +173,25 @@ export async function hydrateFromServer(
 
 export const click = (element: Element): void => {
   element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }))
+}
+
+/** The element with `data-testid`, or a thrown error naming it (so tests never need a non-null assertion). */
+export const byTestId = (container: Element, id: string): Element => {
+  const element = container.querySelector(`[data-testid="${id}"]`)
+  if (element === null) throw new Error(`no element with data-testid="${id}"`)
+  return element
+}
+
+export const inputValue = (input: Element): string => {
+  if (!(input instanceof HTMLInputElement)) throw new Error("not an <input>")
+  return input.value
+}
+
+/** Sets an input's value and fires the `input` event the way typing does. */
+export const type = (input: Element, value: string): void => {
+  if (!(input instanceof HTMLInputElement)) throw new Error("not an <input>")
+  input.value = value
+  input.dispatchEvent(new Event("input", { bubbles: true }))
 }
 
 export const text = (container: Element, selector: string): string | undefined =>

@@ -1,9 +1,10 @@
 // Proves, from the BUILT output, that every page is its own chunk and that the
-// entry chunk carries no page code. Run after `pnpm build`.
+// entry chunk carries no page code: no page marker, no page-only query or
+// Command, and no page-only @effect/ui-kit primitive. Run after `pnpm build`.
 //
 //   node scripts/verify-bundles.mjs [distClientDir]
 import { readdirSync, readFileSync } from "node:fs"
-import { join, relative } from "node:path"
+import { join } from "node:path"
 import { gzipSync } from "node:zlib"
 import { routeSources } from "../src/assets.ts"
 
@@ -16,31 +17,43 @@ const check = (ok, message) => {
   if (!ok) failures.push(message)
 }
 
-// --- Sentinels: unique strings each module exports, so ownership is greppable. ---
+// --- Page-only things, each with the page that owns it and a string that is unique to it in the build. ---
+// Sentinels are exported by our own modules. Query/Command services carry their key into the build as a
+// string literal. A @effect/ui-kit primitive is identified by a data attribute only its module writes.
+const owned = [
+  // [needle, label, owner route]
+  ["SENTINEL:home-page", "Home page", "Home"],
+  ["SENTINEL:products-page", "Products page", "Products"],
+  ["SENTINEL:search-products-query", "SearchProducts marker", "Products"],
+  ["catalog/SearchProducts", "SearchProducts query", "Products"],
+  ["SENTINEL:product-detail-page", "ProductDetail page", "ProductDetail"],
+  ["SENTINEL:get-product-query", "GetProduct marker", "ProductDetail"],
+  ["catalog/GetProduct", "GetProduct query", "ProductDetail"],
+  ["catalog/BookmarkProduct", "BookmarkProduct command", "ProductDetail"],
+  ["data-dialog-backdrop", "ui-kit Dialog", "ProductDetail"],
+  ["SENTINEL:analytics-page", "Analytics page", "Analytics"],
+  ["SENTINEL:analytics-chart", "Analytics chart", "Analytics"],
+  ["SENTINEL:analytics-dataset", "Analytics dataset", "Analytics"],
+  ["SENTINEL:get-analytics-query", "GetAnalytics marker", "Analytics"],
+  ["analytics/GetAnalytics", "GetAnalytics query", "Analytics"],
+  ["data-activation-direction", "ui-kit Tabs", "Analytics"],
+  ["data-panel-open", "ui-kit Collapsible", "Analytics"],
+  ["SENTINEL:not-found-page", "NotFound page", "NotFound"]
+]
+// Imported by exactly the Products and ProductDetail chunks: one shared chunk, never the entry.
+const sharedNeedles = [["SENTINEL:catalog-data", "catalog data"]]
+
+// Every SENTINEL a source file declares must be known here, so a new marker can't escape the check.
 const walk = (dir) =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]
   )
-const sentinelOwners = {
-  "SENTINEL:home-page": "Home",
-  "SENTINEL:products-page": "Products",
-  "SENTINEL:search-products-query": "Products",
-  "SENTINEL:get-product-query": "ProductDetail",
-  "SENTINEL:product-detail-page": "ProductDetail",
-  "SENTINEL:analytics-page": "Analytics",
-  "SENTINEL:analytics-chart": "Analytics",
-  "SENTINEL:analytics-dataset": "Analytics",
-  "SENTINEL:not-found-page": "NotFound"
-}
-const sharedSentinels = ["SENTINEL:catalog-data"] // imported by Products + ProductDetail only
 const declared = new Set(
   walk(join(root, "src")).flatMap((file) => readFileSync(file, "utf8").match(/SENTINEL:[a-z-]+/g) ?? [])
 )
+const known = new Set([...owned.map(([needle]) => needle), ...sharedNeedles.map(([needle]) => needle)])
 for (const sentinel of declared) {
-  check(
-    sentinel in sentinelOwners || sharedSentinels.includes(sentinel),
-    `src declares ${sentinel} but verify-bundles.mjs doesn't know its owner`
-  )
+  check(known.has(sentinel), `src declares ${sentinel} but verify-bundles.mjs doesn't know its owner`)
 }
 
 // --- Read every chunk. ---
@@ -59,14 +72,8 @@ const entry = entries[0]
 const entryCode = code.get(entry.file) ?? ""
 check(entryCode.length > 0, `entry chunk ${entry.file} not found in assets/`)
 
-for (const sentinel of [...Object.keys(sentinelOwners), ...sharedSentinels]) {
-  check(!entryCode.includes(sentinel), `ENTRY chunk ${entry.file} contains page marker ${sentinel}`)
-}
-// A `Query.Service` carries its name into the build as a string literal. Each page-only query (and its
-// Layer, provided with `Component.provide`) must therefore sit in its page's chunk, never in the entry.
-const queryOwners = { "catalog/SearchProducts": "Products", "catalog/GetProduct": "ProductDetail" }
-for (const name of Object.keys(queryOwners)) {
-  check(!entryCode.includes(name), `ENTRY chunk ${entry.file} contains page-only query "${name}"`)
+for (const [needle, label] of [...owned.map(([n, l]) => [n, l]), ...sharedNeedles]) {
+  check(!entryCode.includes(needle), `ENTRY chunk ${entry.file} contains ${label} (${needle})`)
 }
 const pageSources = Object.values(routeSources)
 for (const imported of entry.imports ?? []) {
@@ -92,20 +99,16 @@ check(new Set(files).size === files.length, "two pages share one chunk file")
 
 for (const { route, chunk } of pageChunks) {
   const own = code.get(chunk?.file) ?? ""
-  for (const [sentinel, owner] of Object.entries(sentinelOwners)) {
-    if (owner === route) check(own.includes(sentinel), `${route} chunk ${chunk?.file} is missing its own marker ${sentinel}`)
-    else check(!own.includes(sentinel), `${route} chunk ${chunk?.file} contains ${owner}'s marker ${sentinel}`)
-  }
-  for (const [name, owner] of Object.entries(queryOwners)) {
-    if (owner === route) check(own.includes(name), `${route} chunk ${chunk?.file} is missing its own query "${name}"`)
-    else check(!own.includes(name), `${route} chunk ${chunk?.file} contains ${owner}'s query "${name}"`)
+  for (const [needle, label, owner] of owned) {
+    if (owner === route) check(own.includes(needle), `${route} chunk ${chunk?.file} is missing its own ${label} (${needle})`)
+    else check(!own.includes(needle), `${route} chunk ${chunk?.file} contains ${owner}'s ${label} (${needle})`)
   }
 }
 
 // The catalog data is shared by exactly the Products and ProductDetail chunks, never the entry.
-for (const sentinel of sharedSentinels) {
-  const holders = [...code].filter(([, text]) => text.includes(sentinel)).map(([file]) => file)
-  check(holders.length === 1, `${sentinel} should live in exactly one shared chunk, found ${holders.length}`)
+for (const [needle] of sharedNeedles) {
+  const holders = [...code].filter(([, text]) => text.includes(needle)).map(([file]) => file)
+  check(holders.length === 1, `${needle} should live in exactly one shared chunk, found ${holders.length}`)
   for (const route of ["Products", "ProductDetail"]) {
     const imports = manifest[routeSources[route]]?.imports ?? []
     check(
@@ -122,9 +125,20 @@ for (const sentinel of sharedSentinels) {
   }
 }
 
+// --- CSS: Tailwind (global) rides with the entry; the page-specific stylesheet only with Analytics. ---
+check((entry.css ?? []).length === 1, `entry should own exactly one stylesheet (Tailwind), has ${(entry.css ?? []).length}`)
+for (const { route, chunk } of pageChunks) {
+  const expected = route === "Analytics" ? 1 : 0
+  check((chunk?.css ?? []).length === expected, `${route} should own ${expected} stylesheet(s), has ${(chunk?.css ?? []).length}`)
+}
+
 // --- Report. ---
+const owns = (file) =>
+  [...owned.filter(([needle]) => (code.get(file) ?? "").includes(needle)).map(([, label]) => label)]
+    .filter((label) => label.startsWith("ui-kit") || label.endsWith("query") || label.endsWith("command"))
+    .join(", ")
 const rows = []
-const add = (role, file) => rows.push({ role, file: relative(clientDir, join(clientDir, file)), ...size(file) })
+const add = (role, file) => rows.push({ role, file, ...size(file), owns: file.endsWith(".js") ? owns(file) : "" })
 add("entry", entry.file)
 for (const { route, chunk } of pageChunks) if (chunk) add(`page:${route}`, chunk.file)
 const shared = Object.values(manifest).filter((chunk) => !chunk.isEntry && !chunk.isDynamicEntry)
@@ -135,13 +149,18 @@ for (const file of css) add("css", file)
 const widest = (key, header) => Math.max(header.length, ...rows.map((row) => String(row[key]).length))
 const roleWidth = widest("role", "chunk")
 const fileWidth = widest("file", "file")
+const ownsWidth = widest("owns", "page-only code")
 const pad = (text, width) => String(text).padEnd(width)
 const num = (value) => String(value).padStart(9)
-console.log(`\n${pad("chunk", roleWidth)}  ${pad("file", fileWidth)}  ${"raw (B)".padStart(9)}  ${"gzip (B)".padStart(9)}`)
-console.log(`${"-".repeat(roleWidth)}  ${"-".repeat(fileWidth)}  ${"-".repeat(9)}  ${"-".repeat(9)}`)
-for (const row of rows) console.log(`${pad(row.role, roleWidth)}  ${pad(row.file, fileWidth)}  ${num(row.raw)}  ${num(row.gzip)}`)
+console.log(
+  `\n${pad("chunk", roleWidth)}  ${pad("file", fileWidth)}  ${"raw (B)".padStart(9)}  ${"gzip (B)".padStart(9)}  page-only code`
+)
+console.log(`${"-".repeat(roleWidth)}  ${"-".repeat(fileWidth)}  ${"-".repeat(9)}  ${"-".repeat(9)}  ${"-".repeat(ownsWidth)}`)
+for (const row of rows) {
+  console.log(`${pad(row.role, roleWidth)}  ${pad(row.file, fileWidth)}  ${num(row.raw)}  ${num(row.gzip)}  ${row.owns}`)
+}
 
-const accounted = new Set([...rows.map((row) => row.file)])
+const accounted = new Set(rows.map((row) => row.file))
 const orphans = chunkFiles.map((name) => `assets/${name}`).filter((file) => !accounted.has(file))
 check(orphans.length === 0, `assets/ has JS not described by the manifest: ${orphans.join(", ")}`)
 
@@ -152,5 +171,5 @@ if (failures.length > 0) {
 }
 console.log(
   `\n✓ entry carries no page code; ${pageChunks.length} pages are ${pageChunks.length} separate chunks; ` +
-    `${declared.size} markers and ${Object.keys(queryOwners).length} page-only queries each live in exactly their owner chunk.`
+    `${owned.length} page-only markers, queries, commands and ui-kit primitives each live in exactly their owner chunk.`
 )

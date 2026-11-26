@@ -1,6 +1,7 @@
 import { Head, Router, UiSchema } from "@effect/ui"
 import { Html, HtmlHead } from "@effect/ui/html"
 import { Schema } from "effect"
+import { ui } from "./design.ts"
 import { pageFallback } from "./loading.ts"
 import { pages } from "./pages.ts"
 import { AppRoute } from "./routes.ts"
@@ -32,15 +33,25 @@ export const App = Html.component({
   head: () => [Head.titleTemplate((title) => `${title} · Effect UI lazy routes`), HtmlHead.lang("en")],
   view: (h, { route }) => {
     const fallback = pageFallback(h)
+    const links = [
+      { tag: "Home", href: AppRoute.print(AppRoute.Home()), label: "Home" },
+      { tag: "Products", href: AppRoute.print(AppRoute.Products({ search: {} })), label: "Products" },
+      { tag: "Analytics", href: AppRoute.print(AppRoute.Analytics()), label: "Analytics" }
+    ] as const
     return h.div(
-      h.header(
-        h.nav.children(
-          h.a.attr("href", AppRoute.print(AppRoute.Home())).children("Home"),
-          h.a.attr("href", AppRoute.print(AppRoute.Products({ search: {} }))).children("Products"),
-          h.a.attr("href", AppRoute.print(AppRoute.Analytics())).children("Analytics")
+      h.header.class("border-b border-neutral-200 pb-3 dark:border-neutral-800").children(
+        h.nav.class("flex gap-1").attr("aria-label", "Primary").children(
+          links.map((link) =>
+            h.a
+              .key(link.tag)
+              .class(ui.navLink)
+              .attr("href", link.href)
+              .attr("aria-current", link.tag === route._tag ? "page" : undefined)
+              .children(link.label)
+          )
         )
       ),
-      h.main(
+      h.main.class("pt-6").children(
         // Key by `printPath` (no search): a new path mounts a fresh page, while
         // a search change updates the live page in place with new props.
         AppRoute.match(route, {

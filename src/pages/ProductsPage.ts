@@ -1,8 +1,10 @@
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
+import { Button, Input } from "@effect/ui-kit"
 import { Cause, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { CATALOG_CHUNK, formatPrice } from "../data/products.ts"
+import { ui } from "../design.ts"
 import { SEARCH_PRODUCTS_QUERY_CHUNK, SearchProducts } from "../queries/SearchProducts.ts"
 import { AppRoute } from "../routes.ts"
 
@@ -55,37 +57,43 @@ export const ProductsPageNoDeps = Html.component({
       onSuccess: ({ value }) => value
     })
     const failure = AsyncResult.isFailure(h.queries.results) ? Cause.pretty(h.queries.results.cause) : undefined
+    const status = results === undefined
+      ? failure === undefined ? "Searching…" : "Search failed."
+      : results.length === 0
+      ? "No products match your search."
+      : `${results.length} product(s).`
     return h.section
       .attr("data-page-chunk", PRODUCTS_PAGE_CHUNK)
       .attr("data-catalog", CATALOG_CHUNK)
       .attr("data-query", SEARCH_PRODUCTS_QUERY_CHUNK)
+      .class(ui.stack)
       .children(
-        h.h1("Products"),
-        h.input
-          .attrs({ type: "search", "aria-label": "Search products", "data-testid": "products-search" })
-          .value(q ?? "")
-          .on("input", ({ value }) => ProductsPageMessage.UpdatedQuery({ text: value })),
-        h.p.attr("data-testid", "products-compared").children(`Comparing ${model.compared.length} product(s)`),
-        h.ul(
+        h.h1.class(ui.title).children("Products"),
+        Input(h, {
+          props: { value: q ?? "" },
+          onUpdate: ({ value }) => ProductsPageMessage.UpdatedQuery({ text: value })
+        })
+          .class(ui.input)
+          .attrs({ type: "search", placeholder: "Search products…", "aria-label": "Search products", "data-testid": "products-search" }),
+        h.p.class(ui.muted).attr("data-testid", "products-compared").children(`Comparing ${model.compared.length} product(s)`),
+        h.ul.class("flex flex-col divide-y divide-neutral-200 dark:divide-neutral-800").children(
           (results ?? []).map((product) =>
-            h.li.key(product.id).children(
-              h.a
-                .attr("href", AppRoute.print(AppRoute.ProductDetail({ params: { id: product.id } })))
-                .children(product.name),
-              ` — ${formatPrice(product.priceCents)} `,
-              h.button
-                .attr("type", "button")
+            h.li.key(product.id).class("flex items-center justify-between gap-3 py-3").children(
+              h.div.children(
+                h.a
+                  .class(ui.link)
+                  .attr("href", AppRoute.print(AppRoute.ProductDetail({ params: { id: product.id } })))
+                  .children(product.name),
+                h.span.class(ui.muted).children(` — ${formatPrice(product.priceCents)}`)
+              ),
+              Button(h, { onPress: ProductsPageMessage.ToggledCompare({ id: product.id }) })
+                .class(ui.button)
                 .attr("aria-pressed", String(model.compared.includes(product.id)))
-                .on("click", ProductsPageMessage.ToggledCompare({ id: product.id }))
                 .children(model.compared.includes(product.id) ? "Remove from compare" : "Compare")
             )
           )
         ),
-        results === undefined
-          ? h.p.attr("data-testid", "products-status").children(failure === undefined ? "Searching…" : "Search failed.")
-          : results.length === 0
-          ? h.p.attr("data-testid", "products-status").children("No products match your search.")
-          : h.p.attr("data-testid", "products-status").children(`${results.length} product(s).`)
+        h.p.class(ui.muted).attr("data-testid", "products-status").children(status)
       )
   }
 })

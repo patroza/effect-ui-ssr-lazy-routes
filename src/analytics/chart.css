@@ -1,7 +1,9 @@
+/* The only page-specific stylesheet: it ships with the Analytics chunk, so
+   `/analytics` (and only it) gets its own <link rel="stylesheet">. */
 .analytics-chart {
   display: block;
-  max-width: 100%;
+  width: 100%;
   height: auto;
-  border: 1px solid #d8dee9;
-  border-radius: 6px;
+  border-radius: 0.5rem;
+  background: #fff;
 }

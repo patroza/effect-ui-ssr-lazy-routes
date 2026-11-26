@@ -1,15 +1,25 @@
+import { Schema } from "effect"
+
 /**
  * Analytics-only dataset. Nothing outside `AnalyticsPage` imports it, so it
  * must end up in the Analytics page chunk and nowhere else.
  */
 export const ANALYTICS_DATASET_CHUNK = "SENTINEL:analytics-dataset"
 
-export type Metric = "revenue" | "orders"
+export const Metric = Schema.Literals(["revenue", "orders"])
+export type Metric = typeof Metric.Type
 
-export interface SeriesPoint {
-  readonly label: string
-  readonly value: number
-}
+export const SeriesPoint = Schema.Struct({ label: Schema.String, value: Schema.Number })
+export type SeriesPoint = typeof SeriesPoint.Type
+
+/**
+ * How many times the dataset was actually read by a query fetcher. Production
+ * code never reads it; the tests assert it stays 0 on the client while a
+ * server-rendered page hydrates from the state's `~query` entries.
+ */
+export const analyticsReads = { getAnalytics: 0 }
+
+export const metrics: ReadonlyArray<Metric> = ["revenue", "orders"]
 
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const
 
