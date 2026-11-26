@@ -4,6 +4,7 @@ import * as EffectOxlintPresets from "@effect/tsgo/oxlint-presets"
 import { DevToolsVite } from "@effect/ui-devtools/node"
 import tailwindcss from "@tailwindcss/vite"
 import { defineConfig, lazyPlugins } from "vite-plus"
+import { parseDevToolsPort } from "./scripts/lib/dev-ports.ts"
 import * as EffectDiagnostics from "./scripts/lib/effect-diagnostics.mjs"
 
 const root = fileURLToPath(new URL(".", import.meta.url))
@@ -11,17 +12,6 @@ const sharedOxlintConfig = EffectDiagnostics.loadOxlintJsonConfig(
   join(root, "node_modules/@effect-app/eslint-shared-config/src/oxlintrc.json")
 )
 const strictOxlintConfig = EffectDiagnostics.loadOxlintJsonConfig(join(root, "config/oxlint.strict.json"))
-
-const parseDevToolsPort = (raw: string | undefined): number | undefined => {
-  if (raw === undefined || raw.trim() === "") return undefined
-  const parsed = Number(raw)
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
-    throw new RangeError(`Invalid DEVTOOLS_PORT "${raw}": expected integer between 1 and 65535`)
-  }
-  return parsed
-}
-
-const devToolsPort = parseDevToolsPort(process.env["DEVTOOLS_PORT"])
 
 export default defineConfig(({ isSsrBuild, mode }) => ({
   run: {
@@ -44,14 +34,18 @@ export default defineConfig(({ isSsrBuild, mode }) => ({
   plugins:
     mode === "test"
       ? []
-      : lazyPlugins(() => [
-          tailwindcss(),
-          DevToolsVite.plugin({
-            dispatch: true,
-            overlay: false,
-            ...(devToolsPort === undefined ? {} : { port: devToolsPort })
-          })
-        ]),
+      : lazyPlugins(() => {
+          const devToolsPort = parseDevToolsPort(process.env["DEVTOOLS_PORT"])
+          return [
+            tailwindcss(),
+            DevToolsVite.plugin({
+              dispatch: true,
+              // `src/main.ts` provides `DevTools.layer()` explicitly, so skip the auto-injected overlay.
+              overlay: false,
+              ...(devToolsPort === undefined ? {} : { port: devToolsPort })
+            })
+          ]
+        }),
   build: isSsrBuild
     ? {
         // `vp build --ssr src/server/serve.ts --outDir dist/server`

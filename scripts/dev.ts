@@ -1,16 +1,58 @@
 // Dev server: Vite in middleware mode (HMR, on-demand modules) + the same Effect
 // HTTP + RPC + SSR handler production uses, loaded through Vite so edits apply without restart.
-import { createServer as createHttpServer } from "node:http"
-import { createServer as createViteServer, createServerModuleRunner } from "vite-plus"
+import { createServer as createHttpServer, type Server as HttpServer } from "node:http"
+import { createServer as createViteServer, createServerModuleRunner, type ViteDevServer } from "vite-plus"
 import type * as Assets from "../src/server/assets.ts"
 import type * as Handler from "../src/server/handler.ts"
+import { parseAppPort, resolveDevToolsPort } from "./lib/dev-ports.ts"
 
-const port = Number(process.env["PORT"] ?? 5173)
+const listenHttpServer = (server: HttpServer, port: number): Promise<number> =>
+  new Promise((resolve, reject) => {
+    function onError(error: Error) {
+      server.off("listening", onListening)
+      reject(error)
+    }
+    function onListening() {
+      server.off("error", onError)
+      const address = server.address()
+      if (address === null || typeof address === "string") {
+        server.close(() => reject(new Error("Could not determine bound dev server port")))
+        return
+      }
+      resolve(address.port)
+    }
+    server.once("error", onError)
+    server.once("listening", onListening)
+    server.listen(port)
+  })
+
+const closeHttpServer = (server: HttpServer): Promise<void> =>
+  new Promise((resolve) => {
+    server.close(() => resolve())
+  })
+
+const requestedPort = parseAppPort(process.env["PORT"])
 const server = createHttpServer()
-const vite = await createViteServer({
-  server: { middlewareMode: true, hmr: { server } },
-  appType: "custom"
-})
+const actualPort = await listenHttpServer(server, requestedPort)
+
+let vite: ViteDevServer
+try {
+  const devToolsPort = await resolveDevToolsPort({
+    actualAppPort: actualPort,
+    appPortEnv: process.env["PORT"],
+    devToolsPortEnv: process.env["DEVTOOLS_PORT"]
+  })
+  process.env["DEVTOOLS_PORT"] = String(devToolsPort)
+
+  vite = await createViteServer({
+    server: { middlewareMode: true, hmr: { server } },
+    appType: "custom"
+  })
+} catch (error) {
+  await closeHttpServer(server)
+  throw error
+}
+
 // Loads modules through Vite's SSR environment, so edits apply without restarting.
 const runner = createServerModuleRunner(vite.environments.ssr)
 
@@ -50,13 +92,13 @@ server.on("request", (req, res) => {
   })
 })
 
-server.listen(port, () => console.log(`dev server on http://localhost:${port}`))
+console.log(`dev server on http://localhost:${actualPort}`)
 
 const shutdown = () => {
   void Promise.all([
     currentAppServer?.then((app) => app.dispose()).catch(() => undefined),
     vite.close(),
-    new Promise<void>((resolve) => server.close(() => resolve()))
+    closeHttpServer(server)
   ]).then(() => process.exit(0))
 }
 process.on("SIGINT", shutdown)
