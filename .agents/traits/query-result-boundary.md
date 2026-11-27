@@ -40,12 +40,10 @@ coverage: review
 +  return h.p.children("Loading…")
 +}
 +if (QueryResult.isFailure(series)) {
-+  return QueryResult.errorPanel(h, { title: "Couldn't load analytics", cause: series.cause, onRetry })
++  return QueryResult.errorPanel(h, series, { title: "Couldn't load analytics", onRetry })
 +}
 +return h.div.children(
-+  series.refreshFailure === undefined
-+    ? undefined
-+    : QueryResult.refreshErrorBanner(h, { cause: series.refreshFailure, waiting: series.waiting, onRetry }),
++  QueryResult.refreshErrorBanner(h, series, { onRetry }),
 +  renderChart(h, series.data, series.waiting).key("analytics-content") // `series.data` is guaranteed defined
 +)
 ```

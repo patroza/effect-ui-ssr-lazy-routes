@@ -2,7 +2,6 @@ import { Command, Component, Head, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Collapsible, Tabs } from "@effect/ui-kit"
 import { Effect, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
 import * as Chart from "../analytics/components/Chart.ts"
 import * as Analytics from "../analytics/domain/Analytics.ts"
 import * as GetAnalytics from "../analytics/queries/GetAnalytics.ts"
@@ -77,21 +76,16 @@ const AnalyticsPageNoDeps = Html.component({
         return h.p.class(Design.ui.muted).children("Loading…")
       }
       if (QueryResult.isFailure(series)) {
-        return QueryResult.errorPanel(h, {
+        return QueryResult.errorPanel(h, series, {
           title: "Couldn't load analytics",
           heading: 2,
-          cause: series.cause,
           onRetry: AnalyticsPageMessage.ClickedRefresh()
         })
       }
       return h.div.class(Design.ui.stack).children(
-        series.refreshFailure === undefined
-          ? undefined
-          : QueryResult.refreshErrorBanner(h, {
-              cause: series.refreshFailure,
-              waiting: series.waiting,
-              onRetry: AnalyticsPageMessage.ClickedRefresh()
-            }),
+        QueryResult.refreshErrorBanner(h, series, {
+          onRetry: AnalyticsPageMessage.ClickedRefresh()
+        }),
         renderChartContent(h, title, series.data, series.waiting)
       )
     }
@@ -106,8 +100,7 @@ const AnalyticsPageNoDeps = Html.component({
       .children(
         h.div.class(`${Design.ui.row} justify-between`).children(
           h.h1.class(Design.ui.title).children("Analytics"),
-          QueryResult.refreshButton(h, {
-            waiting: AsyncResult.isWaiting(h.queries.series),
+          QueryResult.refreshButton(h, h.queries.series, {
             onRefresh: AnalyticsPageMessage.ClickedRefresh(),
             testId: "analytics-refresh"
           })

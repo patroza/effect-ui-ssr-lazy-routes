@@ -23,19 +23,21 @@ const RefreshStatus = Command.make("RefreshStatus", { args: { mode: Status.Statu
  * exists (either a fresh `Success` or a preserved `previousSuccess` after a
  * failed refresh). Zero `undefined` / `is defined` checks live here.
  */
-const renderStatusContent = (h: Html.H<typeof StatusPageMessage.Type>, data: Status.SystemStatus, waiting: boolean) =>
+const renderStatusContent = (
+  h: Html.H<typeof StatusPageMessage.Type>,
+  status: QueryResult.ReadyQuery<Status.SystemStatus, unknown>
+) =>
   h.div
     .key("status-content")
     .class(Design.ui.stack)
-    .attr("aria-busy", String(waiting))
+    .attr("aria-busy", String(status.waiting))
     .children(
       h.div.class(`${Design.ui.row} justify-between`).children(
         h.div.children(
-          h.p.class("font-medium").attr("data-testid", "status-revision").children(`Revision ${data.revision}`),
-          h.p.class(Design.ui.muted).attr("data-testid", "status-note").children(data.note)
+          h.p.class("font-medium").attr("data-testid", "status-revision").children(`Revision ${status.data.revision}`),
+          h.p.class(Design.ui.muted).attr("data-testid", "status-note").children(status.data.note)
         ),
-        QueryResult.refreshButton(h, {
-          waiting,
+        QueryResult.refreshButton(h, status, {
           onRefresh: StatusPageMessage.ClickedRefresh()
         })
       ),
@@ -43,7 +45,7 @@ const renderStatusContent = (h: Html.H<typeof StatusPageMessage.Type>, data: Sta
         .class("flex flex-col divide-y divide-neutral-200 dark:divide-neutral-800")
         .attrs({ "data-testid": "status-services" })
         .children(
-          data.services.map((service) =>
+          status.data.services.map((service) =>
             h.li
               .key(service.name)
               .class("flex items-center justify-between py-2 text-sm")
@@ -119,10 +121,9 @@ const StatusPageNoDeps = Html.component({
       return shell.children(
         heading,
         modeLinks,
-        QueryResult.errorPanel(h, {
+        QueryResult.errorPanel(h, status, {
           title: "Couldn't load system status",
           heading: 2,
-          cause: status.cause,
           httpStatus: "503",
           onRetry: StatusPageMessage.ClickedRefresh()
         })
@@ -132,14 +133,10 @@ const StatusPageNoDeps = Html.component({
     return shell.children(
       heading,
       modeLinks,
-      status.refreshFailure === undefined
-        ? undefined
-        : QueryResult.refreshErrorBanner(h, {
-            cause: status.refreshFailure,
-            waiting: status.waiting,
-            onRetry: StatusPageMessage.ClickedRefresh()
-          }),
-      renderStatusContent(h, status.data, status.waiting)
+      QueryResult.refreshErrorBanner(h, status, {
+        onRetry: StatusPageMessage.ClickedRefresh()
+      }),
+      renderStatusContent(h, status)
     )
   }
 })

@@ -2,7 +2,7 @@ import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Button, Input } from "@effect/ui-kit"
 import { Effect, Schema } from "effect"
-import { AsyncResult } from "effect/reactivity"
+import type { AsyncResult } from "effect/reactivity"
 import * as Design from "../design/classes.ts"
 import * as QueryResult from "../design/queryResult.ts"
 import * as Product from "../product/domain/Product.ts"
@@ -72,21 +72,16 @@ const renderResultsSection = <E>(
     return h.p.class(Design.ui.muted).attr("data-testid", "products-status").children("Searching…")
   }
   if (QueryResult.isFailure(results)) {
-    return QueryResult.errorPanel(h, {
+    return QueryResult.errorPanel(h, results, {
       title: "Couldn't load products",
       heading: 2,
-      cause: results.cause,
       onRetry: ProductsPageMessage.ClickedRefresh()
     })
   }
   return h.div.class(Design.ui.stack).children(
-    results.refreshFailure === undefined
-      ? undefined
-      : QueryResult.refreshErrorBanner(h, {
-          cause: results.refreshFailure,
-          waiting: results.waiting,
-          onRetry: ProductsPageMessage.ClickedRefresh()
-        }),
+    QueryResult.refreshErrorBanner(h, results, {
+      onRetry: ProductsPageMessage.ClickedRefresh()
+    }),
     renderProductResults(h, results.data, compared, results.waiting)
   )
 }
@@ -133,8 +128,7 @@ const ProductsPageNoDeps = Html.component({
       .children(
         h.div.class(`${Design.ui.row} justify-between`).children(
           h.h1.class(Design.ui.title).children("Products"),
-          QueryResult.refreshButton(h, {
-            waiting: AsyncResult.isWaiting(h.queries.results),
+          QueryResult.refreshButton(h, h.queries.results, {
             onRefresh: ProductsPageMessage.ClickedRefresh(),
             testId: "products-refresh"
           })

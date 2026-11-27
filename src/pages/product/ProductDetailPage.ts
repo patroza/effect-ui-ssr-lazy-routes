@@ -102,9 +102,8 @@ const ProductDetailPageNoDeps = Html.component({
     }
     if (QueryResult.isFailure(result)) {
       return shell.children(
-        QueryResult.errorPanel(h, {
+        QueryResult.errorPanel(h, result, {
           title: "Couldn't load the product",
-          cause: result.cause,
           httpStatus: "503",
           onRetry: ProductDetailPageMessage.ClickedRefresh()
         }),
@@ -114,13 +113,9 @@ const ProductDetailPageNoDeps = Html.component({
     if (Option.isNone(result.data)) {
       // `data-http-status` is what `renderPage` reads back to answer 404 for exactly this render.
       return shell.attr(Status.NOT_FOUND_ATTRIBUTE, "404").children(
-        result.refreshFailure === undefined
-          ? undefined
-          : QueryResult.refreshErrorBanner(h, {
-              cause: result.refreshFailure,
-              waiting: result.waiting,
-              onRetry: ProductDetailPageMessage.ClickedRefresh()
-            }),
+        QueryResult.refreshErrorBanner(h, result, {
+          onRetry: ProductDetailPageMessage.ClickedRefresh()
+        }),
         h.h1.class(Design.ui.title).children("Unknown product"),
         h.p.class(Design.ui.muted).children(`There is no product "${h.props.id}".`),
         back
@@ -133,21 +128,16 @@ const ProductDetailPageNoDeps = Html.component({
       .attr("data-product-schema", Product.PRODUCT_SCHEMA_CHUNK)
       .attr("aria-busy", String(result.waiting))
       .children(
-        result.refreshFailure === undefined
-          ? undefined
-          : QueryResult.refreshErrorBanner(h, {
-              cause: result.refreshFailure,
-              waiting: result.waiting,
-              onRetry: ProductDetailPageMessage.ClickedRefresh()
-            }),
+        QueryResult.refreshErrorBanner(h, result, {
+          onRetry: ProductDetailPageMessage.ClickedRefresh()
+        }),
         h.div
           .key("detail-content")
           .class(Design.ui.stack)
           .children(
             h.div.class(`${Design.ui.row} justify-between`).children(
               h.h1.class(Design.ui.title).children(product.name),
-              QueryResult.refreshButton(h, {
-                waiting: result.waiting,
+              QueryResult.refreshButton(h, result, {
                 onRefresh: ProductDetailPageMessage.ClickedRefresh(),
                 testId: "detail-refresh"
               })

@@ -104,7 +104,7 @@ export const describeFailure = (cause: Cause.Cause<unknown>): string => {
 
 export interface ErrorPanelOptions<M> {
   readonly title: string
-  readonly cause: Cause.Cause<unknown>
+  readonly cause?: Cause.Cause<unknown> | undefined
   readonly onRetry?: M | undefined
   readonly retryLabel?: string | undefined
   readonly heading?: 1 | 2 | undefined
@@ -113,7 +113,8 @@ export interface ErrorPanelOptions<M> {
 }
 
 /** Dedicated error component rendered when a query fails with no prior data. */
-export const errorPanel = <M>(h: Html.H<M>, options: ErrorPanelOptions<M>) => {
+export const errorPanel = <M>(h: Html.H<M>, failure: FailureQuery<unknown>, options: ErrorPanelOptions<M>) => {
+  const cause = options.cause ?? failure.cause
   const heading =
     options.heading === 2
       ? h.h2.class("text-lg font-semibold").children(options.title)
@@ -128,7 +129,7 @@ export const errorPanel = <M>(h: Html.H<M>, options: ErrorPanelOptions<M>) => {
     })
     .children(
       heading,
-      h.p.class(Design.ui.muted).attr("data-testid", "query-error-message").children(describeFailure(options.cause)),
+      h.p.class(Design.ui.muted).attr("data-testid", "query-error-message").children(describeFailure(cause)),
       options.onRetry === undefined
         ? undefined
         : h.div.children(
@@ -141,15 +142,22 @@ export const errorPanel = <M>(h: Html.H<M>, options: ErrorPanelOptions<M>) => {
 }
 
 export interface RefreshErrorBannerOptions<M> {
-  readonly cause: Cause.Cause<unknown>
-  readonly waiting: boolean
+  readonly cause?: Cause.Cause<unknown> | undefined
+  readonly waiting?: boolean | undefined
   readonly onRetry: M
   readonly testId?: string | undefined
 }
 
 /** Inline warning shown above preserved SSR/cached data when a client refresh fails. */
-export const refreshErrorBanner = <M>(h: Html.H<M>, options: RefreshErrorBannerOptions<M>) =>
-  h.div
+export const refreshErrorBanner = <M>(
+  h: Html.H<M>,
+  ready: ReadyQuery<unknown, unknown>,
+  options: RefreshErrorBannerOptions<M>
+) => {
+  const cause = options.cause ?? ready.refreshFailure
+  if (cause === undefined) return undefined
+  const waiting = options.waiting ?? ready.waiting
+  return h.div
     .key("refresh-error")
     .class(
       `${Design.ui.card} ${Design.ui.row} justify-between border-amber-300 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/30`
@@ -162,29 +170,36 @@ export const refreshErrorBanner = <M>(h: Html.H<M>, options: RefreshErrorBannerO
       h.p
         .class(Design.ui.muted)
         .attr("data-testid", "refresh-error-message")
-        .children(`Refresh failed — showing last loaded data: ${describeFailure(options.cause)}`),
+        .children(`Refresh failed — showing last loaded data: ${describeFailure(cause)}`),
       Button(h, {
-        props: { disabled: options.waiting },
+        props: { disabled: waiting },
         onPress: options.onRetry
       })
         .class(Design.ui.button)
         .attr("data-testid", "refresh-error-retry")
-        .children(options.waiting ? "Retrying…" : "Retry refresh")
+        .children(waiting ? "Retrying…" : "Retry refresh")
     )
+}
 
 export interface RefreshButtonOptions<M> {
-  readonly waiting: boolean
+  readonly waiting?: boolean | undefined
   readonly onRefresh: M
   readonly testId?: string | undefined
   readonly label?: string | undefined
 }
 
 /** Consistent manual refresh button backed by `Query.invalidate`. */
-export const refreshButton = <M>(h: Html.H<M>, options: RefreshButtonOptions<M>) =>
-  Button(h, {
-    props: { disabled: options.waiting },
+export const refreshButton = <M>(
+  h: Html.H<M>,
+  state: { readonly waiting: boolean },
+  options: RefreshButtonOptions<M>
+) => {
+  const waiting = options.waiting ?? state.waiting
+  return Button(h, {
+    props: { disabled: waiting },
     onPress: options.onRefresh
   })
     .class(Design.ui.button)
     .attr("data-testid", options.testId ?? "refresh-button")
-    .children(options.waiting ? "Refreshing…" : (options.label ?? "Refresh"))
+    .children(waiting ? "Refreshing…" : (options.label ?? "Refresh"))
+}
