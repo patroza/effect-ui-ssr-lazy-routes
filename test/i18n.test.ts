@@ -1,5 +1,7 @@
+import { TestHost } from "@effect/ui/testing"
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Exit, Schema, SchemaIssue } from "effect"
+import { TestClock } from "effect/testing"
 import * as LocalizedValidation from "../src/form/localizedValidation.ts"
 import * as I18n from "../src/i18n/I18n.ts"
 import * as DeCatalog from "../src/i18n/catalogs/de.ts"
@@ -138,6 +140,15 @@ describe("/order German SSR & hydration", () => {
         expect(subtotal).toContain("€")
         expect(yield* Helpers.portCounts).toEqual(TestRpc.noCalls)
         expect(browser.fallbacksSeen()).toEqual([])
+
+        // Hydrated browser forwards Accept-Language: de-DE so server RPC checks return German messages.
+        Helpers.type(Helpers.byTestId(browser.container, "project-code-input"), "taken-code")
+        yield* TestHost.settle
+        yield* TestClock.adjust("300 millis")
+        yield* TestHost.settle
+        yield* TestClock.adjust("5 millis")
+        yield* TestHost.settle
+        expect(Helpers.text(browser.container, '[data-testid="project-code-error"]')).toContain("bereits vergeben")
       })
     )
   })

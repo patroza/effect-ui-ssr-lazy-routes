@@ -49,11 +49,6 @@ const importCatalogForLocale: Readonly<
   de: () => import("./catalogs/de.ts")
 }
 
-/** Registers a catalog directly (useful for deterministic unit tests). */
-export const registerCatalog = (locale: AppLocale, catalog: MessageCatalog): void => {
-  loadedCatalogs.set(locale, catalog)
-}
-
 /** Returns the catalog synchronously once preloaded. */
 export const getCatalog = (locale: AppLocale): MessageCatalog | undefined => loadedCatalogs.get(locale)
 

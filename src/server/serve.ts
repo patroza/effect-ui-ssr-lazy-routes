@@ -7,6 +7,18 @@ import { HttpServer } from "effect/http"
 import * as Assets from "./assets.ts"
 import * as Handler from "./handler.ts"
 
+const parsePort = (raw: string | undefined): number => {
+  if (raw === undefined || raw === "") return 3000
+  if (!/^[0-9]+$/.test(raw)) {
+    throw new RangeError(`Invalid PORT "${raw}": expected integer between 0 and 65535`)
+  }
+  const parsed = Number(raw)
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65535) {
+    throw new RangeError(`Invalid PORT "${raw}": expected integer between 0 and 65535`)
+  }
+  return parsed
+}
+
 /**
  * Production entry, built to `dist/server/serve.js` (`pnpm build:server`).
  * Serves `POST /rpc` (Effect RPC over HTTP) + SSR HTML + static assets from
@@ -14,7 +26,7 @@ import * as Handler from "./handler.ts"
  */
 const clientDir = fileURLToPath(new URL("../client", import.meta.url))
 const manifest = Assets.parseManifest(readFileSync(`${clientDir}/.vite/manifest.json`, "utf8"))
-const port = Number(process.env["PORT"] ?? 3000)
+const port = parsePort(process.env["PORT"])
 
 const ServerLive = Layer.effectDiscard(
   Effect.gen(function* () {

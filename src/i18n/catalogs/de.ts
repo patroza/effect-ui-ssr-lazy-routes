@@ -1,9 +1,7 @@
 import type { MessageCatalog } from "../messages.ts"
 
 /** Marker proving the German catalog stays in its own dynamically loaded chunk. */
-export const I18N_DE_CHUNK = "SENTINEL:i18n-de"
-
-export const chunkMarker = I18N_DE_CHUNK
+export const chunkMarker = "SENTINEL:i18n-de"
 
 export const catalog: MessageCatalog = {
   "nav.primaryAria": "Hauptnavigation",

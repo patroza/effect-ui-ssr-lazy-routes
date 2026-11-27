@@ -236,6 +236,7 @@ describe("pages", () => {
     expect(reply.body).toContain("Field notebook")
     expect(reply.headers["x-content-type-options"]).toBe("nosniff")
     expect(reply.headers["content-security-policy"]).toBe(Handler.contentSecurityPolicy)
+    expect(reply.headers["vary"]).toBe("Cookie")
   })
 
   it("answers 404 for an unknown product, derived from the rendered page", async () => {
@@ -337,7 +338,7 @@ describe("Effect RPC over HTTP (POST /rpc/{search,product,analytics})", () => {
     expect(response.headers.get("content-security-policy")).toBe(Handler.contentSecurityPolicy)
     expect(await response.text()).toContain("Field notebook")
 
-    for (const rpcPath of ["/rpc/search", "/rpc/product", "/rpc/analytics", "/rpc/order", "/rpc/warehouse"]) {
+    for (const rpcPath of Rpc.RPC_PATHS) {
       for (const method of ["GET", "HEAD", "PUT"]) {
         const disallowed = await raw(rpcPath, method)
         expect(disallowed.status, `${method} ${rpcPath}`).toBe(405)

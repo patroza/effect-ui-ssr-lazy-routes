@@ -17,14 +17,9 @@ export class BookmarkStore extends Context.Service<BookmarkStore>()("server/Book
       })
     })
 
-    const isBookmarked = Effect.fn("BookmarkStore.isBookmarked")(function* (id: string) {
-      const current = yield* Ref.get(bookmarked)
-      return current.has(id)
-    })
-
     const all = Ref.get(bookmarked)
 
-    return { bookmark, isBookmarked, all } as const
+    return { bookmark, all } as const
   })
 }) {
   static readonly layer = Layer.effect(this, this.make)

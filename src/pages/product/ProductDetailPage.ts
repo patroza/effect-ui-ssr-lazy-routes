@@ -30,12 +30,6 @@ const RefreshProduct = Command.make("RefreshProduct", { args: { id: Schema.Strin
   GetProduct.GetProduct.invalidate({ id }).pipe(Effect.as(Component.noop))
 )
 
-const backdropClass =
-  "fixed inset-0 bg-black/40 transition-opacity data-starting-style:opacity-0 data-ending-style:opacity-0"
-const viewportClass = "fixed inset-0 grid place-items-center p-4"
-const popupClass =
-  "w-full max-w-sm rounded-lg border border-neutral-200 bg-white p-5 shadow-xl transition-all data-starting-style:scale-95 data-starting-style:opacity-0 data-ending-style:scale-95 data-ending-style:opacity-0 dark:border-neutral-800 dark:bg-neutral-900"
-
 const ProductDetailPageNoDeps = Html.component({
   name: "ProductDetailPage",
   props: Schema.Struct({ id: Schema.String }),
@@ -112,7 +106,7 @@ const ProductDetailPageNoDeps = Html.component({
     }
     if (Option.isNone(result.data)) {
       // `data-http-status` is what `renderPage` reads back to answer 404 for exactly this render.
-      return shell.attr(Status.NOT_FOUND_ATTRIBUTE, "404").children(
+      return shell.attr(Status.HTTP_STATUS_ATTRIBUTE, "404").children(
         QueryResult.refreshErrorBanner(h, result, {
           onRetry: ProductDetailPageMessage.ClickedRefresh()
         }),
@@ -188,10 +182,10 @@ const ProductDetailPageNoDeps = Html.component({
                       .attr("data-testid", "inquiry-trigger")
                       .children("Ask a question"),
                     dialog.portal(h.dialog)?.children(
-                      dialog.backdrop(h.div.class(backdropClass)),
-                      dialog.viewport(h.div.class(viewportClass)).children(
+                      dialog.backdrop(h.div.class(Design.ui.dialogBackdrop)),
+                      dialog.viewport(h.div.class(Design.ui.dialogViewport)).children(
                         dialog
-                          .popup(h.div.class(popupClass))
+                          .popup(h.div.class(Design.ui.dialogPopup))
                           .attr("data-testid", "inquiry-popup")
                           .children(
                             h.div.class(Design.ui.stack).children(

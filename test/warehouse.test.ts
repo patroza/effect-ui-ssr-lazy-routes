@@ -245,6 +245,38 @@ describe("/warehouse Scanner Command Console", () => {
 
         expect(viewport.querySelectorAll('[data-testid^="warehouse-toast-"]')).toHaveLength(1)
         expect(viewport.textContent).toContain("CART-101")
+
+        // A failing non-dispatch action emits toastActionError when opted in.
+        Helpers.click(Helpers.byTestId(container, "release-cart-204"))
+        yield* roundTrip
+        expect(viewport.querySelectorAll('[data-testid^="warehouse-toast-"]')).toHaveLength(2)
+        expect(viewport.textContent).toContain("Packstation B")
+      })
+    )
+
+    it.effect("recovers from SessionExpiredError during PreflightDispatch without leaving flow stuck in Running", () =>
+      Effect.gen(function* () {
+        const { container } = yield* Helpers.hydrateFromServer("/warehouse")
+
+        Helpers.click(Helpers.byTestId(container, "sim-session-expired"))
+        yield* Helpers.settleFrames
+
+        Helpers.click(Helpers.byTestId(container, "dispatch-cart-101"))
+        yield* roundTrip
+        expect(Helpers.byTestId(container, "session-expired-popup")).not.toBeNull()
+
+        Helpers.click(Helpers.byTestId(container, "session-expired-confirm"))
+        yield* roundTrip // refreshSession
+        yield* roundTrip // replayed preflightDispatchCart
+
+        expect(container.querySelector('[data-testid="session-expired-popup"]')).toBeNull()
+        expect(Helpers.byTestId(container, "dispatch-alert-popup")).not.toBeNull()
+        expect(container.querySelector('[data-testid="dispatch-progress-panel"]')).toBeNull()
+        expect(container.querySelector('[data-testid="warehouse-error-banner"]')).toBeNull()
+
+        const counts = yield* Helpers.portCounts
+        expect(counts.refreshSession).toBe(1)
+        expect(counts.preflightDispatchCart).toBe(2)
       })
     )
 

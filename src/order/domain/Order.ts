@@ -65,8 +65,8 @@ export const OrderFieldPath = Schema.Union([
     "deliveryNote",
     "acceptTerms"
   ]),
-  Schema.TemplateLiteral(["items.", Schema.Number]),
-  Schema.TemplateLiteral(["items.", Schema.Number, ".", Schema.Literals(["id", "sku", "quantity", "unitPriceDollars"])])
+  Schema.TemplateLiteral(["items.", Schema.Finite]),
+  Schema.TemplateLiteral(["items.", Schema.Finite, ".", Schema.Literals(["id", "sku", "quantity", "unitPriceDollars"])])
 ])
 export type OrderFieldPath = typeof OrderFieldPath.Type
 
@@ -118,9 +118,6 @@ export const calculateOrderTotals = (
   const totalCents = Math.max(0, subtotalCents - discountCents + expeditedFeeCents)
   return { subtotalCents, discountCents, expeditedFeeCents, totalCents }
 }
-
-export const formatCents = (cents: number, locale: I18n.AppLocale = "en"): string =>
-  I18n.translatorFor(locale).formatCurrency(cents)
 
 export interface CrossFieldInput {
   readonly items: ReadonlyArray<{
@@ -187,8 +184,6 @@ export const makeValidateOrderCrossFields =
 
     return issues
   }
-
-export const validateOrderCrossFields = makeValidateOrderCrossFields(englishFallback)
 
 const buildOrderSubmissionSchema = (messages: MessageLookup) => {
   const OrderCodeSchema = Schema.String.pipe(
@@ -341,6 +336,10 @@ const buildOrderSubmissionSchema = (messages: MessageLookup) => {
     }),
     acceptTerms: Schema.Literal(true).annotate({
       title: messages.t("order.fields.acceptTerms", "Order terms"),
+      description: messages.t(
+        "order.fields.acceptTerms.desc",
+        "Confirm unit counts, custom SKUs, and studio proof turnaround."
+      ),
       message: messages.t("order.errors.termsRequired", "You must accept the studio order terms")
     })
   })

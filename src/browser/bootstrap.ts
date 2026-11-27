@@ -1,6 +1,7 @@
 import { type Renderer, Router } from "@effect/ui"
 import { BrowserHost, HtmlHydrate } from "@effect/ui/html"
 import { Effect, Option } from "effect"
+import { HttpClient, HttpClientRequest } from "effect/http"
 import * as App from "../App.ts"
 import * as I18n from "../i18n/I18n.ts"
 import * as Pages from "../pages.ts"
@@ -45,11 +46,18 @@ export const boot = Effect.fn("boot")(function* (options: BootOptions) {
   if (win !== null) yield* Prefetch.installPreloadErrorReload(win)
   yield* Prefetch.installLinkPrefetch(doc, bundle.pages)
 
+  const bcp47 = I18n.configForLocale(locale).bcp47
   const props = Effect.map(Router.props(Routes.AppRoute), (base) => ({ ...base, locale }))
-  const root =
+  const mountOrHydrate =
     options.state === undefined
-      ? yield* BrowserHost.mountEffect(bundle.app, props, options.container)
-      : yield* HtmlHydrate.hydrateEffect(bundle.app, props, options.container, options.state)
+      ? BrowserHost.mountEffect(bundle.app, props, options.container)
+      : HtmlHydrate.hydrateEffect(bundle.app, props, options.container, options.state)
+  const root = yield* mountOrHydrate.pipe(
+    Effect.updateService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(HttpClientRequest.setHeader("accept-language", bcp47))
+    )
+  )
 
   // Completes once every instance that adopts server state is live.
   yield* root.adopted

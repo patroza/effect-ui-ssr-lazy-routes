@@ -47,51 +47,24 @@ export const HandlersLayer = Layer.mergeAll(
   WarehouseHandlers.WarehouseHandlersLayer
 )
 
-/** Feature-scoped HTTP RPC routes mounted independently (no `RpcGroup.merge`). */
-export const SearchRpcHttpLayer = RpcServer.layerHttp({
-  group: SearchRpcs.SearchRpcs,
-  path: "/rpc/search",
-  protocol: "http"
-})
-
-export const ProductRpcHttpLayer = RpcServer.layerHttp({
-  group: ProductRpcs.ProductRpcs,
-  path: "/rpc/product",
-  protocol: "http"
-})
-
-export const AnalyticsRpcHttpLayer = RpcServer.layerHttp({
-  group: AnalyticsRpcs.AnalyticsRpcs,
-  path: "/rpc/analytics",
-  protocol: "http"
-})
-
-export const StatusRpcHttpLayer = RpcServer.layerHttp({
-  group: StatusRpcs.StatusRpcs,
-  path: "/rpc/status",
-  protocol: "http"
-})
-
-export const OrderRpcHttpLayer = RpcServer.layerHttp({
-  group: OrderRpcs.OrderRpcs,
-  path: "/rpc/order",
-  protocol: "http"
-})
-
-export const WarehouseRpcHttpLayer = RpcServer.layerHttp({
-  group: WarehouseRpcs.WarehouseRpcs,
-  path: "/rpc/warehouse",
-  protocol: "http"
-})
+/** Feature-scoped HTTP RPC paths mounted independently on `HttpRouter`. */
+export const RPC_PATHS = [
+  "/rpc/search",
+  "/rpc/product",
+  "/rpc/analytics",
+  "/rpc/status",
+  "/rpc/order",
+  "/rpc/warehouse"
+] as const
 
 /** Composed HTTP POST `/rpc/{search,product,analytics,status,order,warehouse}` route layer using JSON serialization. */
 export const RpcHttpLayer = Layer.mergeAll(
-  SearchRpcHttpLayer,
-  ProductRpcHttpLayer,
-  AnalyticsRpcHttpLayer,
-  StatusRpcHttpLayer,
-  OrderRpcHttpLayer,
-  WarehouseRpcHttpLayer
+  RpcServer.layerHttp({ group: SearchRpcs.SearchRpcs, path: RPC_PATHS[0], protocol: "http" }),
+  RpcServer.layerHttp({ group: ProductRpcs.ProductRpcs, path: RPC_PATHS[1], protocol: "http" }),
+  RpcServer.layerHttp({ group: AnalyticsRpcs.AnalyticsRpcs, path: RPC_PATHS[2], protocol: "http" }),
+  RpcServer.layerHttp({ group: StatusRpcs.StatusRpcs, path: RPC_PATHS[3], protocol: "http" }),
+  RpcServer.layerHttp({ group: OrderRpcs.OrderRpcs, path: RPC_PATHS[4], protocol: "http" }),
+  RpcServer.layerHttp({ group: WarehouseRpcs.WarehouseRpcs, path: RPC_PATHS[5], protocol: "http" })
 ).pipe(Layer.provide(RpcSerialization.layerJson))
 
 /**

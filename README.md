@@ -109,10 +109,18 @@ src/
     HomePage.ts · NotFoundPage.ts · ProductsPage.ts · AnalyticsPage.ts · StatusPage.ts · OrderFormPage.ts · WarehousePage.ts
     product/ProductDetailPage.ts   the inquiry Dialog; maps BookmarkProduct's result/error into its own messages with Command.match
   warehouse/               Warehouse Command Console (Warehouse chunk only)
+    WarehouseState.ts      WarehouseConsole model, TaggedEnum messages, unified action runner & flow transitions
+    components/WarehouseDialogs.ts  controlled AlertDialog / Dialog modals for Block, Release, Dispatch, and Session recovery
     domain/Warehouse.ts    cart/command schemas, localized `BlockCart` `SchemaForm`, `ResourceCheckoutConflictError`, `CartInUseError`, `SessionExpiredError`, `describeWarehouseFailure`
     domain/WarehouseRpcs.ts `WarehouseRpcs` (`getWarehouseCarts`, `unblockCart`, `blockCart`, `preflightReleaseCart`, `releaseCart`, `preflightDispatchCart`, `dispatchCartStep`, `refreshSession`)
     queries/GetWarehouseCarts.ts  `GetWarehouseCarts` Query.Service over `/rpc/warehouse`
     commands/WarehouseCommands.ts `UnblockCart` (`optimistic` + `invalidates`), `BlockCart`, `PreflightReleaseCart`, `ReleaseCart`, `PreflightDispatchCart`, `DispatchCartBatch` (`stream: true`), `RefreshSession`
+  order/                   Custom Order form feature (Order chunk only)
+    components/OrderSections.ts  details, billing, line-items, fulfillment, and summary sections + OrderFormPageMessage
+    domain/Order.ts        `OrderFormValues`, `OrderSubmission`, localized `OrderSchemaForm` controller, `OrderValidationError`
+    domain/OrderRpcs.ts    `OrderRpcs` (`checkOrderCode`, `validatePromoCode`, `submitOrder`)
+    queries/               `CheckOrderCode`, `ValidatePromoCode`
+    commands/              `SubmitOrder`
   form/                    SchemaForm engine, controls & localized Schema validation hooks (`Order` + `Warehouse` chunks only)
     localizedValidation.ts `makeLocalizedHooks` (`LeafHook`/`CheckHook`), `annotateLiteralUnionMessages` (AST union rewriting via `Schema.make<S>`)
   rpc/
@@ -312,7 +320,7 @@ GET /products/42 → css: main.css · modulepreload: ProductDetailPage, classes,
 GET /analytics   → css: main.css + AnalyticsPage.css · modulepreload: AnalyticsPage, classes, rolldown-runtime, transition, attributes, RpcSerialization, Query
 ```
 
-`pnpm smoke` checks this against the built server: it fetches every `<link rel="modulepreload">` and requires `200`, `text/javascript` and `immutable`. In dev there is no manifest, so there is nothing to preload, and Vite delivers the CSS through the JavaScript modules, so an unstyled flash before the entry runs is expected in dev (production links the stylesheets in `<head>`).
+`pnpm smoke` checks this against the built server: it fetches every `<link rel="modulepreload">` and requires `200`, `text/javascript` and `immutable`. In dev there is no manifest, so `devAssetsFor` emits render-blocking `?direct` stylesheet `<link>`s in `<head>` (eliminating dev SSR FOUC) which `src/main.ts` (`removeSupersededDevStylesheets`) removes once Vite's HMR `<style data-vite-dev-id>` tags mount (`test/css-flash.test.ts`).
 
 ## HTTP behaviour
 

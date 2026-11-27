@@ -1,7 +1,7 @@
 import { BrowserRouter } from "@effect/ui/html"
 import { DevTools } from "@effect/ui-devtools"
 import { Effect, Layer } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
+import { FetchHttpClient } from "effect/http"
 import { RpcSerialization } from "effect/rpc"
 import * as Bootstrap from "./browser/bootstrap.ts"
 import * as DevStyles from "./browser/devStyles.ts"
@@ -18,7 +18,6 @@ const container = document.getElementById("app")
 if (container === null) throw new Error("#app not found")
 
 const locale = I18n.parseLocale(document.documentElement.lang)
-const bcp47 = I18n.configForLocale(locale).bcp47
 
 // The server's `serializeState` output is exactly what `hydrateEffect` takes. If it is unreadable, the
 // page is still usable: warn and mount the app fresh instead of leaving the server HTML dead.
@@ -33,13 +32,8 @@ const readState = Effect.try(() => State.readState(document.getElementById("stat
 // Dev-only inspector overlay + Time Travel (tree-shaken to 0 bytes in production builds).
 const devToolsLayer = import.meta.env.DEV ? DevTools.layer({ position: "BottomRight" }) : Layer.empty
 
-// Browser HTTP client (sending Accept-Language for server-localized errors) + JSON RPC serialization.
-const localizedHttpClientLayer = Layer.effect(
-  HttpClient.HttpClient,
-  Effect.map(HttpClient.HttpClient, HttpClient.mapRequest(HttpClientRequest.setHeader("accept-language", bcp47)))
-).pipe(Layer.provide(FetchHttpClient.layer))
-
-const rpcTransportLayer = Layer.mergeAll(localizedHttpClientLayer, RpcSerialization.layerJson)
+// Browser HTTP client + JSON RPC serialization (`boot` attaches Accept-Language from `<html lang>`).
+const rpcTransportLayer = Layer.mergeAll(FetchHttpClient.layer, RpcSerialization.layerJson)
 
 Effect.runFork(
   readState.pipe(

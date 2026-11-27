@@ -116,13 +116,6 @@ export const WarehouseDomainError = Schema.Union([
 ])
 export type WarehouseDomainError = typeof WarehouseDomainError.Type
 
-export const WarehouseWireError = Schema.Union([
-  WarehouseDomainError,
-  Schema.TaggedStruct("RpcClientError", {
-    message: Schema.String
-  })
-])
-
 /**
  * Schema-serializable Command error envelope carrying the active Command run's
  * OTel `SpanPointer` so error banners show `Ref <traceId>` and retries link cleanly.
@@ -131,7 +124,7 @@ export class WarehouseCommandFailure extends Schema.TaggedError<
   WarehouseCommandFailure,
   { readonly brand: unique symbol }
 >()("WarehouseCommandFailure", {
-  error: Schema.Union([ResourceCheckoutConflictError, CartInUseError, SessionExpiredError, ApiError.ApiError]),
+  error: WarehouseDomainError,
   transportMessage: Schema.NullOr(Schema.String),
   failureSpan: Schema.NullOr(CommandTrace.SpanPointer)
 }) {}

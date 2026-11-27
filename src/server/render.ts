@@ -1,6 +1,7 @@
 import { Router } from "@effect/ui"
 import { HtmlServer } from "@effect/ui/html"
 import { Effect, Option } from "effect"
+import { HttpClient, HttpClientRequest } from "effect/http"
 import * as App from "../App.ts"
 import * as I18n from "../i18n/I18n.ts"
 import * as Status from "../lib/status.ts"
@@ -68,11 +69,18 @@ export const renderPageEffect = Effect.fn("renderPage")(function* (
   }
 
   yield* Effect.promise(() => I18n.preloadLocale(locale))
+  const bcp47 = I18n.configForLocale(locale).bcp47
   const page = yield* HtmlServer.renderToHtml(
     options.app ?? App.App,
     Effect.map(Router.props(Routes.AppRoute), (props) => ({ ...props, locale })),
     { budget: "1 second" }
-  ).pipe(Effect.provide(Router.static({ routes: Routes.AppRoute, url })))
+  ).pipe(
+    Effect.updateService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(HttpClientRequest.setHeader("accept-language", bcp47))
+    ),
+    Effect.provide(Router.static({ routes: Routes.AppRoute, url }))
+  )
   const html = `<!doctype html>
 <html ${page.htmlAttributes}>
   <head>

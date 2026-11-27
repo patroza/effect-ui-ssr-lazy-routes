@@ -67,6 +67,13 @@ export default defineConfig(({ command, isSsrBuild, mode }) => ({
   ssr: isSsrBuild ? { noExternal: true } : { external: ["@effect/platform-node", "ws"] },
   test: {
     environment: "happy-dom",
+    environmentOptions: {
+      happyDOM: {
+        settings: {
+          handleDisabledFileLoadingAsSuccess: true
+        }
+      }
+    },
     include: ["test/**/*.test.ts"],
     setupFiles: ["test/setup.ts"]
   },

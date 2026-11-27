@@ -104,7 +104,6 @@ export const describeFailure = (cause: Cause.Cause<unknown>): string => {
 
 export interface ErrorPanelOptions<M> {
   readonly title: string
-  readonly cause?: Cause.Cause<unknown> | undefined
   readonly onRetry?: M | undefined
   readonly retryLabel?: string | undefined
   readonly heading?: 1 | 2 | undefined
@@ -114,7 +113,7 @@ export interface ErrorPanelOptions<M> {
 
 /** Dedicated error component rendered when a query fails with no prior data. */
 export const errorPanel = <M>(h: Html.H<M>, failure: FailureQuery<unknown>, options: ErrorPanelOptions<M>) => {
-  const cause = options.cause ?? failure.cause
+  const cause = failure.cause
   const heading =
     options.heading === 2
       ? h.h2.class("text-lg font-semibold").children(options.title)
@@ -142,8 +141,6 @@ export const errorPanel = <M>(h: Html.H<M>, failure: FailureQuery<unknown>, opti
 }
 
 export interface RefreshErrorBannerOptions<M> {
-  readonly cause?: Cause.Cause<unknown> | undefined
-  readonly waiting?: boolean | undefined
   readonly onRetry: M
   readonly testId?: string | undefined
 }
@@ -154,9 +151,9 @@ export const refreshErrorBanner = <M>(
   ready: ReadyQuery<unknown, unknown>,
   options: RefreshErrorBannerOptions<M>
 ) => {
-  const cause = options.cause ?? ready.refreshFailure
+  const cause = ready.refreshFailure
   if (cause === undefined) return undefined
-  const waiting = options.waiting ?? ready.waiting
+  const waiting = ready.waiting
   return h.div
     .key("refresh-error")
     .class(`${Design.ui.cardWarning} ${Design.ui.row} justify-between`)
@@ -180,7 +177,6 @@ export const refreshErrorBanner = <M>(
 }
 
 export interface RefreshButtonOptions<M> {
-  readonly waiting?: boolean | undefined
   readonly onRefresh: M
   readonly testId?: string | undefined
   readonly label?: string | undefined
@@ -192,7 +188,7 @@ export const refreshButton = <M>(
   state: { readonly waiting: boolean },
   options: RefreshButtonOptions<M>
 ) => {
-  const waiting = options.waiting ?? state.waiting
+  const waiting = state.waiting
   return Button(h, {
     props: { disabled: waiting },
     onPress: options.onRefresh

@@ -7,9 +7,6 @@
  */
 export const HTTP_STATUS_ATTRIBUTE = "data-http-status"
 
-/** Back-compatible alias used by 404 resource pages (`ProductDetailPage`). */
-export const NOT_FOUND_ATTRIBUTE = HTTP_STATUS_ATTRIBUTE
-
 const httpStatusTag = new RegExp(`<([a-z][^>]*)\\s${HTTP_STATUS_ATTRIBUTE}="(404|503)"`)
 
 /**
@@ -21,6 +18,3 @@ export const renderedHttpStatus = (html: string): 404 | 503 | undefined => {
   if (match === null) return undefined
   return match[2] === "503" ? 503 : 404
 }
-
-/** Whether the rendered HTML carries `data-http-status="404"` on an element. */
-export const renderedNotFound = (html: string): boolean => renderedHttpStatus(html) === 404

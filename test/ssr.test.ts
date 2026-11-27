@@ -183,11 +183,12 @@ describe("renderPage outcomes", () => {
   })
 })
 
-describe("Status.renderedNotFound", () => {
+describe("Status.renderedHttpStatus", () => {
   it("only trusts the marker on an element, never in text", () => {
-    expect(Status.renderedNotFound('<section class="x" data-http-status="404">')).toBe(true)
-    expect(Status.renderedNotFound('<p>data-http-status="404"</p>')).toBe(false)
-    expect(Status.renderedNotFound("<p>&lt;b data-http-status=&quot;404&quot;&gt;</p>")).toBe(false)
-    expect(Status.renderedNotFound('<section data-http-status="200">')).toBe(false)
+    expect(Status.renderedHttpStatus('<section class="x" data-http-status="404">')).toBe(404)
+    expect(Status.renderedHttpStatus('<div role="alert" data-http-status="503">')).toBe(503)
+    expect(Status.renderedHttpStatus('<p>data-http-status="404"</p>')).toBeUndefined()
+    expect(Status.renderedHttpStatus("<p>&lt;b data-http-status=&quot;404&quot;&gt;</p>")).toBeUndefined()
+    expect(Status.renderedHttpStatus('<section data-http-status="200">')).toBeUndefined()
   })
 })

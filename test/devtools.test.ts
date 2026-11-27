@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process"
+import { spawn } from "node:child_process"
 import { request as nodeHttpRequest } from "node:http"
 import { createServer, type Server as NetServer } from "node:net"
 import { BrowserRouter } from "@effect/ui/html"
@@ -21,6 +21,7 @@ import * as State from "../src/browser/state.ts"
 import * as JsonString from "../src/lib/jsonString.ts"
 import * as Routes from "../src/routes.ts"
 import * as Helpers from "./helpers.ts"
+import * as Proc from "./support/process.ts"
 import * as TestRpc from "./support/rpc.ts"
 
 const repoRoot = process.cwd()
@@ -153,43 +154,6 @@ const findFreePortRange = async (count: number): Promise<number> => {
   throw new Error(`Could not find ${count} consecutive free ports`)
 }
 
-const waitFor = async <A>(check: () => Promise<A | undefined>, label: string, timeoutMs = 15_000): Promise<A> => {
-  const deadline = Date.now() + timeoutMs
-  let lastError: unknown
-  while (Date.now() < deadline) {
-    try {
-      const value = await check()
-      if (value !== undefined) return value
-    } catch (error) {
-      lastError = error
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50))
-  }
-  const detail =
-    lastError === undefined
-      ? ""
-      : ` (last error: ${lastError instanceof Error ? lastError.message : JSON.stringify(lastError)})`
-  throw new Error(`Timed out waiting for ${label}${detail}`)
-}
-
-const stopChild = async (child: ChildProcess): Promise<void> => {
-  if (child.exitCode !== null || child.signalCode !== null) return
-  const exited = new Promise<void>((resolve) => {
-    child.once("exit", () => resolve())
-  })
-  child.kill("SIGTERM")
-  const timer = setTimeout(() => {
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill("SIGKILL")
-    }
-  }, 5_000)
-  timer.unref()
-  await exited
-  clearTimeout(timer)
-  child.stdout?.destroy()
-  child.stderr?.destroy()
-}
-
 interface RunningDevServer {
   readonly appPort: number
   readonly devToolsPort: number
@@ -198,15 +162,13 @@ interface RunningDevServer {
   readonly stop: () => Promise<void>
 }
 
-// eslint-disable-next-line no-control-regex
-const ANSI_ESCAPE_RE = /\u001b\[[0-9;]*m/g
 const DEV_SERVER_LINE_RE = /dev server on http:\/\/localhost:(\d+)/
 const DEVTOOLS_LINE_RE = /Effect UI DevTools:\s*http:\/\/127\.0\.0\.1:(\d+)/
 
 const parseAnnouncedPorts = (
   output: string
 ): { readonly appPort: number; readonly devToolsPort: number } | undefined => {
-  const clean = output.replace(ANSI_ESCAPE_RE, "")
+  const clean = output.replace(Proc.ANSI_ESCAPE_RE, "")
   const appMatch = clean.match(DEV_SERVER_LINE_RE)
   const dtMatch = clean.match(DEVTOOLS_LINE_RE)
   if (appMatch?.[1] === undefined || dtMatch?.[1] === undefined) return undefined
@@ -222,19 +184,10 @@ const startDevServer = async (
     readonly DEVTOOLS_PORT?: string
   } = { PORT: "0" }
 ): Promise<RunningDevServer> => {
-  const env: NodeJS.ProcessEnv = { ...process.env }
-  delete env["VITEST"]
-  delete env["VITEST_WORKER_ID"]
-  delete env["VITEST_POOL_ID"]
-  delete env["PORT"]
-  delete env["DEVTOOLS_PORT"]
-  if (envOverrides.PORT !== undefined) env["PORT"] = envOverrides.PORT
-  if (envOverrides.DEVTOOLS_PORT !== undefined) env["DEVTOOLS_PORT"] = envOverrides.DEVTOOLS_PORT
-
   let output = ""
   const child = spawn(process.execPath, ["scripts/dev.ts"], {
     cwd: repoRoot,
-    env,
+    env: Proc.cleanChildEnv(envOverrides),
     stdio: ["ignore", "pipe", "pipe"]
   })
 
@@ -246,7 +199,7 @@ const startDevServer = async (
 
   let announced: { readonly appPort: number; readonly devToolsPort: number }
   try {
-    announced = await waitFor(async () => {
+    announced = await Proc.waitFor(async () => {
       if (child.exitCode !== null) {
         throw new Error(`scripts/dev.ts exited early with code ${child.exitCode}:\n${output}`)
       }
@@ -256,7 +209,7 @@ const startDevServer = async (
       return res.status === 200 ? ports : undefined
     }, "dev server and DevTools startup")
   } catch (error) {
-    await stopChild(child)
+    await Proc.stopChild(child)
     throw error
   }
 
@@ -265,7 +218,7 @@ const startDevServer = async (
     devToolsPort: announced.devToolsPort,
     appUrl: `http://127.0.0.1:${announced.appPort}`,
     devToolsUrl: `http://127.0.0.1:${announced.devToolsPort}`,
-    stop: () => stopChild(child)
+    stop: () => Proc.stopChild(child)
   }
 }
 
@@ -535,7 +488,7 @@ describe("dev server DevTools integration (end-to-end)", () => {
       )
 
       // 3. Assert in-page DevTools overlay iframe is mounted and populated
-      const iframe = await waitFor(async () => {
+      const iframe = await Proc.waitFor(async () => {
         const el = document.querySelector("iframe[data-effect-ui-devtools]")
         if (!(el instanceof HTMLIFrameElement)) return undefined
         const inner = el.contentDocument
@@ -546,7 +499,7 @@ describe("dev server DevTools integration (end-to-end)", () => {
       // 4. Assert live DevToolsServer MCP populates session + entries
       const mcp = await createMcpClient(devServer.devToolsUrl)
 
-      const activeSession = await waitFor(async () => {
+      const activeSession = await Proc.waitFor(async () => {
         const text = await mcp.callTool("list_sessions")
         const { result: sessions } = decodeListSessions(text)
         return sessions.find(
@@ -572,7 +525,7 @@ describe("dev server DevTools integration (end-to-end)", () => {
         compareButton.click()
       }
 
-      const entries = await waitFor(async () => {
+      const entries = await Proc.waitFor(async () => {
         const text = await mcp.callTool("list_entries", {
           session: activeSession.session
         })

@@ -1,73 +1,25 @@
 // @vitest-environment node
-import { execFileSync, spawn, type ChildProcess } from "node:child_process"
+import { execFileSync, spawn } from "node:child_process"
 import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Schema } from "effect"
 import { afterAll, describe, expect, it } from "vite-plus/test"
 import * as JsonString from "../src/lib/jsonString.ts"
+import * as Proc from "./support/process.ts"
 
 const repoRoot = process.cwd()
-
-// eslint-disable-next-line no-control-regex
-const ANSI_ESCAPE_RE = /\u001b\[[0-9;]*m/g
-
-const waitFor = async <A>(check: () => Promise<A | undefined>, label: string, timeoutMs = 20_000): Promise<A> => {
-  const deadline = Date.now() + timeoutMs
-  let lastError: unknown
-  while (Date.now() < deadline) {
-    try {
-      const value = await check()
-      if (value !== undefined) return value
-    } catch (error) {
-      lastError = error
-    }
-    await new Promise((resolve) => setTimeout(resolve, 40))
-  }
-  const detail =
-    lastError === undefined
-      ? ""
-      : ` (last error: ${lastError instanceof Error ? lastError.message : JSON.stringify(lastError)})`
-  throw new Error(`Timed out waiting for ${label}${detail}`)
-}
-
-const stopChild = async (child: ChildProcess): Promise<void> => {
-  if (child.exitCode !== null || child.signalCode !== null) return
-  const exited = new Promise<void>((resolve) => {
-    child.once("exit", () => resolve())
-  })
-  child.kill("SIGTERM")
-  const timer = setTimeout(() => {
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill("SIGKILL")
-    }
-  }, 5_000)
-  timer.unref()
-  await exited
-  clearTimeout(timer)
-  child.stdout?.destroy()
-  child.stderr?.destroy()
-}
 
 interface RunningServer {
   readonly url: string
   readonly stop: () => Promise<void>
 }
 
-const cleanChildEnv = (): NodeJS.ProcessEnv => {
-  const env: NodeJS.ProcessEnv = { ...process.env, PORT: "0" }
-  delete env["VITEST"]
-  delete env["VITEST_WORKER_ID"]
-  delete env["VITEST_POOL_ID"]
-  delete env["DEVTOOLS_PORT"]
-  return env
-}
-
 const startDevServer = async (): Promise<RunningServer> => {
   let output = ""
   const child = spawn(process.execPath, ["scripts/dev.ts"], {
     cwd: repoRoot,
-    env: cleanChildEnv(),
+    env: Proc.cleanChildEnv(),
     stdio: ["ignore", "pipe", "pipe"]
   })
   const onChunk = (chunk: Buffer) => {
@@ -77,20 +29,20 @@ const startDevServer = async (): Promise<RunningServer> => {
   child.stderr.on("data", onChunk)
 
   try {
-    const port = await waitFor(async () => {
+    const port = await Proc.waitFor(async () => {
       if (child.exitCode !== null) {
         throw new Error(`scripts/dev.ts exited early (${child.exitCode}):\n${output}`)
       }
-      const clean = output.replace(ANSI_ESCAPE_RE, "")
+      const clean = output.replace(Proc.ANSI_ESCAPE_RE, "")
       const match = /dev server on http:\/\/localhost:(\d+)/.exec(clean)
       return match?.[1] === undefined ? undefined : Number(match[1])
     }, "dev server startup")
     return {
       url: `http://127.0.0.1:${port}`,
-      stop: () => stopChild(child)
+      stop: () => Proc.stopChild(child)
     }
   } catch (error) {
-    await stopChild(child)
+    await Proc.stopChild(child)
     throw error
   }
 }
@@ -99,7 +51,7 @@ const startProdServer = async (): Promise<RunningServer> => {
   let output = ""
   const child = spawn(process.execPath, ["dist/server/serve.js"], {
     cwd: repoRoot,
-    env: cleanChildEnv(),
+    env: Proc.cleanChildEnv(),
     stdio: ["ignore", "pipe", "pipe"]
   })
   const onChunk = (chunk: Buffer) => {
@@ -109,7 +61,7 @@ const startProdServer = async (): Promise<RunningServer> => {
   child.stderr.on("data", onChunk)
 
   try {
-    const port = await waitFor(async () => {
+    const port = await Proc.waitFor(async () => {
       if (child.exitCode !== null) {
         throw new Error(`dist/server/serve.js exited early (${child.exitCode}):\n${output}`)
       }
@@ -118,10 +70,10 @@ const startProdServer = async (): Promise<RunningServer> => {
     }, "production server startup")
     return {
       url: `http://127.0.0.1:${port}`,
-      stop: () => stopChild(child)
+      stop: () => Proc.stopChild(child)
     }
   } catch (error) {
-    await stopChild(child)
+    await Proc.stopChild(child)
     throw error
   }
 }
@@ -325,7 +277,7 @@ const openChromiumSession = async (executablePath: string): Promise<BrowserSessi
   })
 
   try {
-    const debugPort = await waitFor(async () => {
+    const debugPort = await Proc.waitFor(async () => {
       if (browser.exitCode !== null) {
         throw new Error(`Chromium exited early (${browser.exitCode}):\n${stderr}`)
       }
@@ -334,7 +286,7 @@ const openChromiumSession = async (executablePath: string): Promise<BrowserSessi
       return new URL(match[1]).port
     }, "Chromium DevTools WebSocket port")
 
-    const pageWsUrl = await waitFor(async () => {
+    const pageWsUrl = await Proc.waitFor(async () => {
       const res = await fetch(`http://127.0.0.1:${debugPort}/json/list`)
       if (!res.ok) return undefined
       const targets = decodeTargets(await res.text())
@@ -424,12 +376,12 @@ const openChromiumSession = async (executablePath: string): Promise<BrowserSessi
         }
         pending.clear()
         ws.close()
-        await stopChild(browser)
+        await Proc.stopChild(browser)
         rmSync(userDataDir, { recursive: true, force: true })
       }
     }
   } catch (error) {
-    await stopChild(browser)
+    await Proc.stopChild(browser)
     rmSync(userDataDir, { recursive: true, force: true })
     throw error
   }
@@ -517,7 +469,7 @@ const waitForHydratedLoad = (
   mode: "dev" | "prod",
   expectedLang: string
 ): Promise<PageSnapshot> =>
-  waitFor(async () => {
+  Proc.waitFor(async () => {
     const snap = await evaluateSnapshot(browser)
     if (!snap.hydrated || snap.markerOldPage || snap.lang !== expectedLang) return undefined
     if (snap.firstPaintMs === null || snap.blockingCssEndMs === null) return undefined
@@ -577,7 +529,7 @@ const verifyServerZeroFlash = async (browser: BrowserSession, baseUrl: string, m
       return true
     })()`
   )
-  const csrAnalytics = await waitFor(async () => {
+  const csrAnalytics = await Proc.waitFor(async () => {
     const snap = await evaluateSnapshot(browser)
     if (snap.pathname !== "/analytics" || snap.chartFirstSeen === null || snap.chartDisplay === null) return undefined
     if (mode === "dev" && (snap.directLinkCount !== 0 || snap.viteStyleCount < 2)) return undefined
@@ -600,7 +552,7 @@ const verifyServerZeroFlash = async (browser: BrowserSession, baseUrl: string, m
       return true
     })()`
   )
-  const csrOrder = await waitFor(async () => {
+  const csrOrder = await Proc.waitFor(async () => {
     const snap = await evaluateSnapshot(browser)
     return snap.pathname === "/order" && snap.hasOrderPage ? snap : undefined
   }, `${mode} CSR navigation to /order`)
@@ -609,7 +561,7 @@ const verifyServerZeroFlash = async (browser: BrowserSession, baseUrl: string, m
 
   // 6. Cold SSR load directly on /analytics (global CSS + route CSS both in <head> before paint)
   await browser.send("Page.navigate", { url: `${baseUrl}/analytics` })
-  const ssrAnalytics = await waitFor(async () => {
+  const ssrAnalytics = await Proc.waitFor(async () => {
     const snap = await evaluateSnapshot(browser)
     if (!snap.hydrated || snap.pathname !== "/analytics" || snap.chartDisplay === null) return undefined
     if (snap.firstPaintMs === null || snap.blockingCssEndMs === null) return undefined

@@ -116,20 +116,7 @@ const parseRequestUrl = (target: string): URL | undefined => {
   return url.origin === "http://localhost" ? url : undefined
 }
 
-const rpcRawPaths: ReadonlySet<string> = new Set([
-  "/rpc/search",
-  "/rpc/search/",
-  "/rpc/product",
-  "/rpc/product/",
-  "/rpc/analytics",
-  "/rpc/analytics/",
-  "/rpc/status",
-  "/rpc/status/",
-  "/rpc/order",
-  "/rpc/order/",
-  "/rpc/warehouse",
-  "/rpc/warehouse/"
-])
+const rpcRawPaths: ReadonlySet<string> = new Set(Rpc.RPC_PATHS.flatMap((path) => [path, `${path}/`]))
 
 const isRpcRawPath = (target: string): boolean => {
   const rawPath = target.split(/[?#]/, 1)[0]
@@ -232,7 +219,7 @@ const handlePageOrStatic = (
         return textReply(
           method,
           page.status,
-          { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache", ...security },
+          { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache", vary: "Cookie", ...security },
           html
         )
       }

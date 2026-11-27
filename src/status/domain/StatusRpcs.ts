@@ -3,7 +3,7 @@ import * as ApiError from "../../rpc/domain/ApiError.ts"
 import * as Status from "./Status.ts"
 
 /** RPC group for the `/status` error & refresh demo, mounted independently at `/rpc/status`. */
-export const StatusRpcs = RpcGroup.make(
+export class StatusRpcs extends RpcGroup.make(
   Rpc.make("getStatus", {
     payload: {
       mode: Status.StatusMode
@@ -11,4 +11,4 @@ export const StatusRpcs = RpcGroup.make(
     success: Status.SystemStatus,
     error: ApiError.ApiError
   })
-)
+) {}
