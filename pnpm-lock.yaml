@@ -174,14 +174,14 @@ importers:
   .:
     dependencies:
       '@effect/ui':
-        specifier: https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234
-        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5)
+        specifier: https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b
+        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b(effect@4.1.6)
       '@effect/ui-kit':
-        specifier: https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234
-        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5))(effect@4.1.5)
+        specifier: https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7bff56b
+        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7bff56b(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b(effect@4.1.6))(effect@4.1.6)
       effect:
-        specifier: 4.1.5
-        version: 4.1.5
+        specifier: 4.1.6
+        version: 4.1.6
     devDependencies:
       '@effect-app/eslint-codegen-model':
         specifier: 2.0.1
@@ -193,17 +193,17 @@ importers:
         specifier: 0.87.5
         version: 0.87.5
       '@effect/platform-node':
-        specifier: 4.1.5
-        version: 4.1.5(effect@4.1.5)(redis@6.4.0)
+        specifier: 4.1.6
+        version: 4.1.6(effect@4.1.6)(redis@6.4.0)
       '@effect/tsgo':
         specifier: 0.73.7
         version: 0.73.7
       '@effect/ui-devtools':
-        specifier: https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7ef6234
-        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7ef6234(@effect/platform-node@4.1.5(effect@4.1.5)(redis@6.4.0))(@effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5))(effect@4.1.5))(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5))(effect@4.1.5)
+        specifier: https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7bff56b
+        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7bff56b(@effect/platform-node@4.1.6(effect@4.1.6)(redis@6.4.0))(@effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7bff56b(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b(effect@4.1.6))(effect@4.1.6))(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b(effect@4.1.6))(effect@4.1.6)
       '@effect/vitest':
-        specifier: 4.1.5
-        version: 4.1.5(effect@4.1.5)(vitest@5.1.1)
+        specifier: 4.1.6
+        version: 4.1.6(effect@4.1.6)(vitest@5.1.1)
       '@tailwindcss/vite':
         specifier: 4.3.5
         version: 4.3.5(@voidzero-dev/vite-plus-core@8.3.8001(@types/node@25.9.1)(jiti@2.7.0)(typescript@6.0.3))
@@ -259,17 +259,17 @@ packages:
     resolution: {integrity: sha512-np/zJgk71/PyHxtoqyUKLYcpQhoRBI+L6+1Z0ILk35JSQ/lvXzwlwOwddYZLDkeC4bdF2ukKekqKlla/F88R5w==}
     hasBin: true
 
-  '@effect/platform-node-shared@4.1.5':
-    resolution: {integrity: sha512-JzlrYe4uKaBFTWihBRXo2pDjkUVB39kQpKdGfXdbp7Co5sKT8hbcjOmdB5pg/WOYESdGTddd3fxD4lwlZELbZQ==}
+  '@effect/platform-node-shared@4.1.6':
+    resolution: {integrity: sha512-RWKHX5TEZet2KC/NlBu5prBkZT30m6h8YTSWfJM0wIw0BNMkfEzCuH6N5HOw8mUudclWp5z1XTzsZ7xg0h+6Qw==}
     engines: {node: '>=22.19.0'}
     peerDependencies:
-      effect: ^4.1.5
+      effect: ^4.1.6
 
-  '@effect/platform-node@4.1.5':
-    resolution: {integrity: sha512-tFnRvxF9EKc3oU17sDHj1JeLP+TL/IkaOEl3IUk2EjgMS0x7AWs0ioUXjdNKLb3Z1LdjVfMf/DxsNh9PW5FFAg==}
+  '@effect/platform-node@4.1.6':
+    resolution: {integrity: sha512-DNHzWIRARCCoK6Ez5MOqJ6H81e5FbQecH8GY41ftJGqATENUOVOLkT1iNgxBt6zPi36iF1EpraBen+MjKUqHpw==}
     engines: {node: '>=22.19.0'}
     peerDependencies:
-      effect: ^4.1.5
+      effect: ^4.1.6
       redis: '>=5.1.0 <7.0.0'
 
   '@effect/tsgo-darwin-arm64@0.73.7':
@@ -311,8 +311,8 @@ packages:
     resolution: {integrity: sha512-Ks+JDKKrQxhV370MX/AZyBwX+/zUScIHBZ0n4rbS2/bwTcpCPga+9H5yNKX+uOMMUwreH7GFnBka0iZKqkRbfw==}
     hasBin: true
 
-  '@effect/ui-devtools@https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7ef6234':
-    resolution: {integrity: sha512-Bczpdm1kDv11KznfF2veMrcfCqnKmak3l8ycNZbQznK9Awj5bS0IPndRzbVu9S7hA1NXsK/FCQh8jCTTx+McrQ==, tarball: https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7ef6234}
+  '@effect/ui-devtools@https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7bff56b':
+    resolution: {integrity: sha512-kCLqy6rQvXFBAqyUytgS6Lxa79/r+1dEorb5D+Hva3uP4VNmm/tA8AuF5jmye4X/AH31sUhJ9tQB46uiDBRWZw==, tarball: https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7bff56b}
     version: 0.0.0
     hasBin: true
     peerDependencies:
@@ -324,23 +324,23 @@ packages:
       '@effect/platform-node':
         optional: true
 
-  '@effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234':
-    resolution: {integrity: sha512-7rRX78SyQK4JPpt1LD7ym+FvMBvYweWXuahIcDxeOSpoEiKgVYa4uxuDAAitVN3knHlpYIsVuYiZZTIQjuOmpA==, tarball: https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234}
+  '@effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7bff56b':
+    resolution: {integrity: sha512-wLh/vd7hsWs4IELZ/NSrp+TmtEMkw8dKCnJbmYVV/aOv7t3L0ianvE8uTSVaVQV1JCVOhLVxEFw9krQ52Qg/6Q==, tarball: https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7bff56b}
     version: 0.0.0
     peerDependencies:
       '@effect/ui': ^0.0.0
-      effect: ^4.1.4
+      effect: ^4.1.6
 
-  '@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234':
-    resolution: {integrity: sha512-eprvfkEi+LtTengutpFh4A5GdV67I5JmNcmeJ+emSXrpnWeGghoCaSVh2AKvT0V7IRZfByxU6mMIrvFWPczFeA==, tarball: https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234}
+  '@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b':
+    resolution: {integrity: sha512-uYecYnIGC/Q15cl914C6Zbr1FOT1ahCjy625xwQyDODgNdq/yPEdxr6UuhkaYp83zWsiL4rVJsz8nFHziOCBDw==, tarball: https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b}
     version: 0.0.0
     peerDependencies:
       effect: ^4.1.4
 
-  '@effect/vitest@4.1.5':
-    resolution: {integrity: sha512-18u1013wkJtSelk1ZYLc/5aUnluTQyDfi2hAemkJW1GQ9qXw4mtPSiSf0AXZPhesmGCvG1Dk2C4JYD2sz+R72w==}
+  '@effect/vitest@4.1.6':
+    resolution: {integrity: sha512-Knb13gPhDbtOuNUnPXE/Sl+UvrKFHRATwU2vy+DGQCpjK1yI3oy1feQo1g2X8ZdOdc63sJB7HJXCMNsDy8xYvg==}
     peerDependencies:
-      effect: ^4.1.5
+      effect: ^4.1.6
       vitest: 5.1.1
 
   '@emnapi/core@1.10.0':
@@ -1495,8 +1495,8 @@ packages:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
     engines: {node: '>= 0.4'}
 
-  effect@4.1.5:
-    resolution: {integrity: sha512-xyR20KhQI0vg2gD8ILUSQRTTESEYJ0JKdP+QD8J37xbwPTqXRxFM/l0+vUVD9fuSvoYruoTqyt33C4FZv1s4TQ==}
+  effect@4.1.6:
+    resolution: {integrity: sha512-P3CxMsdcSCle/7/FnPILd9GJkNqGtduKam2LX9Xsb8LoOjmeQ9Kmsuh16JwtIthaxLyiTCOzUUt+PZsXIohl+A==}
 
   enhanced-resolve@5.27.0:
     resolution: {integrity: sha512-Do6BB2xzlcc/odFg+XEYyneAx4T/WfywO71yw9ePS2tVfRsf7JVR4mUeELadIeHzixkzbG5DpluiEFPi2WGfYQ==}
@@ -2560,19 +2560,19 @@ snapshots:
 
   '@effect/language-service@0.87.5': {}
 
-  '@effect/platform-node-shared@4.1.5(effect@4.1.5)':
+  '@effect/platform-node-shared@4.1.6(effect@4.1.6)':
     dependencies:
       '@types/ws': 8.18.2
-      effect: 4.1.5
+      effect: 4.1.6
       ws: 8.23.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node@4.1.5(effect@4.1.5)(redis@6.4.0)':
+  '@effect/platform-node@4.1.6(effect@4.1.6)(redis@6.4.0)':
     dependencies:
-      '@effect/platform-node-shared': 4.1.5(effect@4.1.5)
-      effect: 4.1.5
+      '@effect/platform-node-shared': 4.1.6(effect@4.1.6)
+      effect: 4.1.6
       redis: 6.4.0
       undici: 8.13.1
     transitivePeerDependencies:
@@ -2610,26 +2610,26 @@ snapshots:
       '@effect/tsgo-win32-arm64': 0.73.7
       '@effect/tsgo-win32-x64': 0.73.7
 
-  '@effect/ui-devtools@https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7ef6234(@effect/platform-node@4.1.5(effect@4.1.5)(redis@6.4.0))(@effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5))(effect@4.1.5))(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5))(effect@4.1.5)':
+  '@effect/ui-devtools@https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7bff56b(@effect/platform-node@4.1.6(effect@4.1.6)(redis@6.4.0))(@effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7bff56b(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b(effect@4.1.6))(effect@4.1.6))(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b(effect@4.1.6))(effect@4.1.6)':
     dependencies:
-      '@effect/ui': https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5)
-      '@effect/ui-kit': https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5))(effect@4.1.5)
-      effect: 4.1.5
+      '@effect/ui': https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b(effect@4.1.6)
+      '@effect/ui-kit': https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7bff56b(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b(effect@4.1.6))(effect@4.1.6)
+      effect: 4.1.6
     optionalDependencies:
-      '@effect/platform-node': 4.1.5(effect@4.1.5)(redis@6.4.0)
+      '@effect/platform-node': 4.1.6(effect@4.1.6)(redis@6.4.0)
 
-  '@effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5))(effect@4.1.5)':
+  '@effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7bff56b(@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b(effect@4.1.6))(effect@4.1.6)':
     dependencies:
-      '@effect/ui': https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5)
-      effect: 4.1.5
+      '@effect/ui': https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b(effect@4.1.6)
+      effect: 4.1.6
 
-  '@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234(effect@4.1.5)':
+  '@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b(effect@4.1.6)':
     dependencies:
-      effect: 4.1.5
+      effect: 4.1.6
 
-  '@effect/vitest@4.1.5(effect@4.1.5)(vitest@5.1.1)':
+  '@effect/vitest@4.1.6(effect@4.1.6)(vitest@5.1.1)':
     dependencies:
-      effect: 4.1.5
+      effect: 4.1.6
       vitest: 5.1.1(@types/node@25.9.1)(@vitest/browser-preview@5.1.1)(@vitest/ui@5.1.1)(@voidzero-dev/vite-plus-core@8.3.8001(@types/node@25.9.1)(jiti@2.7.0)(typescript@6.0.3))(happy-dom@21.0.4)
 
   '@emnapi/core@1.10.0':
@@ -3487,7 +3487,7 @@ snapshots:
       es-errors: 1.3.0
       gopd: 1.2.0
 
-  effect@4.1.5: {}
+  effect@4.1.6: {}
 
   enhanced-resolve@5.27.0:
     dependencies:

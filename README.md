@@ -15,14 +15,14 @@ A small, strict-TypeScript reference for **[`@effect/ui`](https://github.com/Eff
 
 |                                             |                                                                                                                                        |
 | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `@effect/ui`                                | `https://pkg.pr.new/Effect-TS/ui/@effect/ui@7ef6234`                                                                                   |
-| `@effect/ui-kit`                            | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7ef6234` (same commit)                                                                 |
-| `@effect/ui-devtools`                       | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7ef6234` (dev-only)                                                               |
-| `effect` / `@effect/platform-node`          | `4.1.5`                                                                                                                                |
+| `@effect/ui`                                | `https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b`                                                                                   |
+| `@effect/ui-kit`                            | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7bff56b` (same commit)                                                                 |
+| `@effect/ui-devtools`                       | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7bff56b` (dev-only)                                                               |
+| `effect` / `@effect/platform-node`          | `4.1.6`                                                                                                                                |
 | Tailwind CSS / `@tailwindcss/vite`          | `4.3.5`                                                                                                                                |
 | Vite+ (`vite-plus`)                         | `1.8.0` (Vite `8.3.8`, Vitest `5.1.1`; `pnpm-workspace.yaml` overrides pin Oxlint `1.95.0`, Oxfmt `0.80.0`, `tsrs` `7.1.0-beta.tsrs5`) |
 | TypeScript / happy-dom                      | `6.0.3` / `21.0.4`                                                                                                                     |
-| `@effect/vitest`                            | `4.1.5` (pinned with `effect`)                                                                                                         |
+| `@effect/vitest`                            | `4.1.6` (pinned with `effect`)                                                                                                         |
 | Package manager                             | pnpm 12, Node ≥ 22.18                                                                                                                  |
 | `@effect/tsgo` / `@effect/language-service` | `0.73.7` / `0.87.5`                                                                                                                    |
 

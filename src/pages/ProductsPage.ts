@@ -1,7 +1,7 @@
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Button, Input } from "@effect/ui-kit"
-import { Option, Schema } from "effect"
+import { Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import * as Design from "../design/classes.ts"
 import * as Product from "../product/domain/Product.ts"
@@ -53,9 +53,9 @@ const ProductsPageNoDeps = Html.component({
   head: () => [Head.title("Products")],
   view: (h, model) => {
     const q = h.props.route.search.q
-    // The last results stay up while the next search loads.
+    // The last results stay up while the next search loads (kept in `onSuccess` with `waiting: true`).
     const results = AsyncResult.match(h.queries.results, {
-      onInitial: () => Option.getOrUndefined(h.previous.results),
+      onInitial: () => undefined,
       onFailure: () => undefined,
       onSuccess: ({ value }) => value
     })

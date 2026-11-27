@@ -1,7 +1,7 @@
 import { Component, Head, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Collapsible, Tabs } from "@effect/ui-kit"
-import { Option, Schema } from "effect"
+import { Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import * as Chart from "../analytics/components/Chart.ts"
 import * as Analytics from "../analytics/domain/Analytics.ts"
@@ -42,9 +42,9 @@ const AnalyticsPageNoDeps = Html.component({
   head: () => [Head.title("Analytics")],
   view: (h, model) => {
     const title = Analytics.metricTitle(model.metric)
-    // The last series stays up while the next tab's loads.
+    // The last series stays up while the next tab's loads (kept in `onSuccess` with `waiting: true`).
     const series = AsyncResult.match(h.queries.series, {
-      onInitial: () => Option.getOrUndefined(h.previous.series),
+      onInitial: () => undefined,
       onFailure: () => undefined,
       onSuccess: ({ value }) => value
     })
