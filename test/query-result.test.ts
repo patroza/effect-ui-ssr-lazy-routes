@@ -40,6 +40,7 @@ describe("QueryResult boundary & /status demo", () => {
       Effect.gen(function* () {
         const server = yield* Helpers.serverRender("/status?mode=fail-ssr")
         expect(server.status).toBe(503)
+        expect(server.appHtml).toContain("System Status")
         expect(server.appHtml).toContain('data-testid="query-error"')
         expect(server.appHtml).toContain("Status backend unavailable during SSR")
         expect(server.appHtml).not.toContain('data-testid="status-loading"')
@@ -50,6 +51,10 @@ describe("QueryResult boundary & /status demo", () => {
         expect(browser.before).not.toBeNull()
         expect(browser.fallbacksSeen()).toEqual([])
         expect(browser.container.querySelector('[data-testid="status-loading"]')).toBeNull()
+        expect(browser.container.querySelector("h1")?.textContent).toBe("System Status")
+        expect(browser.container.querySelector('[data-testid="query-error"] h2')?.textContent).toBe(
+          "Couldn't load system status"
+        )
         expect(browser.container.querySelector('[data-testid="query-error"]')).toBe(browser.before)
         expect(Helpers.text(browser.container, '[data-testid="query-error-message"]')).toBe(
           "Status backend unavailable during SSR"

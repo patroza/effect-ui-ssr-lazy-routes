@@ -106,19 +106,22 @@ const StatusPageNoDeps = Html.component({
       .attr("data-query", GetStatus.GET_STATUS_QUERY_CHUNK)
       .class(Design.ui.stack)
 
+    const heading = h.h1.class(Design.ui.title).children("System Status")
     const status = QueryResult.read(h.queries.status)
     if (QueryResult.isInitial(status)) {
       return shell.children(
-        h.h1.class(Design.ui.title).children("System Status"),
+        heading,
         modeLinks,
         h.p.class(Design.ui.muted).attr("data-testid", "status-loading").children("Loading status…")
       )
     }
     if (QueryResult.isFailure(status)) {
       return shell.children(
+        heading,
         modeLinks,
         QueryResult.errorPanel(h, {
           title: "Couldn't load system status",
+          heading: 2,
           cause: status.cause,
           httpStatus: "503",
           onRetry: StatusPageMessage.ClickedRefresh()
@@ -127,7 +130,7 @@ const StatusPageNoDeps = Html.component({
     }
 
     return shell.children(
-      h.h1.class(Design.ui.title).children("System Status"),
+      heading,
       modeLinks,
       status.refreshFailure === undefined
         ? undefined
