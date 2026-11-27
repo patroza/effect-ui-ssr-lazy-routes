@@ -2,6 +2,7 @@ import { Context, Effect, Layer, Ref } from "effect"
 import { HttpClient, type HttpClientError, type HttpClientRequest, HttpRouter } from "effect/http"
 import { RpcSerialization } from "effect/rpc"
 import * as AnalyticsRpcs from "../../src/analytics/domain/AnalyticsRpcs.ts"
+import * as OrderRpcs from "../../src/order/domain/OrderRpcs.ts"
 import * as ProductRpcs from "../../src/product/domain/ProductRpcs.ts"
 import * as ApiError from "../../src/rpc/domain/ApiError.ts"
 import * as SearchRpcs from "../../src/search/domain/SearchRpcs.ts"
@@ -10,6 +11,7 @@ import * as Rpc from "../../src/server/rpc.ts"
 import * as AnalyticsStore from "../../src/server/services/AnalyticsStore.ts"
 import * as BookmarkStore from "../../src/server/services/BookmarkStore.ts"
 import * as CatalogStore from "../../src/server/services/CatalogStore.ts"
+import * as OrderStore from "../../src/server/services/OrderStore.ts"
 import * as StatusStore from "../../src/server/services/StatusStore.ts"
 
 /** How many times each RPC operation ran. */
@@ -19,6 +21,9 @@ export interface RpcCounts {
   readonly bookmarkProduct: number
   readonly getAnalytics: number
   readonly getStatus: number
+  readonly checkOrderCode: number
+  readonly validatePromoCode: number
+  readonly submitOrder: number
 }
 
 export const noCalls: RpcCounts = {
@@ -26,7 +31,10 @@ export const noCalls: RpcCounts = {
   getProduct: 0,
   bookmarkProduct: 0,
   getAnalytics: 0,
-  getStatus: 0
+  getStatus: 0,
+  checkOrderCode: 0,
+  validatePromoCode: 0,
+  submitOrder: 0
 }
 
 /**
@@ -122,6 +130,26 @@ const makeCountingStatusHandlers = () =>
     })
   )
 
+const makeCountingOrderHandlers = () =>
+  OrderRpcs.OrderRpcs.toLayer(
+    Effect.gen(function* () {
+      const calls = yield* RpcCalls
+      const orders = yield* OrderStore.OrderStore
+      return {
+        checkOrderCode: ({ code }) =>
+          calls
+            .record("checkOrderCode")
+            .pipe(Effect.andThen(roundTripDelay), Effect.andThen(orders.checkOrderCode(code))),
+        validatePromoCode: ({ code }) =>
+          calls
+            .record("validatePromoCode")
+            .pipe(Effect.andThen(roundTripDelay), Effect.andThen(orders.validatePromoCode(code))),
+        submitOrder: ({ order }) =>
+          calls.record("submitOrder").pipe(Effect.andThen(roundTripDelay), Effect.andThen(orders.submitOrder(order)))
+      }
+    })
+  )
+
 const makeCountingHandlers = (overrides?: {
   readonly bookmarkProduct?: (id: string) => Effect.Effect<void, ApiError.ApiError>
 }) =>
@@ -129,7 +157,8 @@ const makeCountingHandlers = (overrides?: {
     makeCountingSearchHandlers(),
     makeCountingProductHandlers(overrides),
     makeCountingAnalyticsHandlers(),
-    makeCountingStatusHandlers()
+    makeCountingStatusHandlers(),
+    makeCountingOrderHandlers()
   )
 
 /**

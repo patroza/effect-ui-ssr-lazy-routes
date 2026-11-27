@@ -28,7 +28,8 @@ export const createShell =
       { tag: "Home", href: Routes.AppRoute.print(Routes.AppRoute.Home()), label: "Home" },
       { tag: "Products", href: Routes.AppRoute.print(Routes.AppRoute.Products({ search: {} })), label: "Products" },
       { tag: "Analytics", href: Routes.AppRoute.print(Routes.AppRoute.Analytics()), label: "Analytics" },
-      { tag: "Status", href: Routes.AppRoute.print(Routes.AppRoute.Status({ search: {} })), label: "Status" }
+      { tag: "Status", href: Routes.AppRoute.print(Routes.AppRoute.Status({ search: {} })), label: "Status" },
+      { tag: "Order", href: Routes.AppRoute.print(Routes.AppRoute.Order()), label: "Order" }
     ] as const
     return h.div(
       h.header.class("border-b border-neutral-200 pb-3 dark:border-neutral-800").children(
@@ -65,6 +66,7 @@ export const createShell =
               props: { mode: r.search.mode },
               fallback
             }),
+          Order: (r) => pages.Order(h, { key: Routes.AppRoute.printPath(r), fallback }),
           NotFound: (r) =>
             pages.NotFound(h, {
               key: Routes.AppRoute.printPath(r),

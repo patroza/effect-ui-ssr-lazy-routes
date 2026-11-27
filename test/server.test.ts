@@ -9,6 +9,7 @@ import { type Rpc as RpcDef, RpcClient, RpcClientError, type RpcGroup, RpcSerial
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test"
 import * as AnalyticsRpcs from "../src/analytics/domain/AnalyticsRpcs.ts"
 import * as JsonString from "../src/lib/jsonString.ts"
+import * as OrderRpcs from "../src/order/domain/OrderRpcs.ts"
 import * as Pages from "../src/pages.ts"
 import * as ProductRpcs from "../src/product/domain/ProductRpcs.ts"
 import * as ApiError from "../src/rpc/domain/ApiError.ts"
@@ -335,7 +336,7 @@ describe("Effect RPC over HTTP (POST /rpc/{search,product,analytics})", () => {
     expect(response.headers.get("content-security-policy")).toBe(Handler.contentSecurityPolicy)
     expect(await response.text()).toContain("Field notebook")
 
-    for (const rpcPath of ["/rpc/search", "/rpc/product", "/rpc/analytics"]) {
+    for (const rpcPath of ["/rpc/search", "/rpc/product", "/rpc/analytics", "/rpc/order"]) {
       for (const method of ["GET", "HEAD", "PUT"]) {
         const disallowed = await raw(rpcPath, method)
         expect(disallowed.status, `${method} ${rpcPath}`).toBe(405)
@@ -400,6 +401,62 @@ describe("Effect RPC over HTTP (POST /rpc/{search,product,analytics})", () => {
         expect(roundTripped._tag).toBe("RpcClientError")
         expect(roundTripped.message).toBe(failure.error.message)
         expect(roundTripped.message).toContain("Error decoding HTTP response")
+      }
+    }
+  })
+
+  it("serves POST /rpc/order (checkOrderCode, validatePromoCode, submitOrder + OrderValidationError)", async () => {
+    const taken = await runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
+      client.checkOrderCode({ code: "taken-code" })
+    )
+    expect(taken.available).toBe(false)
+    expect(taken.suggestion).toBe("taken-code-2")
+
+    const promo = await runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
+      client.validatePromoCode({ code: "STUDIO15" })
+    )
+    expect(promo).toEqual({ valid: true, discountPercent: 15, description: "15% studio discount" })
+
+    const receipt = await runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
+      client.submitOrder({
+        order: {
+          projectCode: "http-order-1",
+          contactEmail: "buyer@studio.test",
+          promoCode: "STUDIO15",
+          billing: { _tag: "Card", cardholderName: "Ada Lovelace", billingZip: "94107" },
+          items: [{ id: "line-1", sku: "MUG-01", quantity: 2, unitPriceDollars: 50 }],
+          expedited: false,
+          deliveryNote: "",
+          acceptTerms: true
+        }
+      })
+    )
+    expect(receipt.orderId).toBe("ORD-0001")
+    expect(receipt.projectCode).toBe("http-order-1")
+    expect(receipt.totalCents).toBe(8500)
+
+    const duplicate = await runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
+      Effect.exit(
+        client.submitOrder({
+          order: {
+            projectCode: "http-order-1",
+            contactEmail: "buyer@studio.test",
+            promoCode: "",
+            billing: { _tag: "Card", cardholderName: "Ada Lovelace", billingZip: "94107" },
+            items: [{ id: "line-1", sku: "MUG-01", quantity: 1, unitPriceDollars: 20 }],
+            expedited: false,
+            deliveryNote: "",
+            acceptTerms: true
+          }
+        })
+      )
+    )
+    expect(Exit.isFailure(duplicate)).toBe(true)
+    if (Exit.isFailure(duplicate)) {
+      const reason = duplicate.cause.reasons[0]
+      expect(reason?._tag).toBe("Fail")
+      if (reason?._tag === "Fail") {
+        expect(reason.error._tag).toBe("OrderValidationError")
       }
     }
   })

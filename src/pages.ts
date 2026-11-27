@@ -42,6 +42,9 @@ export const createPages = (options: PagesOptions = {}) => {
     Status: Component.lazy("StatusPage", () =>
       import("./pages/StatusPage.ts").then((m) => loaded("Status", m.StatusPage))
     ),
+    Order: Component.lazy("OrderFormPage", () =>
+      import("./pages/OrderFormPage.ts").then((m) => loaded("Order", m.OrderFormPage))
+    ),
     NotFound: Component.lazy("NotFoundPage", () =>
       import("./pages/NotFoundPage.ts").then((m) => loaded("NotFound", m.NotFoundPage))
     )
