@@ -300,7 +300,7 @@ export const errorSummary = <M>(h: Html.H<M>, options: ErrorSummaryOptions) => {
   if (options.errors.length === 0) return undefined
   const base = h.div
     .key("form-error-summary")
-    .class(`${Design.ui.card} ${Design.ui.stack} border-red-300 bg-red-50/70 dark:border-red-900 dark:bg-red-950/30`)
+    .class(`${Design.ui.cardError} ${Design.ui.stack}`)
     .attrs({
       role: "alert",
       tabindex: "-1",

@@ -16,9 +16,9 @@ export interface CommandButtonOptions<M> {
 const variantClass = (variant: "default" | "primary" | "danger" | undefined): string => {
   switch (variant) {
     case "primary":
-      return `${Design.ui.button} border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-800 dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200`
+      return Design.ui.buttonPrimary
     case "danger":
-      return `${Design.ui.button} border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/50`
+      return Design.ui.buttonDanger
     default:
       return Design.ui.button
   }
@@ -58,9 +58,7 @@ export const commandErrorBanner = <M>(h: Html.H<M>, options: CommandErrorBannerO
   const formatTrace = options.traceRefLabel ?? ((traceId: string) => `Ref ${traceId}`)
   return h.div
     .key(options.testId ?? "command-error-banner")
-    .class(
-      `${Design.ui.card} flex flex-wrap items-center justify-between gap-3 border-red-300 bg-red-50/70 dark:border-red-900 dark:bg-red-950/30`
-    )
+    .class(`${Design.ui.cardError} flex flex-wrap items-center justify-between gap-3`)
     .attrs({ role: "alert", "data-testid": options.testId ?? "command-error-banner" })
     .children(
       h.div
@@ -110,7 +108,7 @@ export interface CommandProgressPanelOptions<M> {
 export const commandProgressPanel = <M>(h: Html.H<M>, options: CommandProgressPanelOptions<M>) =>
   h.div
     .key(options.testId ?? "command-progress-panel")
-    .class(`${Design.ui.card} ${Design.ui.stack} border-sky-200 bg-sky-50/60 dark:border-sky-900 dark:bg-sky-950/20`)
+    .class(`${Design.ui.cardInfo} ${Design.ui.stack}`)
     .attrs({ role: "status", "data-testid": options.testId ?? "command-progress-panel" })
     .children(
       Progress(h, {

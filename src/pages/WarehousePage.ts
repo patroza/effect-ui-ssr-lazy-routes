@@ -360,7 +360,12 @@ const WarehouseConsoleNoDeps = Html.component({
     dispatchModal: Schema.NullOr(DispatchModalState),
     sessionPrompt: Schema.NullOr(SessionPromptState),
     lastRetry: Schema.NullOr(PendingRetryAction),
-    preparingCartId: Schema.NullOr(Schema.String),
+    preparing: Schema.NullOr(
+      Schema.Struct({
+        cartId: Schema.String,
+        action: Schema.Literals(["release", "dispatch"])
+      })
+    ),
     flow: WarehouseFlow.State,
     lastOriginSpan: Schema.NullOr(CommandTrace.SpanPointer),
     lastExecutionSpan: Schema.NullOr(CommandTrace.SpanPointer)
@@ -375,7 +380,7 @@ const WarehouseConsoleNoDeps = Html.component({
   },
   restore: (model) => ({
     ...model,
-    preparingCartId: null,
+    preparing: null,
     flow: WarehouseFlow.restore(model.flow),
     blockDialog: model.blockDialog === null ? null : { ...model.blockDialog, submitting: false },
     releaseAlert: model.releaseAlert === null ? null : { ...model.releaseAlert, submitting: false },
@@ -391,7 +396,7 @@ const WarehouseConsoleNoDeps = Html.component({
     dispatchModal: null,
     sessionPrompt: null,
     lastRetry: null,
-    preparingCartId: null,
+    preparing: null,
     flow: WarehouseFlow.idle,
     lastOriginSpan: null,
     lastExecutionSpan: null
@@ -576,7 +581,11 @@ const WarehouseConsoleNoDeps = Html.component({
 
       ClickedReleaseCart: ({ cartId, cartCode }) => {
         const retry: PendingRetryAction = { _tag: "RetryPreflightRelease", cartId, cartCode }
-        return $.evolve({ preparingCartId: cartId, lastRetry: retry, flow: WarehouseFlow.idle }).run(
+        return $.evolve({
+          preparing: { cartId, action: "release" },
+          lastRetry: retry,
+          flow: WarehouseFlow.idle
+        }).run(
           issuePendingAction(retry, {
             simulateConflict: $.model.simCheckoutConflict,
             simulateExpired: $.model.simSessionExpired,
@@ -587,7 +596,7 @@ const WarehouseConsoleNoDeps = Html.component({
 
       SucceededPreflightRelease: ({ preflight, span }) =>
         $.evolve({
-          preparingCartId: null,
+          preparing: null,
           lastRetry: null,
           lastOriginSpan: span ?? $.model.lastOriginSpan,
           releaseAlert: {
@@ -640,7 +649,11 @@ const WarehouseConsoleNoDeps = Html.component({
 
       ClickedDispatchCart: ({ cartId, cartCode }) => {
         const retry: PendingRetryAction = { _tag: "RetryPreflightDispatch", cartId, cartCode }
-        return $.evolve({ preparingCartId: cartId, lastRetry: retry, flow: WarehouseFlow.idle }).run(
+        return $.evolve({
+          preparing: { cartId, action: "dispatch" },
+          lastRetry: retry,
+          flow: WarehouseFlow.idle
+        }).run(
           issuePendingAction(retry, {
             simulateConflict: $.model.simCheckoutConflict,
             simulateExpired: $.model.simSessionExpired,
@@ -651,7 +664,7 @@ const WarehouseConsoleNoDeps = Html.component({
 
       SucceededPreflightDispatch: ({ preflight, span }) =>
         $.evolve({
-          preparingCartId: null,
+          preparing: null,
           lastRetry: null,
           lastOriginSpan: span ?? $.model.lastOriginSpan,
           dispatchModal: {
@@ -769,7 +782,7 @@ const WarehouseConsoleNoDeps = Html.component({
         const originSpan = failure.failureSpan ?? $.model.lastOriginSpan
         if (failure.error._tag === "SessionExpiredError") {
           return $.evolve({
-            preparingCartId: null,
+            preparing: null,
             blockDialog: $.model.blockDialog === null ? null : { ...$.model.blockDialog, submitting: false },
             releaseAlert: $.model.releaseAlert === null ? null : { ...$.model.releaseAlert, submitting: false },
             flow: WarehouseFlow.idle,
@@ -800,7 +813,7 @@ const WarehouseConsoleNoDeps = Html.component({
           failureSpan: failure.failureSpan
         })
         const nextStep = $.evolve({
-          preparingCartId: null,
+          preparing: null,
           releaseAlert: null,
           flow: nextFlow,
           lastRetry: retry,
@@ -1005,9 +1018,7 @@ const WarehouseConsoleNoDeps = Html.component({
         model.flow._tag === "Succeeded"
           ? h.div
               .key("workflow-success")
-              .class(
-                `${Design.ui.card} flex items-center justify-between gap-3 border-emerald-300 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30`
-              )
+              .class(`${Design.ui.cardSuccess} flex items-center justify-between gap-3`)
               .attrs({ role: "status", "data-testid": "warehouse-success-banner" })
               .children(
                 h.span
@@ -1052,7 +1063,11 @@ const WarehouseConsoleNoDeps = Html.component({
                     cartsStatus.data.map((cart) => {
                       const isUnblocking = h.isRunning(WarehouseCommands.UnblockCart, { cartId: cart.id })
                       const isDispatching = h.isRunning(WarehouseCommands.DispatchCartBatch, { cartId: cart.id })
-                      const isPreparing = model.preparingCartId === cart.id
+                      const isPreparingRelease =
+                        model.preparing?.cartId === cart.id && model.preparing.action === "release"
+                      const isPreparingDispatch =
+                        model.preparing?.cartId === cart.id && model.preparing.action === "dispatch"
+                      const isPreparingCart = model.preparing?.cartId === cart.id
                       const blockReasonText =
                         cart.blockReason === null ? undefined : Warehouse.blockReasonLabel(t, cart.blockReason)
                       return h.div
@@ -1104,7 +1119,7 @@ const WarehouseConsoleNoDeps = Html.component({
                                 })
                               : CommandResult.commandButton(h, {
                                   label: t("warehouse.btnBlock"),
-                                  disabled: isDispatching,
+                                  disabled: isDispatching || isPreparingCart,
                                   testId: `block-${cart.id}`,
                                   onPress: WarehouseMessage.ClickedOpenBlockDialog({
                                     cartId: cart.id,
@@ -1114,18 +1129,18 @@ const WarehouseConsoleNoDeps = Html.component({
                             CommandResult.commandButton(h, {
                               label: t("warehouse.btnRelease"),
                               busyLabel: t("warehouse.btnPreparing"),
-                              busy: isPreparing,
+                              busy: isPreparingRelease,
                               variant: "danger",
-                              disabled: cart.status === "Blocked" || isDispatching,
+                              disabled: cart.status === "Blocked" || isDispatching || isPreparingDispatch,
                               testId: `release-${cart.id}`,
                               onPress: WarehouseMessage.ClickedReleaseCart({ cartId: cart.id, cartCode: cart.code })
                             }),
                             CommandResult.commandButton(h, {
                               label: t("warehouse.btnDispatch"),
                               busyLabel: isDispatching ? t("warehouse.btnDispatching") : t("warehouse.btnPreparing"),
-                              busy: isDispatching || isPreparing,
+                              busy: isDispatching || isPreparingDispatch,
                               variant: "primary",
-                              disabled: cart.status !== "Free" && cart.status !== "Dispatched",
+                              disabled: (cart.status !== "Free" && cart.status !== "Dispatched") || isPreparingRelease,
                               testId: `dispatch-${cart.id}`,
                               onPress: WarehouseMessage.ClickedDispatchCart({ cartId: cart.id, cartCode: cart.code })
                             })
@@ -1166,7 +1181,7 @@ const WarehouseConsoleNoDeps = Html.component({
         // Block Cart Dialog (SchemaForm inside controlled @effect/ui-kit Dialog)
         Dialog(h, {
           key: "block-cart-dialog",
-          props: { open: blockDialogModel !== null },
+          props: { open: blockDialogModel !== null && sessionPromptModel === null },
           onEmit: {
             RequestedOpen: () => undefined,
             RequestedClose: () => WarehouseMessage.RequestedCloseBlockDialog(),
@@ -1254,7 +1269,7 @@ const WarehouseConsoleNoDeps = Html.component({
         // Release Cart Confirmation AlertDialog
         AlertDialog(h, {
           key: "release-alert-dialog",
-          props: { open: releaseAlertModel !== null },
+          props: { open: releaseAlertModel !== null && sessionPromptModel === null },
           onEmit: {
             RequestedOpen: () => undefined,
             RequestedClose: () => WarehouseMessage.RequestedCloseReleaseAlert(),
@@ -1496,7 +1511,7 @@ const WarehousePageNoDeps = Html.component({
             h.div(
               WarehouseConsoleNoDeps(h, {}),
               toastProvider
-                .viewport(h.div.class("fixed right-4 bottom-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2"))
+                .viewport(h.div.class("fixed right-4 bottom-16 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2"))
                 .attr("aria-label", t("common.notifications"))
                 .attr("data-testid", "warehouse-toast-viewport")
                 .children(

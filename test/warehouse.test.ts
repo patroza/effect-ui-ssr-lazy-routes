@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { TestClock } from "effect/testing"
+import * as Design from "../src/design/classes.ts"
 import * as Helpers from "./helpers.ts"
 import * as TestRpc from "./support/rpc.ts"
 
@@ -246,5 +247,55 @@ describe("/warehouse Scanner Command Console", () => {
         expect(viewport.textContent).toContain("CART-101")
       })
     )
+
+    it.effect("shows Checking… only on the clicked preflight action while disabling sibling actions", () =>
+      Effect.gen(function* () {
+        const { container } = yield* Helpers.hydrateFromServer("/warehouse")
+
+        Helpers.click(Helpers.byTestId(container, "dispatch-cart-101"))
+        yield* Helpers.settleFrames
+
+        const dispatchBtn = Helpers.byTestId(container, "dispatch-cart-101")
+        const releaseBtn = Helpers.byTestId(container, "release-cart-101")
+        const blockBtn = Helpers.byTestId(container, "block-cart-101")
+
+        expect(dispatchBtn.getAttribute("aria-busy")).toBe("true")
+        expect(dispatchBtn.textContent).toBe("Checking…")
+        expect(releaseBtn.getAttribute("aria-busy")).toBeNull()
+        expect(releaseBtn.textContent).toBe("Release…")
+        expect(releaseBtn.hasAttribute("disabled")).toBe(true)
+        expect(blockBtn.hasAttribute("disabled")).toBe(true)
+
+        yield* roundTrip
+        expect(Helpers.byTestId(container, "dispatch-alert-popup")).not.toBeNull()
+        expect(dispatchBtn.getAttribute("aria-busy")).toBeNull()
+      })
+    )
+  })
+
+  it("keeps Design.ui button and card recipes free of conflicting Tailwind color utilities", () => {
+    const tokens = (classes: string) => new Set(classes.split(/\s+/).filter(Boolean))
+
+    const primary = tokens(Design.ui.buttonPrimary)
+    expect(primary.has("bg-neutral-900")).toBe(true)
+    expect(primary.has("text-white")).toBe(true)
+    expect(primary.has("bg-white")).toBe(false)
+    expect(primary.has("text-neutral-900")).toBe(false)
+    expect(primary.has("dark:bg-neutral-100")).toBe(true)
+    expect(primary.has("dark:text-neutral-900")).toBe(true)
+    expect(primary.has("dark:bg-neutral-900")).toBe(false)
+    expect(primary.has("dark:text-neutral-100")).toBe(false)
+
+    const danger = tokens(Design.ui.buttonDanger)
+    expect(danger.has("border-red-300")).toBe(true)
+    expect(danger.has("text-red-700")).toBe(true)
+    expect(danger.has("border-neutral-300")).toBe(false)
+    expect(danger.has("text-neutral-900")).toBe(false)
+
+    for (const variant of [Design.ui.cardError, Design.ui.cardWarning, Design.ui.cardSuccess, Design.ui.cardInfo]) {
+      const cardTokens = tokens(variant)
+      expect(cardTokens.has("border-neutral-200")).toBe(false)
+      expect(cardTokens.has("dark:border-neutral-800")).toBe(false)
+    }
   })
 })

@@ -776,9 +776,7 @@ const OrderFormContentNoDeps = Html.component({
         model.submit._tag === "Succeeded"
           ? h.div
               .key("order-receipt")
-              .class(
-                `${Design.ui.card} ${Design.ui.stack} border-emerald-300 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30`
-              )
+              .class(`${Design.ui.cardSuccess} ${Design.ui.stack}`)
               .attrs({ role: "status", "data-testid": "order-receipt" })
               .children(
                 h.div
@@ -805,9 +803,7 @@ const OrderFormContentNoDeps = Html.component({
           ? h.div
               .key("submit-error")
               .ref(ErrorSummaryRef)
-              .class(
-                `${Design.ui.card} ${Design.ui.stack} border-red-300 bg-red-50/70 dark:border-red-900 dark:bg-red-950/30`
-              )
+              .class(`${Design.ui.cardError} ${Design.ui.stack}`)
               .attrs({ role: "alert", tabindex: "-1", "data-testid": "submit-error" })
               .children(
                 h.h2
