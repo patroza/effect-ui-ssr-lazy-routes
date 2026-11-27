@@ -10,23 +10,27 @@ import {
 } from "effect/http"
 import { RpcSerialization, RpcServer } from "effect/rpc"
 import * as AnalyticsRpcs from "../analytics/domain/AnalyticsRpcs.ts"
+import * as OrderRpcs from "../order/domain/OrderRpcs.ts"
 import * as ProductRpcs from "../product/domain/ProductRpcs.ts"
 import * as SearchRpcs from "../search/domain/SearchRpcs.ts"
 import * as StatusRpcs from "../status/domain/StatusRpcs.ts"
 import * as AnalyticsHandlers from "./handlers/AnalyticsHandlers.ts"
+import * as OrderHandlers from "./handlers/OrderHandlers.ts"
 import * as ProductHandlers from "./handlers/ProductHandlers.ts"
 import * as SearchHandlers from "./handlers/SearchHandlers.ts"
 import * as StatusHandlers from "./handlers/StatusHandlers.ts"
 import * as AnalyticsStore from "./services/AnalyticsStore.ts"
 import * as BookmarkStore from "./services/BookmarkStore.ts"
 import * as CatalogStore from "./services/CatalogStore.ts"
+import * as OrderStore from "./services/OrderStore.ts"
 import * as StatusStore from "./services/StatusStore.ts"
 
 /** All server-side stores composed with a single shared `BookmarkStore` instance. */
 export const ServerStoresLayer = Layer.mergeAll(
   CatalogStore.CatalogStore.layer.pipe(Layer.provideMerge(BookmarkStore.BookmarkStore.layer)),
   AnalyticsStore.AnalyticsStore.layer,
-  StatusStore.StatusStore.layer
+  StatusStore.StatusStore.layer,
+  OrderStore.OrderStore.layer
 )
 
 /** Live RPC handlers composed from each feature `RpcGroup`'s own independent handler layer. */
@@ -34,7 +38,8 @@ export const HandlersLayer = Layer.mergeAll(
   SearchHandlers.SearchHandlersLayer,
   ProductHandlers.ProductHandlersLayer,
   AnalyticsHandlers.AnalyticsHandlersLayer,
-  StatusHandlers.StatusHandlersLayer
+  StatusHandlers.StatusHandlersLayer,
+  OrderHandlers.OrderHandlersLayer
 )
 
 /** Feature-scoped HTTP RPC routes mounted independently (no `RpcGroup.merge`). */
@@ -62,12 +67,19 @@ export const StatusRpcHttpLayer = RpcServer.layerHttp({
   protocol: "http"
 })
 
-/** Composed HTTP POST `/rpc/{search,product,analytics,status}` route layer using JSON serialization. */
+export const OrderRpcHttpLayer = RpcServer.layerHttp({
+  group: OrderRpcs.OrderRpcs,
+  path: "/rpc/order",
+  protocol: "http"
+})
+
+/** Composed HTTP POST `/rpc/{search,product,analytics,status,order}` route layer using JSON serialization. */
 export const RpcHttpLayer = Layer.mergeAll(
   SearchRpcHttpLayer,
   ProductRpcHttpLayer,
   AnalyticsRpcHttpLayer,
-  StatusRpcHttpLayer
+  StatusRpcHttpLayer,
+  OrderRpcHttpLayer
 ).pipe(Layer.provide(RpcSerialization.layerJson))
 
 /**

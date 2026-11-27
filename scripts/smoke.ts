@@ -9,6 +9,7 @@ import { Effect, Exit, Layer, Option } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { type Rpc, RpcClient, type RpcClientError, type RpcGroup, RpcSerialization } from "effect/rpc"
 import * as AnalyticsRpcs from "../src/analytics/domain/AnalyticsRpcs.ts"
+import * as OrderRpcs from "../src/order/domain/OrderRpcs.ts"
 import * as ProductRpcs from "../src/product/domain/ProductRpcs.ts"
 import * as SearchRpcs from "../src/search/domain/SearchRpcs.ts"
 import * as StatusRpcs from "../src/status/domain/StatusRpcs.ts"
@@ -73,9 +74,10 @@ const checks = [
   { path: "/status", status: 200, marker: "SENTINEL:status-page", preload: /StatusPage-/ },
   { path: "/status?mode=fail-ssr", status: 503, marker: "SENTINEL:status-page", preload: /StatusPage-/ },
   { path: "/status?mode=fail-refresh", status: 200, marker: "SENTINEL:status-page", preload: /StatusPage-/ },
+  { path: "/order", status: 200, marker: "SENTINEL:order-form-page", preload: /OrderFormPage-/ },
   { path: "/nope", status: 404, marker: "SENTINEL:not-found-page", preload: /NotFoundPage-/ }
 ]
-const otherPages = /(Home|Products|ProductDetail|Analytics|Status|NotFound)Page-/
+const otherPages = /(Home|Products|ProductDetail|Analytics|Status|OrderForm|NotFound)Page-/
 
 let failed = false
 const report = (ok: boolean, label: string, detail: string): void => {
@@ -229,6 +231,71 @@ try {
     statusOk.mode === "ok" && statusOk.revision > 0 && statusOk.services.length > 0,
     "POST /rpc/status getStatus",
     `revision=${statusOk.revision} services=${statusOk.services.length}`
+  )
+
+  const takenOrderCode = await runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
+    client.checkOrderCode({ code: "taken-code" })
+  )
+  report(
+    !takenOrderCode.available && takenOrderCode.suggestion === "taken-code-2",
+    "POST /rpc/order checkOrderCode (taken)",
+    `available=${takenOrderCode.available} suggestion=${takenOrderCode.suggestion ?? "none"}`
+  )
+
+  const freeOrderCode = await runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
+    client.checkOrderCode({ code: "smoke-order" })
+  )
+  report(freeOrderCode.available, "POST /rpc/order checkOrderCode (available)", `available=${freeOrderCode.available}`)
+
+  const promoCheck = await runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
+    client.validatePromoCode({ code: "STUDIO15" })
+  )
+  report(
+    promoCheck.valid && promoCheck.discountPercent === 15,
+    "POST /rpc/order validatePromoCode",
+    `valid=${promoCheck.valid} discount=${promoCheck.discountPercent}%`
+  )
+
+  const orderReceipt = await runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
+    client.submitOrder({
+      order: {
+        projectCode: "smoke-order",
+        contactEmail: "smoke@studio.test",
+        promoCode: "STUDIO15",
+        billing: { _tag: "Card", cardholderName: "Smoke Tester", billingZip: "94107" },
+        items: [{ id: "line-1", sku: "NOTEBOOK-A5", quantity: 2, unitPriceDollars: 24 }],
+        expedited: false,
+        deliveryNote: "",
+        acceptTerms: true
+      }
+    })
+  )
+  report(
+    orderReceipt.orderId === "ORD-0001" && orderReceipt.totalCents === 4080,
+    "POST /rpc/order submitOrder",
+    `${orderReceipt.orderId} total=${orderReceipt.totalCents}`
+  )
+
+  const conflictOrder = await runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
+    Effect.exit(
+      client.submitOrder({
+        order: {
+          projectCode: "race-conflict",
+          contactEmail: "smoke@studio.test",
+          promoCode: "",
+          billing: { _tag: "Card", cardholderName: "Smoke Tester", billingZip: "94107" },
+          items: [{ id: "line-1", sku: "NOTEBOOK-A5", quantity: 1, unitPriceDollars: 24 }],
+          expedited: false,
+          deliveryNote: "",
+          acceptTerms: true
+        }
+      })
+    )
+  )
+  report(
+    Exit.isFailure(conflictOrder) && String(conflictOrder.cause).includes("OrderValidationError"),
+    "POST /rpc/order submitOrder (OrderValidationError)",
+    Exit.isFailure(conflictOrder) ? "OrderValidationError" : "unexpected success"
   )
 } finally {
   if (server.exitCode === null && server.signalCode === null) {

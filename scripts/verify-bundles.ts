@@ -51,6 +51,21 @@ const owned: ReadonlyArray<Owned> = [
   ["SENTINEL:get-status-query", "GetStatus marker", "Status"],
   ["status/GetStatus", "GetStatus query", "Status"],
   ["getStatus", "StatusRpcs rpc", "Status"],
+  ["SENTINEL:order-form-page", "OrderForm page", "Order"],
+  ["SENTINEL:order-schema", "Order schema", "Order"],
+  ["SENTINEL:check-order-code-query", "CheckOrderCode marker", "Order"],
+  ["SENTINEL:validate-promo-code-query", "ValidatePromoCode marker", "Order"],
+  ["order/CheckOrderCode", "CheckOrderCode query", "Order"],
+  ["order/ValidatePromoCode", "ValidatePromoCode query", "Order"],
+  ["order/SubmitOrder", "SubmitOrder command", "Order"],
+  ["checkOrderCode", "OrderRpcs checkOrderCode rpc", "Order"],
+  ["validatePromoCode", "OrderRpcs validatePromoCode rpc", "Order"],
+  ["submitOrder", "OrderRpcs submitOrder rpc", "Order"],
+  ["FormRoot", "ui-kit Form", "Order"],
+  ["data-touched", "ui-kit Field", "Order"],
+  ["data-scrubbing", "ui-kit NumberField", "Order"],
+  ["data-select-blocker", "ui-kit Select", "Order"],
+  ["data-parent", "ui-kit Checkbox", "Order"],
   ["SENTINEL:not-found-page", "NotFound page", "NotFound"]
 ]
 // Framework and kit code that only lazy pages use. It must exist in the build, in a chunk that is neither the
@@ -72,6 +87,7 @@ const serverOnlyNeedles: ReadonlyArray<readonly [needle: string, label: string]>
   ["server/BookmarkStore", "server BookmarkStore"],
   ["server/AnalyticsStore", "server AnalyticsStore"],
   ["server/StatusStore", "server StatusStore"],
+  ["server/OrderStore", "server OrderStore"],
   ["Ceramic pour-over", "server seed catalog dataset"],
   ["effect/rpc/RpcServer", "RpcServer runtime"]
 ]
@@ -198,7 +214,7 @@ for (const [needle] of sharedNeedles) {
     )
   }
   // Transitively: a page that reaches the product schema through ANOTHER shared chunk would load it too.
-  for (const route of ["Home", "Analytics", "Status", "NotFound"] as const) {
+  for (const route of ["Home", "Analytics", "Status", "Order", "NotFound"] as const) {
     check(
       holder === undefined || !staticClosureFiles(Assets.routeSources[route]).has(holder),
       `${route} chunk (transitively) imports the product schema chunk it doesn't need`

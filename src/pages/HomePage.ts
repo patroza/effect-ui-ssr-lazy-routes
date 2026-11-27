@@ -39,7 +39,12 @@ export const HomePage = Html.component({
           h.a
             .class(Design.ui.link)
             .attr("href", Routes.AppRoute.print(Routes.AppRoute.Analytics()))
-            .children("See analytics")
+            .children("See analytics"),
+          h.span.class(Design.ui.muted).children("·"),
+          h.a
+            .class(Design.ui.link)
+            .attr("href", Routes.AppRoute.print(Routes.AppRoute.Order()))
+            .children("Place custom order")
         ),
         h.div.children(
           Button(h, { onPress: HomePageMessage.ClickedCounter() })

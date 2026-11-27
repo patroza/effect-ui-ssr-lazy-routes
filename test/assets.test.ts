@@ -10,6 +10,7 @@ const routeTags = [
   "ProductDetail",
   "Analytics",
   "Status",
+  "Order",
   "NotFound"
 ] as const satisfies ReadonlyArray<Routes.AppRouteTag>
 
@@ -51,6 +52,11 @@ const manifest: Assets.Manifest = {
     isDynamicEntry: true,
     imports: ["src/main.ts"]
   },
+  "src/pages/OrderFormPage.ts": {
+    file: "assets/OrderFormPage-O1.js",
+    isDynamicEntry: true,
+    imports: ["src/main.ts"]
+  },
   "src/pages/NotFoundPage.ts": {
     file: "assets/NotFoundPage-N1.js",
     isDynamicEntry: true,
@@ -63,6 +69,7 @@ describe("resolveRouteAssets", () => {
     expect(Assets.resolveRouteAssets(manifest, "Home").modulePreloads).toEqual(["/assets/HomePage-H1.js"])
     expect(Assets.resolveRouteAssets(manifest, "Analytics").modulePreloads).toEqual(["/assets/AnalyticsPage-A1.js"])
     expect(Assets.resolveRouteAssets(manifest, "Status").modulePreloads).toEqual(["/assets/StatusPage-S1.js"])
+    expect(Assets.resolveRouteAssets(manifest, "Order").modulePreloads).toEqual(["/assets/OrderFormPage-O1.js"])
     expect(Assets.resolveRouteAssets(manifest, "NotFound").modulePreloads).toEqual(["/assets/NotFoundPage-N1.js"])
   })
 
@@ -134,6 +141,7 @@ describe("document head", () => {
     { url: "/products/42", expected: ["/assets/ProductDetailPage-D1.js", "/assets/catalog-C1.js"] },
     { url: "/analytics", expected: ["/assets/AnalyticsPage-A1.js"] },
     { url: "/status", expected: ["/assets/StatusPage-S1.js"] },
+    { url: "/order", expected: ["/assets/OrderFormPage-O1.js"] },
     { url: "/nope", expected: ["/assets/NotFoundPage-N1.js"] }
   ]
   it.layer(Helpers.browserEnv, { buildPerTest: true })("rendered on the server", (it) => {

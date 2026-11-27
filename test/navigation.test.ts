@@ -134,7 +134,10 @@ describe("client-side navigation to a route that was not preloaded", () => {
           getProduct: 0,
           bookmarkProduct: 0,
           getAnalytics: 0,
-          getStatus: 0
+          getStatus: 0,
+          checkOrderCode: 0,
+          validatePromoCode: 0,
+          submitOrder: 0
         })
         yield* Helpers.follow(browser, "/products")
         expect(browser.container.querySelectorAll("li")).toHaveLength(6)
