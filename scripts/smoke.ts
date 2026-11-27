@@ -122,11 +122,29 @@ try {
     if (!own.some((href) => check.preload.test(href)) || own.length !== 1)
       problems.push(`page preloads: ${own.join(", ")}`)
     // Tailwind's stylesheet is global; the Analytics page's own stylesheet loads on /analytics only.
+    const headEnd = html.indexOf("</head>")
     const sheets = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((m) => m[1] ?? "")
     if (!sheets.some((href) => /\/main-.*\.css$/.test(href))) problems.push("no global stylesheet")
     const pageSheet = sheets.some((href) => /AnalyticsPage-.*\.css$/.test(href))
     if (pageSheet !== (check.path === "/analytics"))
       problems.push(`Analytics stylesheet ${pageSheet ? "present" : "missing"}`)
+    for (const href of sheets) {
+      const tagPos = html.indexOf(href)
+      if (tagPos === -1 || headEnd === -1 || tagPos >= headEnd) {
+        problems.push(`${href} not in <head> before </head>`)
+      }
+      const sheetRes = await fetch(base + href)
+      const cssBody = await sheetRes.text()
+      if (sheetRes.status !== 200) problems.push(`${href} -> ${sheetRes.status}`)
+      else if (!(sheetRes.headers.get("content-type") ?? "").startsWith("text/css"))
+        problems.push(`${href} content-type ${sheetRes.headers.get("content-type")}`)
+      else if (!(sheetRes.headers.get("cache-control") ?? "").includes("immutable"))
+        problems.push(`${href} not immutable`)
+      else if (/\/main-.*\.css$/.test(href) && !cssBody.includes("bg-neutral-900"))
+        problems.push(`${href} missing Tailwind utilities`)
+      else if (/AnalyticsPage-.*\.css$/.test(href) && !cssBody.includes("analytics-chart"))
+        problems.push(`${href} missing .analytics-chart`)
+    }
     // Every modulepreload must actually load: a JS module, cacheable forever.
     for (const href of preloads) {
       const asset = await fetch(base + href)

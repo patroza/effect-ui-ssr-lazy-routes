@@ -32,6 +32,14 @@ export interface PageAssets {
 }
 
 export const ENTRY_SOURCE = "src/main.ts"
+export const ENTRY_STYLESHEET = "src/index.css"
+
+/** Dev-only route stylesheets in addition to `ENTRY_STYLESHEET`. */
+export const routeDevStylesheets: Readonly<Partial<Record<Routes.AppRouteTag, ReadonlyArray<string>>>> = {
+  Analytics: ["src/analytics/components/chart.css"]
+}
+
+const devStylesheetUrl = (source: string): string => `/${source}?direct`
 
 /** Manifest key of each route's page module. `satisfies` makes a new route fail to compile until mapped. */
 export const routeSources = {
@@ -96,12 +104,17 @@ export const resolveRouteAssets = (
   }
 }
 
-/** Dev assets: Vite serves modules on demand and injects `/@vite/client` via `transformIndexHtml`. */
-export const devAssets: PageAssets = {
+/**
+ * Dev assets for the matched route: render-blocking `?direct` stylesheet
+ * links in `<head>` eliminate SSR FOUC (while keeping a distinct URL from
+ * Vite's JS CSS module imports), and `src/main.ts` hands them off to Vite's
+ * HMR `<style data-vite-dev-id>` tags once mounted.
+ */
+export const devAssetsFor = (tag: Routes.AppRouteTag): PageAssets => ({
   scripts: [`/${ENTRY_SOURCE}`],
   modulePreloads: [],
-  stylesheets: []
-}
+  stylesheets: [devStylesheetUrl(ENTRY_STYLESHEET), ...(routeDevStylesheets[tag] ?? []).map(devStylesheetUrl)]
+})
 
 const escapeAttribute = (value: string): string =>
   value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;")

@@ -73,7 +73,7 @@ let currentHandlerModule: typeof Handler | undefined
 let currentAppServer: Promise<Handler.ManagedNodeHandler> | undefined
 
 const getAppServer = async (): Promise<Handler.ManagedNodeHandler> => {
-  const [handlerModule, { devAssets }] = await Promise.all([
+  const [handlerModule, { devAssetsFor }] = await Promise.all([
     runner.import<typeof Handler>("/src/server/handler.ts"),
     runner.import<typeof Assets>("/src/server/assets.ts")
   ])
@@ -81,7 +81,7 @@ const getAppServer = async (): Promise<Handler.ManagedNodeHandler> => {
     const previous = currentAppServer
     currentHandlerModule = handlerModule
     currentAppServer = handlerModule.createAppServer({
-      assetsFor: () => devAssets,
+      assetsFor: (route) => devAssetsFor(route._tag),
       transformHtml: (url, html) => vite.transformIndexHtml(url, html)
     })
     if (previous !== undefined) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
+import * as DevStyles from "../src/browser/devStyles.ts"
 import * as Assets from "../src/server/assets.ts"
 import type * as Routes from "../src/routes.ts"
 import * as Helpers from "./helpers.ts"
@@ -11,6 +12,7 @@ const routeTags = [
   "Analytics",
   "Status",
   "Order",
+  "Warehouse",
   "NotFound"
 ] as const satisfies ReadonlyArray<Routes.AppRouteTag>
 
@@ -57,6 +59,11 @@ const manifest: Assets.Manifest = {
     isDynamicEntry: true,
     imports: ["src/main.ts"]
   },
+  "src/pages/WarehousePage.ts": {
+    file: "assets/WarehousePage-W1.js",
+    isDynamicEntry: true,
+    imports: ["src/main.ts"]
+  },
   "src/pages/NotFoundPage.ts": {
     file: "assets/NotFoundPage-N1.js",
     isDynamicEntry: true,
@@ -70,6 +77,7 @@ describe("resolveRouteAssets", () => {
     expect(Assets.resolveRouteAssets(manifest, "Analytics").modulePreloads).toEqual(["/assets/AnalyticsPage-A1.js"])
     expect(Assets.resolveRouteAssets(manifest, "Status").modulePreloads).toEqual(["/assets/StatusPage-S1.js"])
     expect(Assets.resolveRouteAssets(manifest, "Order").modulePreloads).toEqual(["/assets/OrderFormPage-O1.js"])
+    expect(Assets.resolveRouteAssets(manifest, "Warehouse").modulePreloads).toEqual(["/assets/WarehousePage-W1.js"])
     expect(Assets.resolveRouteAssets(manifest, "NotFound").modulePreloads).toEqual(["/assets/NotFoundPage-N1.js"])
   })
 
@@ -142,6 +150,7 @@ describe("document head", () => {
     { url: "/analytics", expected: ["/assets/AnalyticsPage-A1.js"] },
     { url: "/status", expected: ["/assets/StatusPage-S1.js"] },
     { url: "/order", expected: ["/assets/OrderFormPage-O1.js"] },
+    { url: "/warehouse", expected: ["/assets/WarehousePage-W1.js"] },
     { url: "/nope", expected: ["/assets/NotFoundPage-N1.js"] }
   ]
   it.layer(Helpers.browserEnv, { buildPerTest: true })("rendered on the server", (it) => {
@@ -197,5 +206,69 @@ describe("resolveRouteAssets locale chunks", () => {
       "/assets/de-DE1.js"
     ])
     expect(deAssets.modulePreloads).not.toContain("/assets/en-EN1.js")
+  })
+})
+
+describe("devAssetsFor", () => {
+  it("includes the global ?direct CSS link on every route and route CSS only on Analytics", () => {
+    for (const tag of routeTags) {
+      const assets = Assets.devAssetsFor(tag)
+      expect(assets.scripts).toEqual(["/src/main.ts"])
+      if (tag === "Analytics") {
+        expect(assets.stylesheets).toEqual(["/src/index.css?direct", "/src/analytics/components/chart.css?direct"])
+      } else {
+        expect(assets.stylesheets).toEqual(["/src/index.css?direct"])
+      }
+    }
+  })
+
+  it.layer(Helpers.browserEnv, { buildPerTest: true })("rendered in dev SSR <head>", (it) => {
+    it.effect("places blocking stylesheet links in <head> before scripts and <body>", () =>
+      Effect.gen(function* () {
+        const warehouse = yield* Helpers.renderDocument("/warehouse", (route) => Assets.devAssetsFor(route._tag))
+        const linkPos = warehouse.html.indexOf('<link rel="stylesheet" href="/src/index.css?direct">')
+        const scriptPos = warehouse.html.indexOf('<script type="module" crossorigin src="/src/main.ts"></script>')
+        const bodyPos = warehouse.html.indexOf("<body")
+        expect(linkPos).toBeGreaterThan(-1)
+        expect(linkPos).toBeLessThan(scriptPos)
+        expect(linkPos).toBeLessThan(bodyPos)
+
+        const analytics = yield* Helpers.renderDocument("/analytics", (route) => Assets.devAssetsFor(route._tag))
+        expect(analytics.html).toContain('<link rel="stylesheet" href="/src/index.css?direct">')
+        expect(analytics.html).toContain('<link rel="stylesheet" href="/src/analytics/components/chart.css?direct">')
+      })
+    )
+  })
+})
+
+describe("DevStyles.removeSupersededDevStylesheets", () => {
+  const docFromHead = (headHtml: string): Document =>
+    new DOMParser().parseFromString(`<!doctype html><html><head>${headHtml}</head><body></body></html>`, "text/html")
+
+  it("keeps SSR ?direct links untouched until Vite's matching <style data-vite-dev-id> exists", () => {
+    const doc = docFromHead('<link rel="stylesheet" href="/src/index.css?direct">')
+    expect(DevStyles.removeSupersededDevStylesheets(doc)).toBe(0)
+    expect(doc.head.querySelectorAll('link[rel="stylesheet"]')).toHaveLength(1)
+  })
+
+  it("removes only the ?direct links whose matching <style data-vite-dev-id> is mounted", () => {
+    const doc = docFromHead(
+      [
+        '<link rel="stylesheet" href="/src/index.css?direct">',
+        '<link rel="stylesheet" href="/src/analytics/components/chart.css?direct">',
+        '<link rel="stylesheet" href="/assets/main-E1.css">',
+        '<style type="text/css" data-vite-dev-id="/repo/src/index.css">body{}</style>'
+      ].join("")
+    )
+    expect(DevStyles.removeSupersededDevStylesheets(doc)).toBe(1)
+    const remaining = [...doc.head.querySelectorAll('link[rel="stylesheet"]')].map((el) => el.getAttribute("href"))
+    expect(remaining).toEqual(["/src/analytics/components/chart.css?direct", "/assets/main-E1.css"])
+
+    const chartStyle = doc.createElement("style")
+    chartStyle.setAttribute("data-vite-dev-id", "C:\\repo\\src\\analytics\\components\\chart.css")
+    doc.head.append(chartStyle)
+    expect(DevStyles.removeSupersededDevStylesheets(doc)).toBe(1)
+    const afterChart = [...doc.head.querySelectorAll('link[rel="stylesheet"]')].map((el) => el.getAttribute("href"))
+    expect(afterChart).toEqual(["/assets/main-E1.css"])
   })
 })

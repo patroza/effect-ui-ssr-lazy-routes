@@ -4,10 +4,15 @@ import { Effect, Layer } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
 import { RpcSerialization } from "effect/rpc"
 import * as Bootstrap from "./browser/bootstrap.ts"
+import * as DevStyles from "./browser/devStyles.ts"
 import * as State from "./browser/state.ts"
 import * as I18n from "./i18n/I18n.ts"
 import * as Routes from "./routes.ts"
 import "./index.css"
+
+if (import.meta.env.DEV) {
+  DevStyles.removeSupersededDevStylesheets(document)
+}
 
 const container = document.getElementById("app")
 if (container === null) throw new Error("#app not found")
@@ -40,6 +45,14 @@ Effect.runFork(
   readState.pipe(
     Effect.flatMap((state) =>
       Bootstrap.boot({ container, location: window.location.pathname + window.location.search, state, locale })
+    ),
+    Effect.tap(() =>
+      Effect.sync(() => {
+        if (import.meta.env.DEV) {
+          DevStyles.removeSupersededDevStylesheets(document)
+        }
+        container.setAttribute("data-hydrated", "true")
+      })
     ),
     // Keep the app (and its scope, which owns the document listeners) alive for the life of the page...
     Effect.andThen(Effect.never),
