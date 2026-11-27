@@ -5,10 +5,12 @@ import * as AnalyticsRpcs from "../../src/analytics/domain/AnalyticsRpcs.ts"
 import * as ProductRpcs from "../../src/product/domain/ProductRpcs.ts"
 import * as ApiError from "../../src/rpc/domain/ApiError.ts"
 import * as SearchRpcs from "../../src/search/domain/SearchRpcs.ts"
+import * as StatusRpcs from "../../src/status/domain/StatusRpcs.ts"
 import * as Rpc from "../../src/server/rpc.ts"
 import * as AnalyticsStore from "../../src/server/services/AnalyticsStore.ts"
 import * as BookmarkStore from "../../src/server/services/BookmarkStore.ts"
 import * as CatalogStore from "../../src/server/services/CatalogStore.ts"
+import * as StatusStore from "../../src/server/services/StatusStore.ts"
 
 /** How many times each RPC operation ran. */
 export interface RpcCounts {
@@ -16,9 +18,16 @@ export interface RpcCounts {
   readonly getProduct: number
   readonly bookmarkProduct: number
   readonly getAnalytics: number
+  readonly getStatus: number
 }
 
-export const noCalls: RpcCounts = { searchProducts: 0, getProduct: 0, bookmarkProduct: 0, getAnalytics: 0 }
+export const noCalls: RpcCounts = {
+  searchProducts: 0,
+  getProduct: 0,
+  bookmarkProduct: 0,
+  getAnalytics: 0,
+  getStatus: 0
+}
 
 /**
  * Where the counting RPC handlers below write. A `Ref` per test, built with the
@@ -101,10 +110,27 @@ const makeCountingAnalyticsHandlers = () =>
     })
   )
 
+const makeCountingStatusHandlers = () =>
+  StatusRpcs.StatusRpcs.toLayer(
+    Effect.gen(function* () {
+      const calls = yield* RpcCalls
+      const status = yield* StatusStore.StatusStore
+      return {
+        getStatus: ({ mode }) =>
+          calls.record("getStatus").pipe(Effect.andThen(roundTripDelay), Effect.andThen(status.check(mode)))
+      }
+    })
+  )
+
 const makeCountingHandlers = (overrides?: {
   readonly bookmarkProduct?: (id: string) => Effect.Effect<void, ApiError.ApiError>
 }) =>
-  Layer.mergeAll(makeCountingSearchHandlers(), makeCountingProductHandlers(overrides), makeCountingAnalyticsHandlers())
+  Layer.mergeAll(
+    makeCountingSearchHandlers(),
+    makeCountingProductHandlers(overrides),
+    makeCountingAnalyticsHandlers(),
+    makeCountingStatusHandlers()
+  )
 
 /**
  * In-process `HttpClient` + `RpcSerialization` wired to the real per-group

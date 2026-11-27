@@ -121,7 +121,9 @@ const rpcRawPaths: ReadonlySet<string> = new Set([
   "/rpc/product",
   "/rpc/product/",
   "/rpc/analytics",
-  "/rpc/analytics/"
+  "/rpc/analytics/",
+  "/rpc/status",
+  "/rpc/status/"
 ])
 
 const isRpcRawPath = (target: string): boolean => {

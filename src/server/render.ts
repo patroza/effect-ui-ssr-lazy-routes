@@ -95,7 +95,7 @@ export const renderPageEffect = Effect.fn("renderPage")(function* (
 
   return {
     _tag: "Page",
-    status: notFound || Status.renderedNotFound(page.html) ? 404 : 200,
+    status: notFound ? 404 : (Status.renderedHttpStatus(page.html) ?? 200),
     html,
     route
   } satisfies RenderOutcome

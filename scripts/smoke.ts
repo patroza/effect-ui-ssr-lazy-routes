@@ -11,6 +11,7 @@ import { type Rpc, RpcClient, type RpcClientError, type RpcGroup, RpcSerializati
 import * as AnalyticsRpcs from "../src/analytics/domain/AnalyticsRpcs.ts"
 import * as ProductRpcs from "../src/product/domain/ProductRpcs.ts"
 import * as SearchRpcs from "../src/search/domain/SearchRpcs.ts"
+import * as StatusRpcs from "../src/status/domain/StatusRpcs.ts"
 
 const root = fileURLToPath(new URL("..", import.meta.url))
 const server = spawn("node", ["dist/server/serve.js"], {
@@ -69,9 +70,12 @@ const checks = [
   { path: "/products?q=mug", status: 200, marker: "SENTINEL:products-page", preload: /ProductsPage-/ },
   { path: "/products/42", status: 200, marker: "SENTINEL:product-detail-page", preload: /ProductDetailPage-/ },
   { path: "/analytics", status: 200, marker: "SENTINEL:analytics-page", preload: /AnalyticsPage-/ },
+  { path: "/status", status: 200, marker: "SENTINEL:status-page", preload: /StatusPage-/ },
+  { path: "/status?mode=fail-ssr", status: 503, marker: "SENTINEL:status-page", preload: /StatusPage-/ },
+  { path: "/status?mode=fail-refresh", status: 200, marker: "SENTINEL:status-page", preload: /StatusPage-/ },
   { path: "/nope", status: 404, marker: "SENTINEL:not-found-page", preload: /NotFoundPage-/ }
 ]
-const otherPages = /(Home|Products|ProductDetail|Analytics|NotFound)Page-/
+const otherPages = /(Home|Products|ProductDetail|Analytics|Status|NotFound)Page-/
 
 let failed = false
 const report = (ok: boolean, label: string, detail: string): void => {
@@ -218,6 +222,13 @@ try {
     orders.length === 12 && ordersTotal === 5664,
     "POST /rpc/analytics getAnalytics",
     `12 months total=${ordersTotal}`
+  )
+
+  const statusOk = await runRpc(StatusRpcs.StatusRpcs, "/rpc/status", (client) => client.getStatus({ mode: "ok" }))
+  report(
+    statusOk.mode === "ok" && statusOk.revision > 0 && statusOk.services.length > 0,
+    "POST /rpc/status getStatus",
+    `revision=${statusOk.revision} services=${statusOk.services.length}`
   )
 } finally {
   if (server.exitCode === null && server.signalCode === null) {

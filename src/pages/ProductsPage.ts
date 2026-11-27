@@ -1,9 +1,10 @@
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Button, Input } from "@effect/ui-kit"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import * as Design from "../design/classes.ts"
+import * as QueryResult from "../design/queryResult.ts"
 import * as Product from "../product/domain/Product.ts"
 import * as Routes from "../routes.ts"
 import * as SearchProducts from "../search/queries/SearchProducts.ts"
@@ -17,8 +18,49 @@ const ProductsRoute = Routes.AppRoute.subset(["Products"])
 
 export const ProductsPageMessage = UiSchema.TaggedEnum({
   UpdatedQuery: { text: Schema.String },
-  ToggledCompare: { id: Schema.String }
+  ToggledCompare: { id: Schema.String },
+  ClickedRefresh: {}
 })
+
+const RefreshProducts = Command.make("RefreshProducts", { args: { q: Schema.optional(Schema.String) } }, ({ q }) =>
+  SearchProducts.SearchProducts.invalidate({ q }).pipe(Effect.as(Component.noop))
+)
+
+const renderProductResults = (
+  h: Html.H<typeof ProductsPageMessage.Type>,
+  products: ReadonlyArray<Product.Product>,
+  compared: ReadonlyArray<string>,
+  waiting: boolean
+) => {
+  const status = products.length === 0 ? "No products match your search." : `${products.length} product(s).`
+  return h.div
+    .key("products-content")
+    .class(Design.ui.stack)
+    .attr("aria-busy", String(waiting))
+    .children(
+      h.ul.class("flex flex-col divide-y divide-neutral-200 dark:divide-neutral-800").children(
+        products.map((product) =>
+          h.li
+            .key(product.id)
+            .class("flex items-center justify-between gap-3 py-3")
+            .children(
+              h.div.children(
+                h.a
+                  .class(Design.ui.link)
+                  .attr("href", Routes.AppRoute.print(Routes.AppRoute.ProductDetail({ params: { id: product.id } })))
+                  .children(product.name),
+                h.span.class(Design.ui.muted).children(` — ${Product.formatPrice(product.priceCents)}`)
+              ),
+              Button(h, { onPress: ProductsPageMessage.ToggledCompare({ id: product.id }) })
+                .class(Design.ui.button)
+                .attr("aria-pressed", String(compared.includes(product.id)))
+                .children(compared.includes(product.id) ? "Remove from compare" : "Compare")
+            )
+        )
+      ),
+      h.p.class(Design.ui.muted).attr("data-testid", "products-status").children(status)
+    )
+}
 
 const ProductsPageNoDeps = Html.component({
   name: "ProductsPage",
@@ -48,32 +90,26 @@ const ProductsPageNoDeps = Html.component({
       ToggledCompare: ({ id }) =>
         $.evolve({
           compared: (compared) => (compared.includes(id) ? compared.filter((other) => other !== id) : [...compared, id])
-        })
+        }),
+      ClickedRefresh: () => $.run(RefreshProducts.make({ q: $.props.route.search.q }))
     }),
   head: () => [Head.title("Products")],
   view: (h, model) => {
     const q = h.props.route.search.q
-    // The last results stay up while the next search loads (kept in `onSuccess` with `waiting: true`).
-    const results = AsyncResult.match(h.queries.results, {
-      onInitial: () => undefined,
-      onFailure: () => undefined,
-      onSuccess: ({ value }) => value
-    })
-    const status =
-      results === undefined
-        ? AsyncResult.isFailure(h.queries.results)
-          ? "Search failed."
-          : "Searching…"
-        : results.length === 0
-          ? "No products match your search."
-          : `${results.length} product(s).`
     return h.section
       .attr("data-page-chunk", PRODUCTS_PAGE_CHUNK)
       .attr("data-product-schema", Product.PRODUCT_SCHEMA_CHUNK)
       .attr("data-query", SearchProducts.SEARCH_PRODUCTS_QUERY_CHUNK)
       .class(Design.ui.stack)
       .children(
-        h.h1.class(Design.ui.title).children("Products"),
+        h.div.class(`${Design.ui.row} justify-between`).children(
+          h.h1.class(Design.ui.title).children("Products"),
+          QueryResult.refreshButton(h, {
+            waiting: AsyncResult.isWaiting(h.queries.results),
+            onRefresh: ProductsPageMessage.ClickedRefresh(),
+            testId: "products-refresh"
+          })
+        ),
         Input(h, {
           props: { value: q ?? "" },
           onUpdate: ({ value }) => ProductsPageMessage.UpdatedQuery({ text: value })
@@ -89,27 +125,27 @@ const ProductsPageNoDeps = Html.component({
           .class(Design.ui.muted)
           .attr("data-testid", "products-compared")
           .children(`Comparing ${model.compared.length} product(s)`),
-        h.ul.class("flex flex-col divide-y divide-neutral-200 dark:divide-neutral-800").children(
-          (results ?? []).map((product) =>
-            h.li
-              .key(product.id)
-              .class("flex items-center justify-between gap-3 py-3")
-              .children(
-                h.div.children(
-                  h.a
-                    .class(Design.ui.link)
-                    .attr("href", Routes.AppRoute.print(Routes.AppRoute.ProductDetail({ params: { id: product.id } })))
-                    .children(product.name),
-                  h.span.class(Design.ui.muted).children(` — ${Product.formatPrice(product.priceCents)}`)
-                ),
-                Button(h, { onPress: ProductsPageMessage.ToggledCompare({ id: product.id }) })
-                  .class(Design.ui.button)
-                  .attr("aria-pressed", String(model.compared.includes(product.id)))
-                  .children(model.compared.includes(product.id) ? "Remove from compare" : "Compare")
-              )
-          )
-        ),
-        h.p.class(Design.ui.muted).attr("data-testid", "products-status").children(status)
+        QueryResult.matchQuery(h.queries.results, {
+          onInitial: () => h.p.class(Design.ui.muted).attr("data-testid", "products-status").children("Searching…"),
+          onFailure: (cause) =>
+            QueryResult.errorPanel(h, {
+              title: "Couldn't load products",
+              heading: 2,
+              cause,
+              onRetry: ProductsPageMessage.ClickedRefresh()
+            }),
+          onReady: ({ data, refreshFailure, waiting }) =>
+            h.div.class(Design.ui.stack).children(
+              refreshFailure === undefined
+                ? undefined
+                : QueryResult.refreshErrorBanner(h, {
+                    cause: refreshFailure,
+                    waiting,
+                    onRetry: ProductsPageMessage.ClickedRefresh()
+                  }),
+              renderProductResults(h, data, model.compared, waiting)
+            )
+        })
       )
   }
 })

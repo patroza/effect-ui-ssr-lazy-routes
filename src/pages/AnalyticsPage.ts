@@ -1,20 +1,26 @@
-import { Component, Head, UiSchema } from "@effect/ui"
+import { Command, Component, Head, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Collapsible, Tabs } from "@effect/ui-kit"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import * as Chart from "../analytics/components/Chart.ts"
 import * as Analytics from "../analytics/domain/Analytics.ts"
 import * as GetAnalytics from "../analytics/queries/GetAnalytics.ts"
 import * as Design from "../design/classes.ts"
+import * as QueryResult from "../design/queryResult.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
 export const ANALYTICS_PAGE_CHUNK = "SENTINEL:analytics-page"
 
 export const AnalyticsPageMessage = UiSchema.TaggedEnum({
   SelectedMetricTab: { metric: Analytics.Metric },
-  ToggledAbout: { open: Schema.Boolean }
+  ToggledAbout: { open: Schema.Boolean },
+  ClickedRefresh: {}
 })
+
+const RefreshAnalytics = Command.make("RefreshAnalytics", { args: { metric: Analytics.Metric } }, ({ metric }) =>
+  GetAnalytics.GetAnalytics.invalidate({ metric }).pipe(Effect.as(Component.noop))
+)
 
 const isMetric = Schema.is(Analytics.Metric)
 
@@ -23,6 +29,28 @@ const tabClass =
 
 const indicatorClass =
   "absolute bottom-0 left-(--active-tab-left) h-0.5 w-(--active-tab-width) bg-sky-600 transition-all dark:bg-sky-400"
+
+const renderChartContent = <M>(
+  h: Html.H<M>,
+  title: string,
+  series: ReadonlyArray<Analytics.SeriesPoint>,
+  waiting: boolean
+) =>
+  h.div
+    .key("analytics-content")
+    .class(Design.ui.stack)
+    .attr("aria-busy", String(waiting))
+    .children(
+      h.img
+        .class("analytics-chart")
+        .attr("src", Chart.svgDataUri(Chart.lineChartSvg(title, series)))
+        .attr("alt", `${title} by month`)
+        .attr("data-testid", "analytics-chart"),
+      h.p
+        .class(Design.ui.muted)
+        .attr("data-testid", "analytics-total")
+        .children(`Total ${title}: ${series.reduce((sum, point) => sum + point.value, 0)}`)
+    )
 
 const AnalyticsPageNoDeps = Html.component({
   name: "AnalyticsPage",
@@ -37,33 +65,34 @@ const AnalyticsPageNoDeps = Html.component({
   update: ($, message) =>
     AnalyticsPageMessage.match(message, {
       SelectedMetricTab: ({ metric }) => $.evolve({ metric }),
-      ToggledAbout: ({ open }) => $.evolve({ aboutOpen: open })
+      ToggledAbout: ({ open }) => $.evolve({ aboutOpen: open }),
+      ClickedRefresh: () => $.run(RefreshAnalytics.make({ metric: $.model.metric }))
     }),
   head: () => [Head.title("Analytics")],
   view: (h, model) => {
     const title = Analytics.metricTitle(model.metric)
-    // The last series stays up while the next tab's loads (kept in `onSuccess` with `waiting: true`).
-    const series = AsyncResult.match(h.queries.series, {
-      onInitial: () => undefined,
-      onFailure: () => undefined,
-      onSuccess: ({ value }) => value
+    const content = QueryResult.matchQuery(h.queries.series, {
+      onInitial: () => h.p.class(Design.ui.muted).children("Loading…"),
+      onFailure: (cause) =>
+        QueryResult.errorPanel(h, {
+          title: "Couldn't load analytics",
+          heading: 2,
+          cause,
+          onRetry: AnalyticsPageMessage.ClickedRefresh()
+        }),
+      onReady: ({ data, refreshFailure, waiting }) =>
+        h.div.class(Design.ui.stack).children(
+          refreshFailure === undefined
+            ? undefined
+            : QueryResult.refreshErrorBanner(h, {
+                cause: refreshFailure,
+                waiting,
+                onRetry: AnalyticsPageMessage.ClickedRefresh()
+              }),
+          renderChartContent(h, title, data, waiting)
+        )
     })
-    const content =
-      series === undefined
-        ? AsyncResult.isFailure(h.queries.series)
-          ? h.p.class(Design.ui.muted).children("Couldn't load analytics.")
-          : h.p.class(Design.ui.muted).children("Loading…")
-        : h.div.class(Design.ui.stack).children(
-            h.img
-              .class("analytics-chart")
-              .attr("src", Chart.svgDataUri(Chart.lineChartSvg(title, series)))
-              .attr("alt", `${title} by month`)
-              .attr("data-testid", "analytics-chart"),
-            h.p
-              .class(Design.ui.muted)
-              .attr("data-testid", "analytics-total")
-              .children(`Total ${title}: ${series.reduce((sum, point) => sum + point.value, 0)}`)
-          )
+
     return h.section
       .attr("data-page-chunk", ANALYTICS_PAGE_CHUNK)
       .attr("data-chart", Chart.ANALYTICS_CHART_CHUNK)
@@ -71,7 +100,14 @@ const AnalyticsPageNoDeps = Html.component({
       .attr("data-query", GetAnalytics.GET_ANALYTICS_QUERY_CHUNK)
       .class(Design.ui.stack)
       .children(
-        h.h1.class(Design.ui.title).children("Analytics"),
+        h.div.class(`${Design.ui.row} justify-between`).children(
+          h.h1.class(Design.ui.title).children("Analytics"),
+          QueryResult.refreshButton(h, {
+            waiting: AsyncResult.isWaiting(h.queries.series),
+            onRefresh: AnalyticsPageMessage.ClickedRefresh(),
+            testId: "analytics-refresh"
+          })
+        ),
         Tabs(h, {
           props: { value: model.metric, tabs: Analytics.metrics.map((value) => ({ value })) },
           onEmit: {

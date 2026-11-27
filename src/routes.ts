@@ -14,6 +14,9 @@ export const AppRoute = Route.union({
   }),
   ProductDetail: Route.make("/products/:id", { params: { id: Schema.String } }),
   Analytics: Route.make("/analytics"),
+  Status: Route.make("/status", {
+    search: { mode: Schema.optional(Schema.Literals(["ok", "fail-ssr", "fail-refresh"])) }
+  }),
   NotFound: Route.make("/*")
 })
 

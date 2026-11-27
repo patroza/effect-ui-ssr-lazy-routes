@@ -39,6 +39,9 @@ export const createPages = (options: PagesOptions = {}) => {
     Analytics: Component.lazy("AnalyticsPage", () =>
       import("./pages/AnalyticsPage.ts").then((m) => loaded("Analytics", m.AnalyticsPage))
     ),
+    Status: Component.lazy("StatusPage", () =>
+      import("./pages/StatusPage.ts").then((m) => loaded("Status", m.StatusPage))
+    ),
     NotFound: Component.lazy("NotFoundPage", () =>
       import("./pages/NotFoundPage.ts").then((m) => loaded("NotFound", m.NotFoundPage))
     )

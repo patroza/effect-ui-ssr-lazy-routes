@@ -11,6 +11,7 @@ const loaded = {
   Products: () => import("../src/pages/ProductsPage.ts").then((m) => m.ProductsPage),
   ProductDetail: () => import("../src/pages/product/ProductDetailPage.ts").then((m) => m.ProductDetailPage),
   Analytics: () => import("../src/pages/AnalyticsPage.ts").then((m) => m.AnalyticsPage),
+  Status: () => import("../src/pages/StatusPage.ts").then((m) => m.StatusPage),
   NotFound: () => import("../src/pages/NotFoundPage.ts").then((m) => m.NotFoundPage)
 } as const satisfies Record<Routes.AppRouteTag, () => Promise<{ readonly definition: { readonly name: string } }>>
 
@@ -30,6 +31,7 @@ describe("pages", () => {
     "Products",
     "ProductDetail",
     "Analytics",
+    "Status",
     "NotFound"
   ] as const satisfies ReadonlyArray<Routes.AppRouteTag>
 

@@ -38,6 +38,7 @@ export const routeSources = {
   Products: "src/pages/ProductsPage.ts",
   ProductDetail: "src/pages/product/ProductDetailPage.ts",
   Analytics: "src/pages/AnalyticsPage.ts",
+  Status: "src/pages/StatusPage.ts",
   NotFound: "src/pages/NotFoundPage.ts"
 } as const satisfies Record<Routes.AppRouteTag, string>
 

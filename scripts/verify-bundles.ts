@@ -46,6 +46,11 @@ const owned: ReadonlyArray<Owned> = [
   ["getAnalytics", "AnalyticsRpcs rpc", "Analytics"],
   ["data-activation-direction", "ui-kit Tabs", "Analytics"],
   ["data-panel-open", "ui-kit Collapsible", "Analytics"],
+  ["SENTINEL:status-page", "Status page", "Status"],
+  ["SENTINEL:status-schema", "Status schema", "Status"],
+  ["SENTINEL:get-status-query", "GetStatus marker", "Status"],
+  ["status/GetStatus", "GetStatus query", "Status"],
+  ["getStatus", "StatusRpcs rpc", "Status"],
   ["SENTINEL:not-found-page", "NotFound page", "NotFound"]
 ]
 // Framework and kit code that only lazy pages use. It must exist in the build, in a chunk that is neither the
@@ -66,6 +71,7 @@ const serverOnlyNeedles: ReadonlyArray<readonly [needle: string, label: string]>
   ["server/CatalogStore", "server CatalogStore"],
   ["server/BookmarkStore", "server BookmarkStore"],
   ["server/AnalyticsStore", "server AnalyticsStore"],
+  ["server/StatusStore", "server StatusStore"],
   ["Ceramic pour-over", "server seed catalog dataset"],
   ["effect/rpc/RpcServer", "RpcServer runtime"]
 ]
@@ -192,7 +198,7 @@ for (const [needle] of sharedNeedles) {
     )
   }
   // Transitively: a page that reaches the product schema through ANOTHER shared chunk would load it too.
-  for (const route of ["Home", "Analytics", "NotFound"] as const) {
+  for (const route of ["Home", "Analytics", "Status", "NotFound"] as const) {
     check(
       holder === undefined || !staticClosureFiles(Assets.routeSources[route]).has(holder),
       `${route} chunk (transitively) imports the product schema chunk it doesn't need`
