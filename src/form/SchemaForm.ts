@@ -1,4 +1,4 @@
-import { Exit, Option, Schema, SchemaIssue } from "effect"
+import { Equal, Exit, Option, Redacted, Schema, SchemaIssue } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import * as SchemaMeta from "./schemaMeta.ts"
 
@@ -38,15 +38,50 @@ export interface FormIssueItem {
   readonly message: string
 }
 
-export interface DerivedFormState<To> {
+type BuiltinLeaf =
+  | string
+  | number
+  | boolean
+  | bigint
+  | symbol
+  | null
+  | undefined
+  | Date
+  | RegExp
+  | Redacted.Redacted<unknown>
+  | Option.Option<unknown>
+  | ((...args: ReadonlyArray<never>) => unknown)
+
+type NextDepth = readonly [never, 0, 1, 2, 3, 4]
+
+type FieldPathInner<T, D extends number = 4> = [D] extends [never]
+  ? never
+  : T extends BuiltinLeaf
+    ? never
+    : T extends ReadonlyArray<infer Elem>
+      ? `${number}` | (FieldPathInner<Elem, NextDepth[D]> extends infer Sub extends string ? `${number}.${Sub}` : never)
+      : T extends object
+        ? {
+            [K in Extract<keyof T, string>]-?:
+              | K
+              | (FieldPathInner<Exclude<T[K], undefined | null>, NextDepth[D]> extends infer Sub extends string
+                  ? `${K}.${Sub}`
+                  : never)
+          }[Extract<keyof T, string>]
+        : never
+
+/** Compile-time dotted field path derived recursively from a `Values` model type. */
+export type FieldPath<T> = FieldPathInner<T>
+
+export interface DerivedFormState<To, Path extends string = string> {
   readonly decoded: Option.Option<To>
   readonly syncDecoded: Option.Option<To>
   readonly isDirty: boolean
   readonly isValid: boolean
   readonly isValidating: boolean
   readonly canSubmit: boolean
-  readonly field: (path: string) => DerivedFieldState
-  readonly fieldPassesSync: (path: string) => boolean
+  readonly field: (path: Path) => DerivedFieldState
+  readonly fieldPassesSync: (path: Path) => boolean
   readonly visibleErrors: ReadonlyArray<FormIssueItem>
   readonly allErrors: ReadonlyArray<FormIssueItem>
   readonly formErrors: ReadonlyArray<string>
@@ -55,9 +90,13 @@ export interface DerivedFormState<To> {
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-/** Structural equality for JSON/Model-serializable form values. */
+/**
+ * Structural equality for Model-serializable form values, including Effect
+ * `Equal` types (`Schema.Redacted`, `Option`, `Data`, `Schema.Class`).
+ */
 export const deepEqual = (left: unknown, right: unknown): boolean => {
   if (Object.is(left, right)) return true
+  if (Equal.isEqual(left) && Equal.isEqual(right)) return Equal.equals(left, right)
   if (Array.isArray(left) && Array.isArray(right)) {
     if (left.length !== right.length) return false
     for (let index = 0; index < left.length; index++) {
@@ -75,6 +114,16 @@ export const deepEqual = (left: unknown, right: unknown): boolean => {
     return true
   }
   return false
+}
+
+const isEmptyValue = (value: unknown): boolean => {
+  const unwrapped = Redacted.isRedacted(value) ? Redacted.value(value) : value
+  return (
+    unwrapped === undefined ||
+    unwrapped === null ||
+    unwrapped === "" ||
+    (Array.isArray(unwrapped) && unwrapped.length === 0)
+  )
 }
 
 const getPathValue = (root: unknown, path: string): unknown => {
@@ -111,6 +160,76 @@ const dropServerErrorsUnder = (
   return next
 }
 
+const parseIndexedSuffix = (
+  path: string,
+  arrayPath: string
+): { readonly prefix: string; readonly index: number; readonly tail: string } | undefined => {
+  const prefix = `${arrayPath}.`
+  if (!path.startsWith(prefix)) return undefined
+  const rest = path.slice(prefix.length)
+  const dotIndex = rest.indexOf(".")
+  const segment = dotIndex === -1 ? rest : rest.slice(0, dotIndex)
+  if (!/^\d+$/.test(segment)) return undefined
+  return {
+    prefix,
+    index: Number(segment),
+    tail: dotIndex === -1 ? "" : rest.slice(dotIndex)
+  }
+}
+
+/** Remap a dotted path after removing element `removedIndex` under `arrayPath`. */
+export const reindexPathAfterRemove = (path: string, arrayPath: string, removedIndex: number): string | undefined => {
+  const parsed = parseIndexedSuffix(path, arrayPath)
+  if (parsed === undefined) return path
+  if (parsed.index === removedIndex) return undefined
+  if (parsed.index > removedIndex) return `${parsed.prefix}${parsed.index - 1}${parsed.tail}`
+  return path
+}
+
+/** Remap a dotted path after moving element `fromIndex` -> `toIndex` under `arrayPath`. */
+export const reindexPathAfterMove = (path: string, arrayPath: string, fromIndex: number, toIndex: number): string => {
+  if (fromIndex === toIndex) return path
+  const parsed = parseIndexedSuffix(path, arrayPath)
+  if (parsed === undefined) return path
+  let nextIndex = parsed.index
+  if (parsed.index === fromIndex) {
+    nextIndex = toIndex
+  } else if (fromIndex < toIndex && parsed.index > fromIndex && parsed.index <= toIndex) {
+    nextIndex = parsed.index - 1
+  } else if (fromIndex > toIndex && parsed.index >= toIndex && parsed.index < fromIndex) {
+    nextIndex = parsed.index + 1
+  }
+  return `${parsed.prefix}${nextIndex}${parsed.tail}`
+}
+
+const remapPathList = (
+  paths: ReadonlyArray<string>,
+  mapper: (path: string) => string | undefined
+): ReadonlyArray<string> => {
+  const out: Array<string> = []
+  for (const path of paths) {
+    const mapped = mapper(path)
+    if (mapped !== undefined && !out.includes(mapped)) {
+      out.push(mapped)
+    }
+  }
+  return out
+}
+
+const remapErrorRecord = (
+  errors: Readonly<Record<string, ReadonlyArray<string>>>,
+  arrayPath: string,
+  mapper: (path: string) => string | undefined
+): Readonly<Record<string, ReadonlyArray<string>>> => {
+  const next: Record<string, ReadonlyArray<string>> = {}
+  for (const [key, messages] of Object.entries(errors)) {
+    const mapped = mapper(key)
+    if (mapped === undefined || mapped === arrayPath || messages.length === 0) continue
+    next[mapped] = messages
+  }
+  return next
+}
+
 const normalizeKeySegment = (segment: PropertyKey | { readonly key: PropertyKey }): string => {
   const raw = typeof segment === "object" && segment !== null && "key" in segment ? segment.key : segment
   return typeof raw === "symbol" ? (raw.description ?? "") : String(raw)
@@ -123,6 +242,29 @@ const normalizeIssuePath = (path: ReadonlyArray<PropertyKey | { readonly key: Pr
 
 const pushUniqueMessage = (target: Array<string>, message: string): void => {
   if (!target.includes(message)) target.push(message)
+}
+
+const asyncChecksEqual = (
+  left: Readonly<Record<string, AsyncCheckStatus | undefined>> | undefined,
+  right: Readonly<Record<string, AsyncCheckStatus | undefined>> | undefined
+): boolean => {
+  if (left === right) return true
+  const l = left ?? {}
+  const r = right ?? {}
+  const lKeys = Object.keys(l)
+  const rKeys = Object.keys(r)
+  if (lKeys.length !== rKeys.length) return false
+  for (const key of lKeys) {
+    if (!Object.hasOwn(r, key)) return false
+    const lv = l[key]
+    const rv = r[key]
+    if (lv === rv) continue
+    if (lv === undefined || rv === undefined || lv._tag !== rv._tag) return false
+    if (lv._tag === "Invalid" && rv._tag === "Invalid" && !deepEqual(lv.errors, rv.errors)) {
+      return false
+    }
+  }
+  return true
 }
 
 /**
@@ -149,19 +291,22 @@ export const asyncCheckFromResult = <A, E>(
  *
  * - Stores only minimal serializable `FormState<Values>` in the Component Model.
  * - Derives per-field validity, visibility, dirty flags, and decoded `To`
- *   values purely on demand from `formSchema`.
- * - Coordinates sync Schema checks, cross-field refinements, debounced async
+ *   values purely on demand from `formSchema` plus optional `crossFieldChecks`
+ *   that run even when unrelated fields on the form fail schema decoding.
+ * - Coordinates sync Schema checks, typed array row mutations, debounced async
  *   `Query` checks, and server-side `reject` errors without mutable state.
  */
 export const make = <
   SValue extends Schema.Top & { readonly DecodingServices: never; readonly EncodingServices: never },
-  SForm extends Schema.Top & Schema.ConstraintDecoder<unknown, never>
+  SForm extends Schema.Top & Schema.ConstraintDecoder<unknown, never>,
+  Path extends string = FieldPath<SValue["Type"]>
 >(options: {
   readonly valueSchema: SValue
   readonly formSchema: SForm
   readonly mode?: ValidationMode | undefined
   readonly leafHook?: SchemaIssue.LeafHook | undefined
   readonly checkHook?: SchemaIssue.CheckHook | undefined
+  readonly crossFieldChecks?: ((values: SValue["Type"]) => ReadonlyArray<FormIssueItem>) | undefined
 }) => {
   type Values = SValue["Type"]
   type Decoded = SForm["Type"]
@@ -194,7 +339,7 @@ export const make = <
     formServerErrors: []
   })
 
-  const update = (state: FormState<Values>, path: string, updater: (values: Values) => Values): FormState<Values> => ({
+  const update = (state: FormState<Values>, path: Path, updater: (values: Values) => Values): FormState<Values> => ({
     ...state,
     values: updater(state.values),
     edited: addUnique(state.edited, path),
@@ -202,7 +347,42 @@ export const make = <
     formServerErrors: []
   })
 
-  const blur = (state: FormState<Values>, path: string): FormState<Values> => ({
+  const removeArrayItem = (
+    state: FormState<Values>,
+    arrayPath: Path,
+    index: number,
+    updater: (values: Values) => Values
+  ): FormState<Values> => {
+    const mapper = (path: string) => reindexPathAfterRemove(path, arrayPath, index)
+    return {
+      ...state,
+      values: updater(state.values),
+      edited: addUnique(remapPathList(state.edited, mapper), arrayPath),
+      touched: remapPathList(state.touched, mapper),
+      serverErrors: remapErrorRecord(state.serverErrors, arrayPath, mapper),
+      formServerErrors: []
+    }
+  }
+
+  const moveArrayItem = (
+    state: FormState<Values>,
+    arrayPath: Path,
+    fromIndex: number,
+    toIndex: number,
+    updater: (values: Values) => Values
+  ): FormState<Values> => {
+    const mapper = (path: string) => reindexPathAfterMove(path, arrayPath, fromIndex, toIndex)
+    return {
+      ...state,
+      values: updater(state.values),
+      edited: addUnique(remapPathList(state.edited, mapper), arrayPath),
+      touched: remapPathList(state.touched, mapper),
+      serverErrors: remapErrorRecord(state.serverErrors, arrayPath, mapper),
+      formServerErrors: []
+    }
+  }
+
+  const blur = (state: FormState<Values>, path: Path): FormState<Values> => ({
     ...state,
     touched: addUnique(state.touched, path)
   })
@@ -256,14 +436,52 @@ export const make = <
     return false
   }
 
+  interface CachedDeriveEntry {
+    syncOnly?: DerivedFormState<Decoded, Path> | undefined
+    withChecks?:
+      | {
+          readonly asyncChecks: Readonly<Record<string, AsyncCheckStatus | undefined>>
+          readonly derived: DerivedFormState<Decoded, Path>
+        }
+      | undefined
+  }
+
+  const deriveCache = new WeakMap<FormState<Values>, CachedDeriveEntry>()
+
   const derive = (
     state: FormState<Values>,
     asyncChecks: Readonly<Record<string, AsyncCheckStatus | undefined>> = {}
-  ): DerivedFormState<Decoded> => {
+  ): DerivedFormState<Decoded, Path> => {
+    const hasAsyncKeys = Object.keys(asyncChecks).length > 0
+    const cacheEntry = deriveCache.get(state)
+    if (!hasAsyncKeys && cacheEntry?.syncOnly !== undefined) {
+      return cacheEntry.syncOnly
+    }
+    if (
+      hasAsyncKeys &&
+      cacheEntry?.withChecks !== undefined &&
+      asyncChecksEqual(cacheEntry.withChecks.asyncChecks, asyncChecks)
+    ) {
+      return cacheEntry.withChecks.derived
+    }
+
     const exit = decodeUnknown(state.values)
     const syncIssuesByPath = new Map<string, Array<string>>()
     const rootSyncIssues: Array<string> = []
     let syncDecoded: Option.Option<Decoded> = Option.none()
+
+    const addSyncIssue = (path: string, message: string): void => {
+      if (path === "") {
+        pushUniqueMessage(rootSyncIssues, message)
+        return
+      }
+      const bucket = syncIssuesByPath.get(path)
+      if (bucket === undefined) {
+        syncIssuesByPath.set(path, [message])
+      } else {
+        pushUniqueMessage(bucket, message)
+      }
+    }
 
     if (Exit.isSuccess(exit)) {
       syncDecoded = Option.some(exit.value)
@@ -272,23 +490,20 @@ export const make = <
         if (reason._tag === "Fail" && Schema.isSchemaError(reason.error)) {
           const formatted = formatter(reason.error.issue)
           for (const issue of formatted.issues) {
-            const path = normalizeIssuePath(issue.path)
-            if (path === "") {
-              pushUniqueMessage(rootSyncIssues, issue.message)
-            } else {
-              const bucket = syncIssuesByPath.get(path)
-              if (bucket === undefined) {
-                syncIssuesByPath.set(path, [issue.message])
-              } else {
-                pushUniqueMessage(bucket, issue.message)
-              }
-            }
+            addSyncIssue(normalizeIssuePath(issue.path), issue.message)
           }
         }
       }
     }
 
-    const fieldPassesSync = (path: string): boolean => {
+    // Cross-field refinements run unconditionally on `state.values` so they surface even
+    // while unrelated fields on the base schema still fail validation.
+    const crossFieldIssues = options.crossFieldChecks?.(state.values) ?? []
+    for (const issue of crossFieldIssues) {
+      addSyncIssue(issue.path, issue.message)
+    }
+
+    const fieldPassesSync = (path: Path): boolean => {
       if (syncIssuesByPath.has(path)) return false
       const prefix = `${path}.`
       for (const issuePath of syncIssuesByPath.keys()) {
@@ -298,13 +513,14 @@ export const make = <
     }
 
     const fieldCache = new Map<string, DerivedFieldState>()
-    const field = (path: string): DerivedFieldState => {
+    const deriveFieldAtPath = (path: string): DerivedFieldState => {
       const cached = fieldCache.get(path)
       if (cached !== undefined) return cached
 
       const edited = state.edited.includes(path)
       const touched = state.touched.includes(path)
-      const dirty = !deepEqual(getPathValue(state.values, path), getPathValue(state.baseline, path))
+      const value = getPathValue(state.values, path)
+      const dirty = !deepEqual(value, getPathValue(state.baseline, path))
       const show = showsPath(state, path)
 
       const serverMsgs = Object.hasOwn(state.serverErrors, path) ? (state.serverErrors[path] ?? []) : []
@@ -380,7 +596,7 @@ export const make = <
             edited
           }
         }
-      } else if (show) {
+      } else if (show && !isEmptyValue(value)) {
         result = {
           path,
           status: "Valid",
@@ -420,7 +636,7 @@ export const make = <
     const visibleErrors: Array<FormIssueItem> = []
 
     for (const path of candidatePaths) {
-      const derivedField = field(path)
+      const derivedField = deriveFieldAtPath(path)
       const serverMsgs = Object.hasOwn(state.serverErrors, path) ? (state.serverErrors[path] ?? []) : []
       const syncMsgs = syncIssuesByPath.get(path) ?? []
       const asyncCheck = Object.hasOwn(asyncChecks, path) ? asyncChecks[path] : undefined
@@ -453,23 +669,33 @@ export const make = <
     const isValidating = Object.values(asyncChecks).some((check) => check?._tag === "Validating")
     const hasAsyncInvalid = Object.values(asyncChecks).some((check) => check?._tag === "Invalid")
 
-    const isValid = Option.isSome(syncDecoded) && !hasServerError && !hasAsyncInvalid
+    const isValid = Option.isSome(syncDecoded) && crossFieldIssues.length === 0 && !hasServerError && !hasAsyncInvalid
     const canSubmit = isValid && !isValidating
     const decoded = canSubmit ? syncDecoded : Option.none()
 
-    return {
+    const derived: DerivedFormState<Decoded, Path> = {
       decoded,
       syncDecoded,
       isDirty: isDirty(state),
       isValid,
       isValidating,
       canSubmit,
-      field,
+      field: (path: Path) => deriveFieldAtPath(path),
       fieldPassesSync,
       visibleErrors,
       allErrors,
       formErrors
     }
+
+    const nextEntry: CachedDeriveEntry = cacheEntry ?? {}
+    if (!hasAsyncKeys) {
+      nextEntry.syncOnly = derived
+    } else {
+      nextEntry.withChecks = { asyncChecks: { ...asyncChecks }, derived }
+    }
+    deriveCache.set(state, nextEntry)
+
+    return derived
   }
 
   const labelFor = (path: string): string => SchemaMeta.resolveFieldLabel(meta, path)
@@ -479,6 +705,8 @@ export const make = <
     meta,
     init,
     update,
+    removeArrayItem,
+    moveArrayItem,
     blur,
     submit,
     setServerErrors,

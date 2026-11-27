@@ -46,6 +46,28 @@ export const OrderFormValues = Schema.Struct({
 })
 export type OrderFormValues = typeof OrderFormValues.Type
 
+export const OrderFieldPath = Schema.Union([
+  Schema.Literals([
+    "projectCode",
+    "contactEmail",
+    "promoCode",
+    "billing",
+    "billing._tag",
+    "billing.cardholderName",
+    "billing.billingZip",
+    "billing.companyName",
+    "billing.poNumber",
+    "billing.paymentTermsDays",
+    "items",
+    "expedited",
+    "deliveryNote",
+    "acceptTerms"
+  ]),
+  Schema.TemplateLiteral(["items.", Schema.Number]),
+  Schema.TemplateLiteral(["items.", Schema.Number, ".", Schema.Literals(["id", "sku", "quantity", "unitPriceDollars"])])
+])
+export type OrderFieldPath = typeof OrderFieldPath.Type
+
 export const OrderCodeSchema = Schema.String.pipe(
   Schema.check(
     Schema.isTrimmed({ message: "Remove leading or trailing spaces" }),
@@ -185,47 +207,69 @@ export const calculateOrderTotals = (
 export const formatCents = (cents: number): string => `$${(cents / 100).toFixed(2)}`
 
 /**
+ * Cross-field order rules shared by both `OrderSchemaForm.derive` (so issues
+ * surface even while unrelated fields remain incomplete) and `OrderSubmission`.
+ */
+export const validateOrderCrossFields = (input: {
+  readonly items: ReadonlyArray<{
+    readonly sku: string
+    readonly quantity: number | null
+    readonly unitPriceDollars: number | null
+  }>
+  readonly expedited: boolean
+  readonly deliveryNote: string
+  readonly billing: { readonly _tag: "Card" | "Invoice" }
+}): ReadonlyArray<SchemaForm.FormIssueItem> => {
+  const issues: Array<SchemaForm.FormIssueItem> = []
+
+  const seenSkus = new Map<string, number>()
+  for (let index = 0; index < input.items.length; index++) {
+    const item = input.items[index]
+    if (item === undefined) continue
+    const normalizedSku = item.sku.trim().toUpperCase()
+    if (normalizedSku !== "" && seenSkus.has(normalizedSku)) {
+      issues.push({
+        path: `items.${index}.sku`,
+        message: `Duplicate SKU "${item.sku}" — combine quantities instead`
+      })
+    } else if (normalizedSku !== "") {
+      seenSkus.set(normalizedSku, index)
+    }
+  }
+
+  if (input.expedited && input.deliveryNote.trim().length < 5) {
+    issues.push({
+      path: "deliveryNote",
+      message: "Expedited orders require delivery instructions (at least 5 characters)"
+    })
+  }
+
+  if (input.billing._tag === "Invoice") {
+    const { subtotalCents } = calculateOrderTotals(input, 0)
+    if (subtotalCents < INVOICE_MIN_SUBTOTAL_CENTS) {
+      issues.push({
+        path: "billing.poNumber",
+        message: `Invoice billing requires a subtotal of at least ${formatCents(INVOICE_MIN_SUBTOTAL_CENTS)}`
+      })
+    }
+  }
+
+  return issues
+}
+
+/**
  * Canonical schema shared between the client form engine and the server RPC
  * endpoint, including cross-field refinements that target exact nested paths.
  */
 export const OrderSubmission = OrderSubmissionBase.pipe(
   Schema.check(
     Schema.makeFilter((input) => {
-      const issues: Array<Schema.FilterIssue> = []
-
-      const seenSkus = new Map<string, number>()
-      for (let index = 0; index < input.items.length; index++) {
-        const item = input.items[index]
-        if (item === undefined) continue
-        const normalizedSku = item.sku.trim().toUpperCase()
-        if (normalizedSku !== "" && seenSkus.has(normalizedSku)) {
-          issues.push({
-            path: ["items", index, "sku"],
-            issue: `Duplicate SKU "${item.sku}" — combine quantities instead`
-          })
-        } else if (normalizedSku !== "") {
-          seenSkus.set(normalizedSku, index)
-        }
-      }
-
-      if (input.expedited && input.deliveryNote.trim().length < 5) {
-        issues.push({
-          path: ["deliveryNote"],
-          issue: "Expedited orders require delivery instructions (at least 5 characters)"
-        })
-      }
-
-      if (input.billing._tag === "Invoice") {
-        const { subtotalCents } = calculateOrderTotals(input, 0)
-        if (subtotalCents < INVOICE_MIN_SUBTOTAL_CENTS) {
-          issues.push({
-            path: ["billing", "poNumber"],
-            issue: `Invoice billing requires a subtotal of at least ${formatCents(INVOICE_MIN_SUBTOTAL_CENTS)}`
-          })
-        }
-      }
-
-      return issues.length === 0 ? undefined : issues
+      const crossFieldIssues = validateOrderCrossFields(input)
+      if (crossFieldIssues.length === 0) return undefined
+      return crossFieldIssues.map((item): Schema.FilterIssue => ({
+        path: item.path.split(".").map((segment) => (/^\d+$/.test(segment) ? Number(segment) : segment)),
+        issue: item.message
+      }))
     })
   )
 )
@@ -293,5 +337,6 @@ export const defaultOrderFormValues: OrderFormValues = {
 export const OrderSchemaForm = SchemaForm.make({
   valueSchema: OrderFormValues,
   formSchema: OrderSubmission,
-  mode: "onSubmit"
+  mode: "onSubmit",
+  crossFieldChecks: validateOrderCrossFields
 })

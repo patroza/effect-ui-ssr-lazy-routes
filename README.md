@@ -13,6 +13,7 @@ A small, strict-TypeScript reference for **[`@effect/ui`](https://github.com/Eff
 - **No entry → page waterfall** on direct visits: `<link rel="modulepreload">` for the matched route's chunks and the entry's static imports, and a page's own `<link rel="stylesheet">` only on that page.
 - **Dev-only DevTools**: `@effect/ui-devtools` inspector overlay + Time Travel (`DevTools.layer`) and Vite MCP server (`DevToolsVite.plugin({ dispatch: true })` at `http://127.0.0.1:4774/mcp`) in `pnpm dev`, tree-shaken to **0 bytes** in production (`pnpm verify:bundles`).
 - **Tailwind v4** (`@tailwindcss/vite`) with a neutral light/dark palette (`prefers-color-scheme`, no JS), focus rings and `data-*` / `aria-*` variants on the kit's attributes.
+- **Forms & i18n guides**: [docs/complex-forms.md](docs/complex-forms.md) (`SchemaForm`, typed field paths, cross-field rules, array reindexing, debounced async checks, `Router.blocked`) and [docs/i18n-proposal.md](docs/i18n-proposal.md) (`I18n` service + `shares`/`reads` provider, lazy catalogs, localized Schema/OmegaForm hooks).
 
 |                                             |                                                                                                                                        |
 | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |

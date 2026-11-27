@@ -58,7 +58,7 @@ export const OrderFormPageMessage = UiSchema.TaggedEnum({
   ToggledExpedited: { checked: Schema.Boolean },
   UpdatedDeliveryNote: { value: Schema.String },
   ToggledAcceptTerms: { checked: Schema.Boolean },
-  BlurredField: { path: Schema.String },
+  BlurredField: { path: Order.OrderFieldPath },
   ClickedReset: {},
   SubmittedForm: {},
   SucceededSubmit: { receipt: Order.OrderReceipt },
@@ -111,6 +111,8 @@ const deriveOrderForm = (
   })
 }
 
+type OrderDerivedForm = SchemaForm.DerivedFormState<Order.OrderSubmission, SchemaForm.FieldPath<Order.OrderFormValues>>
+
 const updateFormField = (
   model: {
     readonly form: SchemaForm.FormState<Order.OrderFormValues>
@@ -118,11 +120,27 @@ const updateFormField = (
     readonly termsSelectOpen: boolean
     readonly submit: typeof SubmitState.Type
   },
-  path: string,
+  path: SchemaForm.FieldPath<Order.OrderFormValues>,
   updater: (values: Order.OrderFormValues) => Order.OrderFormValues
 ) => ({
   ...model,
   form: Order.OrderSchemaForm.update(model.form, path, updater),
+  submit: model.submit._tag === "Failed" ? SubmitState.Idle() : model.submit
+})
+
+const removeFormArrayItem = (
+  model: {
+    readonly form: SchemaForm.FormState<Order.OrderFormValues>
+    readonly nextLineId: number
+    readonly termsSelectOpen: boolean
+    readonly submit: typeof SubmitState.Type
+  },
+  arrayPath: SchemaForm.FieldPath<Order.OrderFormValues>,
+  index: number,
+  updater: (values: Order.OrderFormValues) => Order.OrderFormValues
+) => ({
+  ...model,
+  form: Order.OrderSchemaForm.removeArrayItem(model.form, arrayPath, index, updater),
   submit: model.submit._tag === "Failed" ? SubmitState.Idle() : model.submit
 })
 
@@ -202,7 +220,7 @@ const renderPromoAdornment = (
 const renderBillingSection = (
   h: Html.H<Msg>,
   values: Order.OrderFormValues,
-  derived: SchemaForm.DerivedFormState<Order.OrderSubmission>,
+  derived: OrderDerivedForm,
   termsSelectOpen: boolean,
   isSubmitting: boolean
 ) => {
@@ -407,7 +425,7 @@ const renderBillingSection = (
 const renderLineItemsSection = (
   h: Html.H<Msg>,
   values: Order.OrderFormValues,
-  derived: SchemaForm.DerivedFormState<Order.OrderSubmission>,
+  derived: OrderDerivedForm,
   isSubmitting: boolean
 ) => {
   const itemsState = derived.field("items")
@@ -599,11 +617,14 @@ const OrderFormPageNoDeps = Html.component({
               })),
               nextLineId: $.model.nextLineId + 1
             },
-      RemovedLineItem: ({ id }) =>
-        updateFormField($.model, "items", (v) => ({
+      RemovedLineItem: ({ id }) => {
+        const index = lineItemIndex($.model.form.values, id)
+        if (index < 0) return $.model
+        return removeFormArrayItem($.model, "items", index, (v) => ({
           ...v,
           items: v.items.filter((item) => item.id !== id)
-        })),
+        }))
+      },
       UpdatedLineSku: ({ id, value }) => {
         const index = lineItemIndex($.model.form.values, id)
         if (index < 0) return $.model

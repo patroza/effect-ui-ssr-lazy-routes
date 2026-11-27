@@ -18,27 +18,35 @@ This document explains how to manage complex forms and form state in `@effect/ui
 
 2. **Use Effect `Schema` as the single source of truth.**
    - `OrderFormValues` models raw control state (including `null` for cleared `NumberField`s or `""` for untyped text).
-   - `OrderSubmission` models the strict domain contract—shared by the client `SchemaForm` decoder and the server `OrderRpcs` payload (`POST /rpc/order`)—including nested structs, tagged unions (`Card | Invoice`), dynamic arrays (`items`), and cross-field `Schema.makeFilter` refinements targeting exact nested paths (`["items", index, "sku"]`, `["deliveryNote"]`, `["billing", "poNumber"]`).
+   - `OrderSubmission` models the strict domain contract—shared by the client `SchemaForm` decoder and the server `OrderRpcs` payload (`POST /rpc/order`)—including nested structs, tagged unions (`Card | Invoice`), dynamic arrays (`items`), and cross-field rules extracted into `validateOrderCrossFields` so they run both inside `OrderSubmission` and unconditionally via `SchemaForm.make({ ..., crossFieldChecks })` (without being short-circuited when unrelated fields on the base schema are still incomplete).
 
-3. **Model debounced async field validation as `Query.Service` entries.**
+3. **Keep form state normalized across array mutations, `Equal` types, optional fields, and repeated renders.**
+   - **`removeArrayItem` / `moveArrayItem`**: drop or shift `edited`, `touched`, and `serverErrors` entries under `items.<index>` whenever rows are deleted or reordered.
+   - **`Equal.equals` in `deepEqual`**: accurately detects edits on `Schema.Redacted`, `Option`, `Data`, and `Schema.Class` fields so `isDirty` never stalls on opaque values.
+   - **Empty optional fields stay `NotValidated`**: optional blank inputs (`promoCode`, non-expedited `deliveryNote`) keep `invalid: undefined` instead of turning valid-green.
+   - **Typed `FieldPath<Values>` + memoized `derive`**: catch misspelled dotted paths at compile time and reuse derived views per `(state, asyncChecks)` via a `WeakMap` cache.
+
+4. **Model debounced async field validation as `Query.Service` entries.**
    Instead of managing `AbortController`s, sequence numbers, or manual debounce timers:
    - Declare each async validator as a `Query.Service` (`CheckOrderCode`, `ValidatePromoCode`) with `debounce: "300 millis"`.
    - Gate `args` on sync validity (`derived.fieldPassesSync(path) ? { code } : undefined`). Invalid or empty inputs produce `undefined`, keeping network traffic at zero.
    - Changing input restarts the debounce clock and interrupts obsolete in-flight fetches automatically.
    - `SchemaForm.asyncCheckFromResult` projects `AsyncResult` onto `Idle | Validating | Valid | Invalid` (never trapping a failed transport error in `Validating`).
 
-4. **Model submission as a `Command.Service` with explicit state.**
+5. **Model submission as a `Command.Service` with explicit state.**
    - Guard double-submit in `update` (`if ($.model.submit._tag === "Submitting") return $.model`).
    - Wrap controls in `@effect/ui-kit`'s `Fieldset` (`disabled: isSubmitting`).
    - Run `SubmitOrder.make({ order: decoded })`, declaring `invalidates` to clear stale `CheckOrderCode` cache entries on exit.
    - Map `OrderValidationError` via `OrderSchemaForm.setServerErrors` (cleared automatically when the user edits that field or any descendant path) and focus the error summary with `HtmlCommand.focus`.
    - Map `ApiError` / `RpcClientError` to a retryable banner without losing form edits.
 
-5. **Guard unsaved changes with `Router.blocked`.**
+6. **Guard unsaved changes with `Router.blocked`.**
    Return `[Router.blocked("order-form")]` from `subscriptions` whenever `OrderSchemaForm.isDirty(model.form)` is `true`. On successful submission, `OrderSchemaForm.rebase(form)` advances `baseline` to the submitted values (mirroring OmegaForm's `prevent-and-reset`), releasing `Router.blocked` immediately.
 
-6. **Secret fields (`Schema.Redacted`) belong in leaf components.**
+7. **Secret fields (`Schema.Redacted`) belong in leaf components.**
    When a form includes secrets (passwords, API keys), declare those fields with `Schema.Redacted(Schema.String)`. `@effect/ui` excludes any component whose Model contains `Redacted` from `history.state` and SSR state serialization, so isolate secret-bearing forms as leaf components.
+
+See [the i18n proposal](./i18n-proposal.md) for localizing Schema validation hooks, `AnyOf` literal unions, field labels, `NumberField` decimals, and multi-locale routing in `@effect/ui`.
 
 ---
 

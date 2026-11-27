@@ -1,6 +1,6 @@
 import { TestHost } from "@effect/ui/testing"
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Option } from "effect"
+import { Effect, Option, Redacted, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 import * as SchemaForm from "../src/form/SchemaForm.ts"
@@ -163,6 +163,124 @@ describe("SchemaMeta & SchemaForm unit tests", () => {
       _tag: "Invalid",
       errors: ["Fallback"]
     })
+  })
+
+  it("surfaces cross-field checks even while unrelated fields are incomplete", () => {
+    // `acceptTerms` is still false and `projectCode` / `contactEmail` are empty, yet cross-field
+    // duplicate-SKU, expedited deliveryNote, and Invoice $100 minimum rules still run.
+    let state = Order.OrderSchemaForm.init(Order.defaultOrderFormValues)
+    state = Order.OrderSchemaForm.update(state, "billing", (v) => ({
+      ...v,
+      billing: { _tag: "Invoice", companyName: "Acme Corp", poNumber: "PO-9001", paymentTermsDays: "30" },
+      items: [
+        { id: "line-1", sku: "MUG-01", quantity: 1, unitPriceDollars: 20 },
+        { id: "line-2", sku: "mug-01", quantity: 1, unitPriceDollars: 20 }
+      ],
+      expedited: true,
+      deliveryNote: "no"
+    }))
+    state = Order.OrderSchemaForm.submit(state)
+    const derived = Order.OrderSchemaForm.derive(state)
+    expect(derived.isValid).toBe(false)
+    expect(derived.field("items.1.sku").errors[0]).toContain("Duplicate SKU")
+    expect(derived.field("deliveryNote").errors[0]).toContain("Expedited orders require delivery instructions")
+    expect(derived.field("billing.poNumber").errors[0]).toContain("at least $100.00")
+  })
+
+  it("reindexes edited, touched, and serverErrors cleanly across removeArrayItem and moveArrayItem", () => {
+    let state = Order.OrderSchemaForm.init(Order.defaultOrderFormValues)
+    state = Order.OrderSchemaForm.update(state, "items.0.sku", (v) => ({
+      ...v,
+      items: [
+        { id: "line-1", sku: "BAD-0", quantity: 1, unitPriceDollars: 10 },
+        { id: "line-2", sku: "GOOD-1", quantity: 1, unitPriceDollars: 20 },
+        { id: "line-3", sku: "BAD-2", quantity: 1, unitPriceDollars: 30 }
+      ]
+    }))
+    state = Order.OrderSchemaForm.update(state, "items.1.sku", (v) => v)
+    state = Order.OrderSchemaForm.blur(state, "items.1.sku")
+    state = Order.OrderSchemaForm.blur(state, "items.2.quantity")
+    state = Order.OrderSchemaForm.setServerErrors(state, {
+      fieldErrors: {
+        "items.0.sku": ["Server error row 0"],
+        "items.2.sku": ["Server error row 2"],
+        items: ["Array-level error"]
+      }
+    })
+
+    // Removing index 0 drops items.0.* and shifts items.1.* -> items.0.*, items.2.* -> items.1.*
+    state = Order.OrderSchemaForm.removeArrayItem(state, "items", 0, (v) => ({
+      ...v,
+      items: v.items.slice(1)
+    }))
+    expect(state.edited).toContain("items.0.sku")
+    expect(state.edited).not.toContain("items.1.sku")
+    expect(state.touched).toEqual(["items.0.sku", "items.1.quantity"])
+    expect(state.serverErrors).toEqual({
+      "items.1.sku": ["Server error row 2"]
+    })
+
+    // Moving index 0 -> 1 swaps items.0.* and items.1.* metadata cleanly
+    state = Order.OrderSchemaForm.moveArrayItem(state, "items", 0, 1, (v) => {
+      const [first, second] = v.items
+      return {
+        ...v,
+        items: first !== undefined && second !== undefined ? [second, first] : v.items
+      }
+    })
+    expect(state.touched).toEqual(["items.1.sku", "items.0.quantity"])
+    expect(state.serverErrors).toEqual({
+      "items.0.sku": ["Server error row 2"]
+    })
+  })
+
+  it("compares Redacted and Option values accurately in deepEqual / isDirty", () => {
+    const SecretValues = Schema.Struct({
+      token: Schema.Redacted(Schema.String),
+      note: Schema.Option(Schema.String)
+    })
+    const SecretForm = SchemaForm.make({
+      valueSchema: SecretValues,
+      formSchema: SecretValues,
+      mode: "onChange"
+    })
+    let state = SecretForm.init({
+      token: Redacted.make("alpha"),
+      note: Option.none()
+    })
+    expect(SecretForm.isDirty(state)).toBe(false)
+
+    state = SecretForm.update(state, "token", (v) => ({ ...v, token: Redacted.make("beta") }))
+    expect(SecretForm.isDirty(state)).toBe(true)
+
+    state = SecretForm.update(state, "token", (v) => ({ ...v, token: Redacted.make("alpha") }))
+    expect(SecretForm.isDirty(state)).toBe(false)
+
+    state = SecretForm.update(state, "note", (v) => ({ ...v, note: Option.some("memo") }))
+    expect(SecretForm.isDirty(state)).toBe(true)
+  })
+
+  it("keeps empty optional fields NotValidated after submit and memoizes derive references", () => {
+    let state = Order.OrderSchemaForm.init(Order.defaultOrderFormValues)
+    state = Order.OrderSchemaForm.submit(state)
+
+    const derivedA = Order.OrderSchemaForm.derive(state)
+    const derivedB = Order.OrderSchemaForm.derive(state)
+    expect(derivedA).toBe(derivedB)
+
+    expect(derivedA.field("promoCode").status).toBe("NotValidated")
+    expect(derivedA.field("promoCode").invalid).toBeUndefined()
+    expect(derivedA.field("deliveryNote").status).toBe("NotValidated")
+    expect(derivedA.field("deliveryNote").invalid).toBeUndefined()
+
+    const withChecksA = Order.OrderSchemaForm.derive(state, {
+      projectCode: { _tag: "Validating" }
+    })
+    const withChecksB = Order.OrderSchemaForm.derive(state, {
+      projectCode: { _tag: "Validating" }
+    })
+    expect(withChecksA).toBe(withChecksB)
+    expect(Order.OrderSchemaForm.derive(state)).toBe(derivedA)
   })
 })
 
