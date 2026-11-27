@@ -13,6 +13,7 @@ import * as OrderRpcs from "../src/order/domain/OrderRpcs.ts"
 import * as ProductRpcs from "../src/product/domain/ProductRpcs.ts"
 import * as SearchRpcs from "../src/search/domain/SearchRpcs.ts"
 import * as StatusRpcs from "../src/status/domain/StatusRpcs.ts"
+import * as WarehouseRpcs from "../src/warehouse/domain/WarehouseRpcs.ts"
 
 const root = fileURLToPath(new URL("..", import.meta.url))
 const server = spawn("node", ["dist/server/serve.js"], {
@@ -75,9 +76,10 @@ const checks = [
   { path: "/status?mode=fail-ssr", status: 503, marker: "SENTINEL:status-page", preload: /StatusPage-/ },
   { path: "/status?mode=fail-refresh", status: 200, marker: "SENTINEL:status-page", preload: /StatusPage-/ },
   { path: "/order", status: 200, marker: "SENTINEL:order-form-page", preload: /OrderFormPage-/ },
+  { path: "/warehouse", status: 200, marker: "SENTINEL:warehouse-page", preload: /WarehousePage-/ },
   { path: "/nope", status: 404, marker: "SENTINEL:not-found-page", preload: /NotFoundPage-/ }
 ]
-const otherPages = /(Home|Products|ProductDetail|Analytics|Status|OrderForm|NotFound)Page-/
+const otherPages = /(Home|Products|ProductDetail|Analytics|Status|OrderForm|Warehouse|NotFound)Page-/
 
 let failed = false
 const report = (ok: boolean, label: string, detail: string): void => {
@@ -296,6 +298,71 @@ try {
     Exit.isFailure(conflictOrder) && String(conflictOrder.cause).includes("OrderValidationError"),
     "POST /rpc/order submitOrder (OrderValidationError)",
     Exit.isFailure(conflictOrder) ? "OrderValidationError" : "unexpected success"
+  )
+
+  // Progressive-enhancement POST /locale switcher + German SSR & chunk isolation.
+  const localeSwitch = await fetch(`${base}/locale`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: "locale=de&next=/warehouse",
+    redirect: "manual"
+  })
+  report(
+    localeSwitch.status === 303 &&
+      localeSwitch.headers.get("location") === "/warehouse" &&
+      (localeSwitch.headers.get("set-cookie") ?? "").includes("locale=de"),
+    "POST /locale (de)",
+    `${localeSwitch.status} location=${localeSwitch.headers.get("location") ?? "(none)"}`
+  )
+
+  const evilLocaleRedirect = await fetch(`${base}/locale`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: "locale=de&next=//evil.com/",
+    redirect: "manual"
+  })
+  report(
+    evilLocaleRedirect.status === 303 && evilLocaleRedirect.headers.get("location") === "/",
+    "POST /locale open-redirect guard",
+    `${evilLocaleRedirect.status} location=${evilLocaleRedirect.headers.get("location") ?? "(none)"}`
+  )
+
+  const warehouseDeRes = await fetch(`${base}/warehouse`, {
+    headers: { cookie: "locale=de" }
+  })
+  const warehouseDeHtml = await warehouseDeRes.text()
+  const dePreloads = [...warehouseDeHtml.matchAll(/<link rel="modulepreload"[^>]*href="([^"]+)"/g)].map(
+    (m) => m[1] ?? ""
+  )
+  const warehouseDeOk =
+    warehouseDeRes.status === 200 &&
+    warehouseDeHtml.includes('lang="de"') &&
+    warehouseDeHtml.includes('data-i18n-chunk="SENTINEL:i18n-de"') &&
+    warehouseDeHtml.includes("Lager-Command-Konsole") &&
+    dePreloads.some((href) => /\/de-.*\.js$/.test(href)) &&
+    !dePreloads.some((href) => /\/en-.*\.js$/.test(href))
+  report(warehouseDeOk, "GET /warehouse (Cookie: locale=de)", `status=${warehouseDeRes.status} lang=de`)
+
+  // Live Effect RPC over HTTP (`POST /rpc/warehouse`).
+  const carts = await runRpc(WarehouseRpcs.WarehouseRpcs, "/rpc/warehouse", (client) => client.getWarehouseCarts())
+  report(carts.length === 4, "POST /rpc/warehouse getWarehouseCarts", `${carts.length} carts`)
+
+  const dispatchPreflight = await runRpc(WarehouseRpcs.WarehouseRpcs, "/rpc/warehouse", (client) =>
+    client.preflightDispatchCart({ cartId: "cart-101", simulateConflict: false, simulateExpired: false })
+  )
+  report(
+    dispatchPreflight.cartCode === "CART-101" && dispatchPreflight.warningCount === 0,
+    "POST /rpc/warehouse preflightDispatchCart",
+    `${dispatchPreflight.cartCode} picks=${dispatchPreflight.pickCount}`
+  )
+
+  const inUseExit = await runRpc(WarehouseRpcs.WarehouseRpcs, "/rpc/warehouse", (client) =>
+    Effect.exit(client.preflightReleaseCart({ cartId: "cart-204", simulateExpired: false }))
+  )
+  report(
+    Exit.isFailure(inUseExit) && String(inUseExit.cause).includes("CartInUseError"),
+    "POST /rpc/warehouse preflightReleaseCart (CartInUseError)",
+    Exit.isFailure(inUseExit) ? "CartInUseError" : "unexpected success"
   )
 } finally {
   if (server.exitCode === null && server.signalCode === null) {

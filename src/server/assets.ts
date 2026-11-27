@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import type * as I18n from "../i18n/I18n.ts"
 import * as JsonString from "../lib/jsonString.ts"
 import type * as Routes from "../routes.ts"
 
@@ -24,7 +25,7 @@ export const parseManifest = Schema.decodeSync(JsonString.jsonString(Manifest))
 export interface PageAssets {
   /** `<script type="module" src>` URLs. */
   readonly scripts: ReadonlyArray<string>
-  /** `<link rel="modulepreload">` URLs: the matched route's chunk and the entry's/route's transitive static imports. */
+  /** `<link rel="modulepreload">` URLs: the matched route's chunk, active locale chunk, and static imports. */
   readonly modulePreloads: ReadonlyArray<string>
   /** `<link rel="stylesheet">` URLs: the entry's CSS plus the CSS of the route chunks. */
   readonly stylesheets: ReadonlyArray<string>
@@ -40,8 +41,15 @@ export const routeSources = {
   Analytics: "src/pages/AnalyticsPage.ts",
   Status: "src/pages/StatusPage.ts",
   Order: "src/pages/OrderFormPage.ts",
+  Warehouse: "src/pages/WarehousePage.ts",
   NotFound: "src/pages/NotFoundPage.ts"
 } as const satisfies Record<Routes.AppRouteTag, string>
+
+/** Manifest key of each lazy-split translation catalog module. */
+export const localeSources = {
+  en: "src/i18n/catalogs/en.ts",
+  de: "src/i18n/catalogs/de.ts"
+} as const satisfies Record<I18n.AppLocale, string>
 
 const url = (file: string): string => `/${file}`
 
@@ -64,22 +72,27 @@ const staticClosure = (manifest: Manifest, source: string): ReadonlyArray<Manife
 const unique = <A>(items: Iterable<A>): ReadonlyArray<A> => [...new Set(items)]
 
 /**
- * Production assets for a route. This is what removes the entry -> page
- * network waterfall on a direct URL visit: the HTML already tells the browser
- * to fetch the page chunk (and the shared chunks it needs) in parallel with
- * the entry, instead of discovering them only after the entry has run.
+ * Production assets for a route and active locale. Preloads the page chunk
+ * AND the active locale catalog chunk (never the inactive locale) in parallel
+ * with the entry script so hydration has zero waterfall or fallback keys.
  */
-export const resolveRouteAssets = (manifest: Manifest, tag: Routes.AppRouteTag): PageAssets => {
+export const resolveRouteAssets = (
+  manifest: Manifest,
+  tag: Routes.AppRouteTag,
+  locale: I18n.AppLocale = "en"
+): PageAssets => {
   const entry = staticClosure(manifest, ENTRY_SOURCE)
   const entryChunk = entry[0]
   if (entryChunk === undefined) throw new Error("Manifest has no entry chunk")
   const route = staticClosure(manifest, routeSources[tag])
+  const localeSource = localeSources[locale]
+  const localeChunks = manifest[localeSource] !== undefined ? staticClosure(manifest, localeSource) : []
   return {
     scripts: [url(entryChunk.file)],
-    modulePreloads: unique([...route, ...entry].map((chunk) => url(chunk.file))).filter(
+    modulePreloads: unique([...route, ...localeChunks, ...entry].map((chunk) => url(chunk.file))).filter(
       (href) => href !== url(entryChunk.file)
     ),
-    stylesheets: unique([...entry, ...route].flatMap((chunk) => (chunk.css ?? []).map(url)))
+    stylesheets: unique([...entry, ...route, ...localeChunks].flatMap((chunk) => (chunk.css ?? []).map(url)))
   }
 }
 

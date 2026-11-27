@@ -18,6 +18,7 @@ export const AppRoute = Route.union({
     search: { mode: Schema.optional(Schema.Literals(["ok", "fail-ssr", "fail-refresh"])) }
   }),
   Order: Route.make("/order"),
+  Warehouse: Route.make("/warehouse"),
   NotFound: Route.make("/*")
 })
 

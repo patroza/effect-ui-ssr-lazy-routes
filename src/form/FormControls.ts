@@ -84,7 +84,10 @@ export interface NumberFieldOptions<M> {
   readonly min?: number | undefined
   readonly max?: number | undefined
   readonly step?: number | undefined
+  readonly locale?: string | undefined
   readonly format?: NumberFieldFormat | undefined
+  readonly increaseLabel?: string | undefined
+  readonly decreaseLabel?: string | undefined
   readonly testId?: string | undefined
   readonly decrementTestId?: string | undefined
   readonly incrementTestId?: string | undefined
@@ -113,7 +116,7 @@ export const numberField = <M>(h: Html.H<M>, options: NumberFieldOptions<M>) => 
           max: options.max,
           step: options.step ?? 1,
           allowOutOfRange: true,
-          locale: "en-US",
+          locale: options.locale ?? "en-US",
           format: options.format,
           name: options.name,
           disabled: field.disabled
@@ -131,7 +134,10 @@ export const numberField = <M>(h: Html.H<M>, options: NumberFieldOptions<M>) => 
               .children(
                 nf
                   .decrement({
-                    element: h.button.class(Design.ui.button).attr("data-testid", options.decrementTestId)
+                    element: h.button
+                      .class(Design.ui.button)
+                      .attr("aria-label", options.decreaseLabel)
+                      .attr("data-testid", options.decrementTestId)
                   })
                   .children("−"),
                 nf
@@ -140,7 +146,10 @@ export const numberField = <M>(h: Html.H<M>, options: NumberFieldOptions<M>) => 
                   .attr("data-testid", options.testId),
                 nf
                   .increment({
-                    element: h.button.class(Design.ui.button).attr("data-testid", options.incrementTestId)
+                    element: h.button
+                      .class(Design.ui.button)
+                      .attr("aria-label", options.increaseLabel)
+                      .attr("data-testid", options.incrementTestId)
                   })
                   .children("+")
               ),
@@ -278,6 +287,7 @@ export const checkboxField = <M>(h: Html.H<M>, options: ToggleFieldOptions<M>) =
 export interface ErrorSummaryOptions {
   readonly errors: ReadonlyArray<SchemaForm.FormIssueItem>
   readonly labelFor: (path: string) => string
+  readonly title?: string | undefined
   readonly summaryRef?: Renderer.Ref<HTMLDivElement> | undefined
   readonly testId?: string | undefined
 }
@@ -290,7 +300,7 @@ export const errorSummary = <M>(h: Html.H<M>, options: ErrorSummaryOptions) => {
   if (options.errors.length === 0) return undefined
   const base = h.div
     .key("form-error-summary")
-    .class(`${Design.ui.card} ${Design.ui.stack} border-red-300 bg-red-50/70 dark:border-red-900 dark:bg-red-950/30`)
+    .class(`${Design.ui.cardError} ${Design.ui.stack}`)
     .attrs({
       role: "alert",
       tabindex: "-1",
@@ -298,7 +308,9 @@ export const errorSummary = <M>(h: Html.H<M>, options: ErrorSummaryOptions) => {
     })
   const container = options.summaryRef === undefined ? base : base.ref(options.summaryRef)
   return container.children(
-    h.h2.class("text-sm font-semibold text-red-700 dark:text-red-300").children("Please resolve the following issues"),
+    h.h2
+      .class("text-sm font-semibold text-red-700 dark:text-red-300")
+      .children(options.title ?? "Please resolve the following issues"),
     h.ul
       .class("list-disc space-y-1 pl-5 text-sm text-red-700 dark:text-red-300")
       .children(

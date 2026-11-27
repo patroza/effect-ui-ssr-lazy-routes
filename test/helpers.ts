@@ -7,6 +7,7 @@ import { TestClock } from "effect/testing"
 import * as App from "../src/App.ts"
 import * as Bootstrap from "../src/browser/bootstrap.ts"
 import * as State from "../src/browser/state.ts"
+import type * as I18n from "../src/i18n/I18n.ts"
 import * as Pages from "../src/pages.ts"
 import * as Routes from "../src/routes.ts"
 import type * as Assets from "../src/server/assets.ts"
@@ -100,21 +101,34 @@ const pageOrFallback = (container: globalThis.Element): "page" | "fallback" =>
  * proves full SSR output, head/model/`~query` adoption and zero client refetches; `test/hydration.test.ts` uses
  * two separate `createAppBundle()` instances to prove zero-flash lazy hydration on an unloaded client.
  */
-export const ssrAt = Effect.fn("ssrAt")(function* (url: string, options?: { readonly budget?: Duration.Input }) {
+export const ssrAt = Effect.fn("ssrAt")(function* (
+  url: string,
+  options?: { readonly budget?: Duration.Input; readonly locale?: I18n.AppLocale }
+) {
   const side = makeSide()
   yield* preloadFor(side, url)
-  const result = yield* ssr(side.app, Router.props(Routes.AppRoute), { ...options, frames: pageOrFallback })
+  const props =
+    options?.locale === undefined
+      ? Router.props(Routes.AppRoute)
+      : Effect.map(Router.props(Routes.AppRoute), (base) => ({ ...base, locale: options.locale }))
+  const result = yield* ssr(side.app, props, {
+    ...(options?.budget === undefined ? {} : { budget: options.budget }),
+    frames: pageOrFallback
+  })
   return { side, result }
 })
 
 /** `renderPageEffect` for a URL that must render a document (not a redirect or a 400). */
 export const renderDocument = Effect.fn("renderDocument")(function* (
   url: string,
-  assetsFor: (route: Routes.AppRouteValue) => Assets.PageAssets = () => noAssets
+  assetsFor: (route: Routes.AppRouteValue, locale: I18n.AppLocale) => Assets.PageAssets = () => noAssets,
+  options?: { readonly locale?: I18n.AppLocale }
 ) {
   const side = makeSide()
   yield* preloadFor(side, url)
-  const outcome = yield* onTestClock(Render.renderPageEffect(url, assetsFor, { app: side.app }))
+  const outcome = yield* onTestClock(
+    Render.renderPageEffect(url, assetsFor, { app: side.app, locale: options?.locale })
+  )
   if (outcome._tag !== "Page") throw new Error(`expected a page for ${url}, got ${outcome._tag} ${outcome.status}`)
   return outcome
 })
@@ -136,9 +150,12 @@ export interface ServerDocument {
 }
 
 /** Server-renders `url` with its own pages and app, and splits the document the way a browser would see it. */
-export const serverRender = Effect.fn("serverRender")(function* (url: string) {
+export const serverRender = Effect.fn("serverRender")(function* (
+  url: string,
+  options?: { readonly locale?: I18n.AppLocale }
+) {
   const rpc = yield* Layer.build(TestRpc.makeCountingRpcProtocol())
-  const page = yield* renderDocument(url).pipe(Effect.provideContext(rpc))
+  const page = yield* renderDocument(url, () => noAssets, options).pipe(Effect.provideContext(rpc))
   const parsed = new DOMParser().parseFromString(page.html, "text/html")
   const state = State.readState(parsed.getElementById("state")?.textContent)
   if (state === undefined) throw new Error("server HTML has no #state")
@@ -171,6 +188,7 @@ export interface Browser<Before> {
 
 interface HydrateOptions {
   readonly editState?: (state: Renderer.State) => Renderer.State
+  readonly locale?: I18n.AppLocale
 }
 
 const collectFallbacks = (records: ReadonlyArray<MutationRecord>, target: Array<Element>): void => {
@@ -188,10 +206,11 @@ const hydrate = Effect.fn("hydrateFromServer")(function* <Before>(
   capture: (container: Element) => Before,
   options: HydrateOptions
 ) {
-  const server = yield* serverRender(url)
+  const server = yield* serverRender(url, { locale: options.locale })
   const side = makeSide() // the "browser": its lazy pages start unloaded
 
   window.history.replaceState(null, "", url)
+  document.documentElement.lang = options.locale ?? "en"
   document.body.innerHTML = `<div id="app">${server.appHtml}</div>`
   const container = document.getElementById("app")
   if (container === null) throw new Error("#app missing")
@@ -219,7 +238,8 @@ const hydrate = Effect.fn("hydrateFromServer")(function* <Before>(
     container,
     location: window.location.pathname + window.location.search,
     state,
-    bundle: side
+    bundle: side,
+    locale: options.locale
   }).pipe(
     Effect.provideContext(router),
     Effect.provideService(Scope.Scope, scope),

@@ -2,6 +2,7 @@ import { Router } from "@effect/ui"
 import { HtmlServer } from "@effect/ui/html"
 import { Effect, Option } from "effect"
 import * as App from "../App.ts"
+import * as I18n from "../i18n/I18n.ts"
 import * as Status from "../lib/status.ts"
 import * as Routes from "../routes.ts"
 import * as Assets from "./assets.ts"
@@ -34,6 +35,8 @@ export interface RenderedBadRequest {
 export interface RenderOptions {
   /** The root to render. Defaults to the production `App`; a test passes one built over its own `pages`. */
   readonly app?: App.AppComponent | undefined
+  /** Active SSR locale (defaults to `"en"`). */
+  readonly locale?: I18n.AppLocale | undefined
 }
 
 export type RenderOutcome = RenderedPage | RenderedRedirect | RenderedBadRequest
@@ -43,25 +46,14 @@ export const isSafeRelativeLocation = (location: string): boolean =>
   location.startsWith("/") && !location.startsWith("//") && !location.startsWith("/\\")
 
 /**
- * Server-renders one URL.
- *
- * `AppRoute.resolve` decides first, like `HtmlServerHttp.layerHttp` does: an
- * undecodable URL is `BadRequest`, a non-canonical one a `Redirect`.
- * Otherwise `HtmlServer.renderToHtml` runs `init`/`update`/`view` of `App` for
- * the route the static Router reports. `Component.lazy` pages are awaited, so
- * the HTML contains the whole page. `serializeState` is what the client adopts.
- * The status is 404 for the catch-all route (`resolved.notFound`) or when the
- * rendered page says its record is missing.
- *
- * Requires `HttpClient` and `RpcSerialization` (provided in-process by the
- * server or test composition root) so SSR executes queries directly against
- * the per-group HTTP RPC routes without a TCP round-trip.
+ * Server-renders one URL in the requested locale.
  */
 export const renderPageEffect = Effect.fn("renderPage")(function* (
   url: string,
-  assetsFor: (route: Routes.AppRouteValue) => Assets.PageAssets,
+  assetsFor: (route: Routes.AppRouteValue, locale: I18n.AppLocale) => Assets.PageAssets,
   options: RenderOptions = {}
 ) {
+  const locale = options.locale ?? "en"
   const resolved = Routes.AppRoute.resolve(url)
   if (Option.isNone(resolved)) return { _tag: "BadRequest", status: 400 } satisfies RenderOutcome
   const { invalid, notFound, redirected, route } = resolved.value
@@ -75,16 +67,19 @@ export const renderPageEffect = Effect.fn("renderPage")(function* (
     } satisfies RenderOutcome
   }
 
-  const page = yield* HtmlServer.renderToHtml(options.app ?? App.App, Router.props(Routes.AppRoute), {
-    budget: "1 second"
-  }).pipe(Effect.provide(Router.static({ routes: Routes.AppRoute, url })))
+  yield* Effect.promise(() => I18n.preloadLocale(locale))
+  const page = yield* HtmlServer.renderToHtml(
+    options.app ?? App.App,
+    Effect.map(Router.props(Routes.AppRoute), (props) => ({ ...props, locale })),
+    { budget: "1 second" }
+  ).pipe(Effect.provide(Router.static({ routes: Routes.AppRoute, url })))
   const html = `<!doctype html>
 <html ${page.htmlAttributes}>
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     ${page.head}
-    ${Assets.renderAssetTags(assetsFor(route))}
+    ${Assets.renderAssetTags(assetsFor(route, locale))}
   </head>
   <body ${page.bodyAttributes}>
     <div id="app">${page.html}</div>

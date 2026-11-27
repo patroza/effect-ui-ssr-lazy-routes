@@ -121,7 +121,7 @@ export const errorPanel = <M>(h: Html.H<M>, failure: FailureQuery<unknown>, opti
       : h.h1.class(Design.ui.title).children(options.title)
 
   return h.div
-    .class(`${Design.ui.card} ${Design.ui.stack} border-red-300 bg-red-50/70 dark:border-red-900 dark:bg-red-950/30`)
+    .class(`${Design.ui.cardError} ${Design.ui.stack}`)
     .attrs({
       role: "alert",
       "data-testid": options.testId ?? "query-error",
@@ -159,9 +159,7 @@ export const refreshErrorBanner = <M>(
   const waiting = options.waiting ?? ready.waiting
   return h.div
     .key("refresh-error")
-    .class(
-      `${Design.ui.card} ${Design.ui.row} justify-between border-amber-300 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/30`
-    )
+    .class(`${Design.ui.cardWarning} ${Design.ui.row} justify-between`)
     .attrs({
       role: "alert",
       "data-testid": options.testId ?? "refresh-error"

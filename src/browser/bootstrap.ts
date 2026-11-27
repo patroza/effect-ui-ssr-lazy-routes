@@ -2,6 +2,7 @@ import { type Renderer, Router } from "@effect/ui"
 import { BrowserHost, HtmlHydrate } from "@effect/ui/html"
 import { Effect, Option } from "effect"
 import * as App from "../App.ts"
+import * as I18n from "../i18n/I18n.ts"
 import * as Pages from "../pages.ts"
 import * as Routes from "../routes.ts"
 import * as Prefetch from "./prefetch.ts"
@@ -15,31 +16,28 @@ export interface BootOptions {
   readonly state: Renderer.State | undefined
   /** The matched `{ app, pages }` bundle to preload and mount. Defaults to `App.productionApp`. */
   readonly bundle?: App.AppBundle | undefined
+  /** Active locale resolved from `<html lang>` (defaults to `"en"`). */
+  readonly locale?: I18n.AppLocale | undefined
 }
 
 /**
  * Boots the app in the browser, inside the caller's scope:
  *
  * 1. resolve the URL with the same route union the server used,
- * 2. await `preloadRoute` for the matched route: the native
- *    `Component.lazy(...).preload()` of its page,
- * 3. install the `vite:preloadError` reload guard and the link prefetch (both
- *    released with the scope),
+ * 2. await `preloadRoute` AND `I18n.preloadLocale` in parallel before hydrating,
+ * 3. install the `vite:preloadError` reload guard and the link prefetch,
  * 4. hydrate the server DOM + state (or mount fresh if there is none).
- *
- * Step 2 must come before step 4: the lazy child then hydrates like a direct
- * one (same DOM nodes, Model and `~query` entries, no fallback).
- *
- * Provide the Router layer (`BrowserRouter.layer(...)` in the browser,
- * `Router.memory(...)` in tests) AROUND the scope that keeps the app alive (as
- * `src/main.ts` does), never inside `boot`: the Router layer owns the
- * document's click listeners and removes them when the layer closes.
  */
 export const boot = Effect.fn("boot")(function* (options: BootOptions) {
   const bundle = options.bundle ?? App.productionApp
-  // `/*` is a catch-all, so the server only serves URLs that resolve; an undecodable one has no page to preload.
+  const locale = options.locale ?? "en"
   const route = Routes.routeOf(options.location)
-  if (Option.isSome(route)) yield* Effect.promise(() => Pages.preloadRoute(route.value, bundle.pages))
+  yield* Effect.promise(() =>
+    Promise.all([
+      Option.isSome(route) ? Pages.preloadRoute(route.value, bundle.pages) : Promise.resolve(),
+      I18n.preloadLocale(locale)
+    ])
+  )
 
   // After the initial preload, so a failed first load surfaces as itself.
   const doc = options.container.ownerDocument
@@ -47,10 +45,11 @@ export const boot = Effect.fn("boot")(function* (options: BootOptions) {
   if (win !== null) yield* Prefetch.installPreloadErrorReload(win)
   yield* Prefetch.installLinkPrefetch(doc, bundle.pages)
 
+  const props = Effect.map(Router.props(Routes.AppRoute), (base) => ({ ...base, locale }))
   const root =
     options.state === undefined
-      ? yield* BrowserHost.mountEffect(bundle.app, Router.props(Routes.AppRoute), options.container)
-      : yield* HtmlHydrate.hydrateEffect(bundle.app, Router.props(Routes.AppRoute), options.container, options.state)
+      ? yield* BrowserHost.mountEffect(bundle.app, props, options.container)
+      : yield* HtmlHydrate.hydrateEffect(bundle.app, props, options.container, options.state)
 
   // Completes once every instance that adopts server state is live.
   yield* root.adopted

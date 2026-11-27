@@ -21,7 +21,7 @@ const ServerLive = Layer.effectDiscard(
     const server = yield* HttpServer.HttpServer
     const httpEffect = yield* Handler.makeHttpAppEffect({
       clientDir,
-      assetsFor: (route) => Assets.resolveRouteAssets(manifest, route._tag)
+      assetsFor: (route, locale) => Assets.resolveRouteAssets(manifest, route._tag, locale)
     })
     yield* server.serve(httpEffect)
     const actual =

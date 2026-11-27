@@ -307,6 +307,7 @@ export const make = <
   readonly leafHook?: SchemaIssue.LeafHook | undefined
   readonly checkHook?: SchemaIssue.CheckHook | undefined
   readonly crossFieldChecks?: ((values: SValue["Type"]) => ReadonlyArray<FormIssueItem>) | undefined
+  readonly labelOptions?: SchemaMeta.ResolveLabelOptions | undefined
 }) => {
   type Values = SValue["Type"]
   type Decoded = SForm["Type"]
@@ -698,7 +699,7 @@ export const make = <
     return derived
   }
 
-  const labelFor = (path: string): string => SchemaMeta.resolveFieldLabel(meta, path)
+  const labelFor = (path: string): string => SchemaMeta.resolveFieldLabel(meta, path, options.labelOptions)
 
   return {
     State,

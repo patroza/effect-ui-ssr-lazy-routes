@@ -2,18 +2,20 @@
 
 A small, strict-TypeScript reference for **[`@effect/ui`](https://github.com/Effect-TS/ui)** + **`@effect/ui-kit`** + **Tailwind CSS v4** that shows, end to end and _verifiably_:
 
-- **Multi-page routing** with `Route.union` (+ `subset`, `printPath`) and `Router.patchSearch` (`/`, `/products?q=`, `/products/:id`, `/analytics`, `/status?mode=`, `/*`).
+- **Multi-page routing** with `Route.union` (+ `subset`, `printPath`) and `Router.patchSearch` (`/`, `/products?q=`, `/products/:id`, `/analytics`, `/status?mode=`, `/order`, `/warehouse`, `/*`).
+- **Lazy locale catalogs (`en` / `de`)**: [`src/i18n/I18n.ts`](src/i18n/I18n.ts) + [`src/i18n/catalogs/`](src/i18n/catalogs) split translations into separate Vite chunks, switched progressively via `POST /locale` cookie (`<html lang>` + active-locale-only `<link rel="modulepreload">` + `Accept-Language` RPC headers) and exposed to descendants through `I18nProvider` (`shares` / `reads`), localized `SchemaForm` hooks (`makeLocalizedHooks`, `annotateLiteralUnionMessages`), and localized error renderers ([docs/i18n-proposal.md](docs/i18n-proposal.md)).
+- **Scanner-inspired MVU Command workflows (`/warehouse`)**: [`src/pages/WarehousePage.ts`](src/pages/WarehousePage.ts), [`src/workflow/CommandFlow.ts`](src/workflow/CommandFlow.ts), [`src/workflow/CommandTrace.ts`](src/workflow/CommandTrace.ts), and [`src/design/commandResult.ts`](src/design/commandResult.ts) demonstrate atomic preflight & execution `Command.Service`s, optimistic cache updates + rollback, controlled `@effect/ui-kit` `AlertDialog` / `Dialog` confirmation & input gates, `SpanPointer` + OTel `SpanLink` correlation across human think-time pauses, `stream: true` inline `Progress` + `Command.interrupt`, `SessionExpiredError` mid-flight recovery preserving drafts, and opt-in `ToastProvider` notifications ([docs/command-workflow-architecture.md](docs/command-workflow-architecture.md)).
 - **Server-side rendering** with `HtmlServer.renderToHtml`, `HtmlServer.serializeState` and `Router.static`.
-- **Zero-flash hydration**: the browser adopts the _exact_ server DOM nodes, the server's serialized Model and its `~query` cache, for pages code-split with plain `Component.lazy` (`await preloadRoute` before `HtmlHydrate.hydrateEffect`).
+- **Zero-flash hydration**: the browser adopts the _exact_ server DOM nodes, the server's serialized Model and its `~query` cache, for pages code-split with plain `Component.lazy` (`await preloadRoute` + `await I18n.preloadLocale` before `HtmlHydrate.hydrateEffect`).
 - **Query result boundary ([`.agents/traits/query-result-boundary.md`](.agents/traits/query-result-boundary.md))**: [`src/design/queryResult.ts`](src/design/queryResult.ts) flattens `h.queries.*` once at each page boundary via `QueryResult.read` (`isInitial` for cold nav, `isFailure` for SSR `503` / initial error UI with Retry, `isReady` / falling through for guaranteed non-optional `data: A` plus `refreshErrorBanner` when `Failure.previousSuccess` keeps SSR/cached data alive across a failed client refresh). [`src/pages/StatusPage.ts`](src/pages/StatusPage.ts) (`/status?mode=ok|fail-ssr|fail-refresh`) demonstrates SSR errors, SSR-to-client refresh errors, and manual `Query.invalidate` refresh (`Products`, `ProductDetail`, `Analytics`, `Status`), alongside `BrowserHost` automatic stale-query refetching on `Query.Visibility` / `Query.Connectivity` changes.
-- **Per-page Vite splitting**, `@effect/ui-kit` included: `Tabs`, `Collapsible` and `Dialog` ship **only** in the page chunk that uses them, never in the entry (`pnpm verify:bundles`).
-- **Real Effect HTTP + RPC API server** (`effect/rpc` + `effect/http`): feature-scoped `RpcGroup`s (`SearchRpcs`, `ProductRpcs`, `AnalyticsRpcs`, `StatusRpcs`) are mounted independently on `HttpRouter` (`POST /rpc/search`, `POST /rpc/product`, `POST /rpc/analytics`, `POST /rpc/status`) with zero `RpcGroup.merge`, keeping each page's schemas, RPC definitions and `RpcClient` protocol strictly in its lazy route chunk while all server stores/datasets stay under `src/server/` (0 bytes in `dist/client/`).
+- **Per-page Vite splitting**, `@effect/ui-kit` included: `Tabs` + `Collapsible` (`Analytics`), `Form` + `NumberField` + `Select` + `Checkbox` (`Order`), and `Progress` + `ToastProvider` (`Warehouse`) ship **only** in the page chunk that uses them, while `Dialog` (`ProductDetail` + `Warehouse`) and `Field` (`Order` + `Warehouse`) stay out of the entry (`pnpm verify:bundles`).
+- **Real Effect HTTP + RPC API server** (`effect/rpc` + `effect/http`): feature-scoped `RpcGroup`s (`SearchRpcs`, `ProductRpcs`, `AnalyticsRpcs`, `StatusRpcs`, `OrderRpcs`, `WarehouseRpcs`) are mounted independently on `HttpRouter` (`POST /rpc/{search,product,analytics,status,order,warehouse}`) with zero `RpcGroup.merge`, keeping each page's schemas, RPC definitions and `RpcClient` protocol strictly in its lazy route chunk while all server stores/datasets stay under `src/server/` (0 bytes in `dist/client/`).
 - **Required `HttpClient` + `RpcSerialization` at composition roots**: each page's `Query.Service` / `Command.Service` provides its own `RpcClient.layerProtocolHttp({ url: "/rpc/<group>" })`, so only `HttpClient` and `RpcSerialization` flow to each entry root — `FetchHttpClient.layer` + `RpcSerialization.layerJson` in the browser (so `Home` and `NotFound` don't even load `RpcClient`!), and an in-process `HttpClient` dispatching directly to the RPC `HttpRouter` effect during SSR (zero TCP round-trip).
 - **Deterministic tests**: `@effect/vitest` `it.effect` on the `TestClock`, `TestHost.layer()` / `TestHost.settle`, `Ssr.ssr`, and `Ref`-backed in-process RPC call counters. No `vi.resetModules()`, no `setTimeout`, no wall-clock waits, no module-level counters.
 - **No entry → page waterfall** on direct visits: `<link rel="modulepreload">` for the matched route's chunks and the entry's static imports, and a page's own `<link rel="stylesheet">` only on that page.
 - **Dev-only DevTools**: `@effect/ui-devtools` inspector overlay + Time Travel (`DevTools.layer`) and Vite MCP server (`DevToolsVite.plugin({ dispatch: true })` at `http://127.0.0.1:4774/mcp`) in `pnpm dev`, tree-shaken to **0 bytes** in production (`pnpm verify:bundles`).
 - **Tailwind v4** (`@tailwindcss/vite`) with a neutral light/dark palette (`prefers-color-scheme`, no JS), focus rings and `data-*` / `aria-*` variants on the kit's attributes.
-- **Forms & i18n guides**: [docs/complex-forms.md](docs/complex-forms.md) (`SchemaForm`, typed field paths, cross-field rules, array reindexing, debounced async checks, `Router.blocked`) and [docs/i18n-proposal.md](docs/i18n-proposal.md) (`I18n` service + `shares`/`reads` provider, lazy catalogs, localized Schema/OmegaForm hooks).
+- **Forms, workflows & i18n guides**: [docs/complex-forms.md](docs/complex-forms.md) (`SchemaForm`, typed field paths, cross-field rules, array reindexing, debounced async checks, `Router.blocked`), [docs/command-workflow-architecture.md](docs/command-workflow-architecture.md) (MVU `CommandFlow`, `CommandTrace` OTel SpanLinks, `CommandResult` inline progress/errors, opt-in `ToastProvider`, and phased rollout), and [docs/i18n-proposal.md](docs/i18n-proposal.md) (`I18n` service + `shares`/`reads` provider, lazy catalogs, localized Schema/OmegaForm hooks).
 
 |                                             |                                                                                                                                        |
 | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -75,28 +77,44 @@ Vite+ (`vite-plus`) unifies Vite, Vitest, Oxlint, Oxfmt, and `tsrs` into a singl
 
 ## The pages
 
-| Route           | Page chunk contains                                                                        | `@effect/ui-kit`                |
-| --------------- | ------------------------------------------------------------------------------------------ | ------------------------------- |
-| `/`             | counter                                                                                    | `Button`                        |
-| `/products?q=`  | `SearchProducts` query + `SearchRpcs`, compare list (`Product` schema is shared)           | `Input`, `Button`               |
-| `/products/:id` | `GetProduct` query, **`BookmarkProduct` Command** + `ProductRpcs`, quantity, inquiry modal | `Dialog`, `Input`, `Button`     |
-| `/analytics`    | `GetAnalytics` query + `AnalyticsRpcs`, schemas, SVG chart, **its own CSS**                | `Tabs`, `Collapsible`, `Button` |
-| `/status?mode=` | `GetStatus` query + `StatusRpcs`, `errorPanel` / `refreshErrorBanner` demo                 | `Button`                        |
-| `/*`            | not-found (404)                                                                            | none                            |
+| Route           | Page chunk contains                                                                                                     | `@effect/ui-kit`                                                                 |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `/`             | counter                                                                                                                 | `Button`                                                                         |
+| `/products?q=`  | `SearchProducts` query + `SearchRpcs`, compare list (`Product` schema is shared)                                        | `Input`, `Button`                                                                |
+| `/products/:id` | `GetProduct` query, **`BookmarkProduct` Command** + `ProductRpcs`, quantity, inquiry modal                              | `Dialog`, `Input`, `Button`                                                      |
+| `/analytics`    | `GetAnalytics` query + `AnalyticsRpcs`, schemas, SVG chart, **its own CSS**                                             | `Tabs`, `Collapsible`, `Button`                                                  |
+| `/status?mode=` | `GetStatus` query + `StatusRpcs`, `errorPanel` / `refreshErrorBanner` demo                                              | `Button`                                                                         |
+| `/order`        | `SchemaForm`, async code/promo queries, `SubmitOrder` Command + `OrderRpcs`                                             | `Form`, `Field`, `NumberField`, `Select`, `Checkbox`, `Input`, `Button`          |
+| `/warehouse`    | Scanner Command Console: `GetWarehouseCarts`, 7 Commands (`stream: true` + `optimistic`), `CommandFlow`, `CommandTrace` | `Progress`, `ToastProvider`, `AlertDialog`, `Dialog`, `Field`, `Input`, `Button` |
+| `/*`            | not-found (404)                                                                                                         | none                                                                             |
 
-`Button`, `Input` and `Product` schema are used by several pages, so Rollup puts them in small shared chunks (`Product-*.js` is shared only by Products and ProductDetail). `Tabs`, `Collapsible` and `Dialog` each have exactly one user, so they land in that page's chunk. `App.ts` and `Shell.ts` import no kit primitive, so the shell never pays for them.
+`Button`, `Input`, `Dialog`, `Field` and `Product` schema are shared only by the lazy routes that use them (`verify:bundles` proves 0 bytes in entry). `Tabs`/`Collapsible` (`Analytics`), `Form`/`NumberField`/`Select`/`Checkbox` (`Order`), and `Progress`/`ToastProvider` (`Warehouse`) each land in their own single-owner page chunk, while `en`/`de` catalogs land in separate dynamic locale chunks. `App.ts` and `Shell.ts` import no kit primitive, so the shell never pays for them.
 
 ```
 src/
-  main.ts                  browser entry: decode #state (`JsonString.jsonString`; unreadable → warn + mount fresh), run boot in the app scope, wire `BrowserRouter`, `FetchHttpClient.layer` + `RpcSerialization.layerJson`, and dev-only `DevTools.layer`
+  main.ts                  browser entry: decode #state (`JsonString.jsonString`; unreadable → warn + mount fresh), run boot in the app scope, wire `BrowserRouter`, `FetchHttpClient` + `Accept-Language` + `RpcSerialization.layerJson`, and dev-only `DevTools.layer`
   index.css                @import "tailwindcss" + a tiny base layer (the entry's only global CSS)
-  App.ts                   createApp(pages), createAppBundle() + the production `App`/`productionApp`: holds the route, Head.titleTemplate, Router subscription; delegates the layout to the shell
-  Shell.ts                 createShell(pages): primary nav + the lazy page outlet (a plain view function, so state paths stay `/App/<page>[<path>]`)
-  routes.ts                AppRoute = Route.union({ Home, Products, ProductDetail, Analytics, Status, NotFound }) + routeOf(url)
+  App.ts                   createApp(pages), createAppBundle() + the production `App`/`productionApp`: holds route & active locale (`HtmlHead.lang`), Router subscription; delegates layout to Shell
+  Shell.ts                 createShell(pages): primary nav + progressive `POST /locale` EN/DE switcher + lazy page outlet (keeping `/App/<Page>[<path>]` state paths intact)
+  routes.ts                AppRoute = Route.union({ Home, Products, ProductDetail, Analytics, Status, Order, Warehouse, NotFound }) + routeOf(url)
   pages.ts                 the ONLY references to ./pages/*: createPages({ onLoad }) → Component.lazy(name, () => import(...)), the production `pages`, preloadRoute(route, pages)
+  i18n/
+    messages.ts            `MESSAGE_KEYS` + zero-dependency ICU `{param}` / `{count, plural, ...}` template formatter
+    I18n.ts                `AppLocale` (`en`/`de`), dynamic-import `preloadLocale`, `I18n` Effect service, `I18nProvider` (`shares`/`reads`), `Intl` formatters
+    catalogs/en.ts · de.ts lazy-split translation catalogs (`SENTINEL:i18n-en`, `SENTINEL:i18n-de`)
+  workflow/
+    CommandTrace.ts        `SpanPointer`, `captureSpanPointer`, `captureCommandOutcome`, `shortTraceRef`, `withOriginSpanLink` / `withOriginSpanLinkStream`
+    CommandFlow.ts         Schema-serializable MVU workflow helper (`Idle -> Prompting -> Running -> Succeeded | Failed`) + `restore`
   pages/                   one component per route; each ends up in its own chunk
-    HomePage.ts · NotFoundPage.ts · ProductsPage.ts · AnalyticsPage.ts · StatusPage.ts
+    HomePage.ts · NotFoundPage.ts · ProductsPage.ts · AnalyticsPage.ts · StatusPage.ts · OrderFormPage.ts · WarehousePage.ts
     product/ProductDetailPage.ts   the inquiry Dialog; maps BookmarkProduct's result/error into its own messages with Command.match
+  warehouse/               Warehouse Command Console (Warehouse chunk only)
+    domain/Warehouse.ts    cart/command schemas, localized `BlockCart` `SchemaForm`, `ResourceCheckoutConflictError`, `CartInUseError`, `SessionExpiredError`, `describeWarehouseFailure`
+    domain/WarehouseRpcs.ts `WarehouseRpcs` (`getWarehouseCarts`, `unblockCart`, `blockCart`, `preflightReleaseCart`, `releaseCart`, `preflightDispatchCart`, `dispatchCartStep`, `refreshSession`)
+    queries/GetWarehouseCarts.ts  `GetWarehouseCarts` Query.Service over `/rpc/warehouse`
+    commands/WarehouseCommands.ts `UnblockCart` (`optimistic` + `invalidates`), `BlockCart`, `PreflightReleaseCart`, `ReleaseCart`, `PreflightDispatchCart`, `DispatchCartBatch` (`stream: true`), `RefreshSession`
+  form/                    SchemaForm engine, controls & localized Schema validation hooks (`Order` + `Warehouse` chunks only)
+    localizedValidation.ts `makeLocalizedHooks` (`LeafHook`/`CheckHook`), `annotateLiteralUnionMessages` (AST union rewriting via `Schema.make<S>`)
   rpc/
     domain/ApiError.ts     typed domain `Schema.TaggedError` (with optional `cause: Schema.Defect()`) for server-side RPC failures (e.g. `bookmarkProduct`, `getStatus`)
   product/
@@ -122,22 +140,23 @@ src/
     state.ts               #state decoding
   design/
     classes.ts             Tailwind class recipes (plain strings, found by Tailwind's source scan)
+    commandResult.ts       `commandButton`, `commandErrorBanner` (`Ref <traceId>`), `commandProgressPanel` (`ui-kit Progress`)
     loading.ts             pageFallback for lazy pages (the `data-fallback` marker the tests look for)
     queryResult.ts         `read`, `isInitial`/`isFailure`/`isReady`, `errorPanel`, `refreshErrorBanner`, `refreshButton` boundary helpers
   lib/
     jsonString.ts          the central Schema.fromJsonString(Schema.toCodecJson(...))
     status.ts              `data-http-status` ("404" / "503") marker a page sets; the server reads it back as the HTTP status
   server/
-    services/              server-only `Context.Service` stores (0 bytes in dist/client/): CatalogStore, BookmarkStore (`Ref`), AnalyticsStore, StatusStore (`Ref`)
-    handlers/              per-group RPC handler layers (`SearchHandlers`, `ProductHandlers`, `AnalyticsHandlers`, `StatusHandlers`), each yielding only the store(s) it needs
-    rpc.ts                 independent `RpcServer.layerHttp` routes (`/rpc/{search,product,analytics,status}`), `HandlersLayer` (`Layer.mergeAll` of per-group handlers), and `InProcessRpcClientLayer` (zero-TCP in-process `HttpClient` for SSR)
-    assets.ts              manifest → per-route <link rel="modulepreload"> / stylesheet tags
-    render.ts              renderPageEffect(url, assetsFor, { app? }) → Page | Redirect | BadRequest (requires `HttpClient` + `RpcSerialization`)
-    handler.ts             Effect HTTP application (`POST /rpc/{search,product,analytics,status}` + static files + redirects + 400/405 + security headers + in-process SSR)
+    services/              server-only `Context.Service` stores (0 bytes in dist/client/): CatalogStore, BookmarkStore (`Ref`), AnalyticsStore, StatusStore (`Ref`), OrderStore (`Ref`), WarehouseStore (`Ref`)
+    handlers/              per-group RPC handler layers (`SearchHandlers`, `ProductHandlers`, `AnalyticsHandlers`, `StatusHandlers`, `OrderHandlers`, `WarehouseHandlers`), each yielding only the store(s) it needs
+    rpc.ts                 independent `RpcServer.layerHttp` routes (`/rpc/{search,product,analytics,status,order,warehouse}`), `HandlersLayer` (`Layer.mergeAll` of per-group handlers), and `InProcessRpcClientLayer` (zero-TCP in-process `HttpClient` for SSR)
+    assets.ts              manifest → per-route + active-locale `<link rel="modulepreload">` / stylesheet tags
+    render.ts              renderPageEffect(url, assetsFor, { app?, locale? }) → Page | Redirect | BadRequest (requires `HttpClient` + `RpcSerialization`)
+    handler.ts             Effect HTTP application (`POST /locale` + `POST /rpc/{search,product,analytics,status,order,warehouse}` + static files + redirects + 400/405 + security headers + in-process SSR)
     serve.ts               production server entry (`NodeHttpServer.layer` + `NodeRuntime.runMain`)
 config/            oxlint.strict.json (the strict type-aware rules vite.config.ts extends)
 scripts/           verify-bundles.ts · smoke.ts · dev.ts
-test/              ssr · hydration · ui-kit · navigation · query-result · prefetch · assets · server · pages · chart (+ setup.ts, helpers.ts, support/rpc.ts, support/frames.ts)
+test/              ssr · hydration · ui-kit · navigation · query-result · prefetch · assets · server · pages · chart · order-form · command-flow · i18n · warehouse (+ setup.ts, helpers.ts, support/rpc.ts, support/frames.ts)
 ```
 
 ### Request lifecycle
@@ -299,7 +318,7 @@ GET /analytics   → css: main.css + AnalyticsPage.css · modulepreload: Analyti
 
 `src/server/handler.ts` composes `RpcServer.layerHttp` (`POST /rpc/{search,product,analytics,status}` with `RpcSerialization.layerJson`) with static asset serving and SSR (`NodeHttpServer` in `src/server/serve.ts`, also loaded through Vite in `scripts/dev.ts`). [`test/server.test.ts`](test/server.test.ts) drives it against a temporary client directory.
 
-- **Effect RPC (`POST /rpc/{search,product,analytics,status}`):** serves `searchProducts` (`/rpc/search`), `getProduct` + `bookmarkProduct` (`/rpc/product`), `getAnalytics` (`/rpc/analytics`), and `getStatus` (`/rpc/status`) over JSON HTTP, sharing the same server store `Layer` instance as in-process SSR.
+- **Effect RPC (`POST /rpc/{search,product,analytics,status,order,warehouse}`):** serves all 6 feature-scoped `RpcGroup`s over JSON HTTP (plus `POST /locale` for cookie locale switching), sharing the same server store `Layer` instance as in-process SSR.
 - **URLs** are resolved with `AppRoute.resolve` first, as `HtmlServerHttp.layerHttp` does: an undecodable URL (`/%E0%A4%A`), a protocol-relative target (`//evil.com/`), or any canonical redirect whose `Location` would start with `//` or `/\` (`/%2F%2Fevil.com/`, `/.//evil.com/`, `/a/..//evil.com/`) is rejected with `400`; a safe non-canonical path is a permanent `301` (`/products/` → `/products`), or a temporary `302` when search params were dropped as invalid (`/products?q=a&q=b` → `/products`), with `Location: AppRoute.print(route)`.
 - **Status** is `404` for the catch-all route and for a page that rendered a missing record (an unknown product marks its root with `data-http-status="404"`), and `503` when a page's initial SSR query failed (`data-http-status="503"` on `QueryResult.errorPanel`), so HTTP status cannot drift from what the document shows.
 - **Static files** come from `dist/client` only: `..` segments, malformed escapes and any dotfile segment (`/.vite/manifest.json`, in any letter case) are never served. `/assets/*` is `immutable`; a real `favicon.ico` in `dist/client` is served before falling back to `204`.
@@ -330,6 +349,10 @@ GET /analytics   → css: main.css + AnalyticsPage.css · modulepreload: Analyti
 | `chart.test.ts`        | `escapeXml` and that a `&` / `<` in the chart's title or labels keeps the SVG well-formed XML.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `assets.test.ts`       | `resolveRouteAssets` and the `<head>` contain `modulepreload` for the active route's chunks and the entry's static imports (no other route's chunks), CSS handling, cycles, missing-manifest errors.                                                                                                                                                                                                                                                                                                                                                                                               |
 | `prefetch.test.ts`     | `installPreloadErrorReload` reloads and calls `preventDefault()` on the first `vite:preloadError`; when a reload just happened it does **neither**, so the real chunk error survives; it still reloads when `sessionStorage` throws, and its listener is released with the scope.                                                                                                                                                                                                                                                                                                                  |
+| `order-form.test.ts`   | `/order` `SchemaForm` SSR + hydration, conditional Card/Invoice branches, dynamic array reindexing, debounced async code/promo checks, `Router.blocked` dirty guard, and `submitOrder` server validation mapping.                                                                                                                                                                                                                                                                                                                                                                                  |
+| `command-flow.test.ts` | `CommandFlow` state machine transitions, Schema round-trip, history `restore`, and real `Tracer.make` OTel `SpanLink` correlation (`workflow.origin_trace_id`) across simulated `TestClock` human confirmation pauses without span duration inflation.                                                                                                                                                                                                                                                                                                                                             |
+| `i18n.test.ts`         | `en`/`de` catalog key parity, plural/param templates, localized `OrderSchemaForm` labels & AST literal-union messages (`PaymentTerms`), `describeWarehouseFailure` in EN & DE, and German SSR/hydration on `/order`.                                                                                                                                                                                                                                                                                                                                                                               |
+| `warehouse.test.ts`    | `/warehouse` SSR/hydration in EN & DE, optimistic `UnblockCart` rollback on `ResourceCheckoutConflictError` (`Ref <traceId>`), `BlockCart` `Dialog` + `SchemaForm`, `CartInUseError` vs `ReleaseCart` `AlertDialog`, streaming `DispatchCartBatch` + `Progress` + `Command.interrupt`, `SessionExpiredError` recovery preserving draft & retrying, and opt-in `ToastProvider`.                                                                                                                                                                                                                     |
 
 `test/setup.ts` adds a tiny stand-in for the Popover API, which happy-dom lacks and the kit's top-layer `Dialog` calls, and the manual `requestAnimationFrame` above.
 
