@@ -6,6 +6,11 @@ export interface FieldMeta {
   readonly required: boolean
 }
 
+export interface ResolveLabelOptions {
+  readonly formLabel?: string | undefined
+  readonly formatItemLabel?: ((index: number, label: string) => string) | undefined
+}
+
 const isRecord = (u: unknown): u is Readonly<Record<string, unknown>> => typeof u === "object" && u !== null
 
 const readStringAnnotation = (annotations: unknown, key: "title" | "description"): string | undefined => {
@@ -14,13 +19,15 @@ const readStringAnnotation = (annotations: unknown, key: "title" | "description"
   return typeof value === "string" ? value : undefined
 }
 
+const defaultFormatItemLabel = (index: number, label: string): string => `Item #${index} · ${label}`
+
 /**
  * Converts a camelCase / snake_case / kebab-case identifier or dotted path
  * into a readable field label (for example `projectCode` -> `"Project code"`).
  */
-export const humanizeKey = (key: string): string => {
+export const humanizeKey = (key: string, options: ResolveLabelOptions = {}): string => {
   const segments = key.split(".").filter((segment) => segment.length > 0)
-  if (segments.length === 0) return "Form"
+  if (segments.length === 0) return options.formLabel ?? "Form"
 
   const last = segments[segments.length - 1] ?? key
   const words = last
@@ -32,7 +39,8 @@ export const humanizeKey = (key: string): string => {
 
   const numericSegment = segments.find((segment) => /^\d+$/.test(segment))
   if (numericSegment !== undefined) {
-    return `Item #${Number(numericSegment) + 1} · ${formatted}`
+    const formatItem = options.formatItemLabel ?? defaultFormatItemLabel
+    return formatItem(Number(numericSegment) + 1, formatted)
   }
   return formatted
 }
@@ -129,8 +137,12 @@ export const extractFieldMetaMap = (schema: Schema.Top): Readonly<Record<string,
  * Resolves a human-readable label for a concrete dotted field path (such as
  * `"items.1.sku"` -> `"Item #2 · SKU"` or `"billing.poNumber"` -> `"PO number"`).
  */
-export const resolveFieldLabel = (metaMap: Readonly<Record<string, FieldMeta>>, path: string): string => {
-  if (path === "") return "Form"
+export const resolveFieldLabel = (
+  metaMap: Readonly<Record<string, FieldMeta>>,
+  path: string,
+  options: ResolveLabelOptions = {}
+): string => {
+  if (path === "") return options.formLabel ?? "Form"
   const exact = metaMap[path]
   if (exact !== undefined) return exact.label
 
@@ -139,8 +151,10 @@ export const resolveFieldLabel = (metaMap: Readonly<Record<string, FieldMeta>>, 
   const wildcardPath = segments.map((segment) => (/^\d+$/.test(segment) ? "*" : segment)).join(".")
   const wildcard = metaMap[wildcardPath]
   if (wildcard !== undefined) {
-    return numericSegment === undefined ? wildcard.label : `Item #${Number(numericSegment) + 1} · ${wildcard.label}`
+    if (numericSegment === undefined) return wildcard.label
+    const formatItem = options.formatItemLabel ?? defaultFormatItemLabel
+    return formatItem(Number(numericSegment) + 1, wildcard.label)
   }
 
-  return humanizeKey(path)
+  return humanizeKey(path, options)
 }

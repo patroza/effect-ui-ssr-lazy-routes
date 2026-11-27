@@ -16,6 +16,7 @@ import * as ApiError from "../src/rpc/domain/ApiError.ts"
 import * as SearchRpcs from "../src/search/domain/SearchRpcs.ts"
 import * as Handler from "../src/server/handler.ts"
 import * as Rpc from "../src/server/rpc.ts"
+import * as WarehouseRpcs from "../src/warehouse/domain/WarehouseRpcs.ts"
 
 interface Reply {
   readonly status: number
@@ -336,7 +337,7 @@ describe("Effect RPC over HTTP (POST /rpc/{search,product,analytics})", () => {
     expect(response.headers.get("content-security-policy")).toBe(Handler.contentSecurityPolicy)
     expect(await response.text()).toContain("Field notebook")
 
-    for (const rpcPath of ["/rpc/search", "/rpc/product", "/rpc/analytics", "/rpc/order"]) {
+    for (const rpcPath of ["/rpc/search", "/rpc/product", "/rpc/analytics", "/rpc/order", "/rpc/warehouse"]) {
       for (const method of ["GET", "HEAD", "PUT"]) {
         const disallowed = await raw(rpcPath, method)
         expect(disallowed.status, `${method} ${rpcPath}`).toBe(405)
@@ -457,6 +458,87 @@ describe("Effect RPC over HTTP (POST /rpc/{search,product,analytics})", () => {
       expect(reason?._tag).toBe("Fail")
       if (reason?._tag === "Fail") {
         expect(reason.error._tag).toBe("OrderValidationError")
+      }
+    }
+  })
+
+  it("handles POST /locale cookie switching, open-redirect blocking, and localized SSR + RPC headers", async () => {
+    const switchRes = await fetch(`http://127.0.0.1:${port}/locale`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "locale=de&next=/warehouse",
+      redirect: "manual"
+    })
+    expect(switchRes.status).toBe(303)
+    expect(switchRes.headers.get("location")).toBe("/warehouse")
+    expect(switchRes.headers.get("set-cookie")).toContain("locale=de")
+
+    const openRedirect = await fetch(`http://127.0.0.1:${port}/locale`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "locale=de&next=//evil.com/",
+      redirect: "manual"
+    })
+    expect(openRedirect.status).toBe(303)
+    expect(openRedirect.headers.get("location")).toBe("/")
+
+    const ssrDe = await fetch(`http://127.0.0.1:${port}/warehouse`, {
+      headers: { cookie: "locale=de" }
+    })
+    const htmlDe = await ssrDe.text()
+    expect(ssrDe.status).toBe(200)
+    expect(htmlDe).toContain('lang="de"')
+    expect(htmlDe).toContain('data-i18n-chunk="SENTINEL:i18n-de"')
+    expect(htmlDe).toContain("Lager-Command-Konsole")
+
+    const deOrderRes = await fetch(`http://127.0.0.1:${port}/rpc/order`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "accept-language": "de-DE,de;q=0.9"
+      },
+      body: JSON.stringify({
+        _tag: "Request",
+        id: "1",
+        tag: "submitOrder",
+        payload: {
+          order: {
+            projectCode: "race-conflict",
+            contactEmail: "buyer@studio.test",
+            promoCode: "",
+            billing: { _tag: "Card", cardholderName: "Ada Lovelace", billingZip: "94107" },
+            items: [{ id: "line-1", sku: "MUG-01", quantity: 1, unitPriceDollars: 20 }],
+            expedited: false,
+            deliveryNote: "",
+            acceptTerms: true
+          }
+        },
+        headers: []
+      })
+    })
+    expect(deOrderRes.status).toBe(200)
+    expect(await deOrderRes.text()).toContain("wurde vor Abschluss vergeben")
+  })
+
+  it("serves POST /rpc/warehouse (getWarehouseCarts, preflightDispatchCart, CartInUseError)", async () => {
+    const carts = await runRpc(WarehouseRpcs.WarehouseRpcs, "/rpc/warehouse", (client) => client.getWarehouseCarts())
+    expect(carts).toHaveLength(4)
+
+    const preflight = await runRpc(WarehouseRpcs.WarehouseRpcs, "/rpc/warehouse", (client) =>
+      client.preflightDispatchCart({ cartId: "cart-101", simulateConflict: false, simulateExpired: false })
+    )
+    expect(preflight.cartCode).toBe("CART-101")
+    expect(preflight.warningCount).toBe(0)
+
+    const inUse = await runRpc(WarehouseRpcs.WarehouseRpcs, "/rpc/warehouse", (client) =>
+      Effect.exit(client.preflightReleaseCart({ cartId: "cart-204", simulateExpired: false }))
+    )
+    expect(Exit.isFailure(inUse)).toBe(true)
+    if (Exit.isFailure(inUse)) {
+      const reason = inUse.cause.reasons[0]
+      expect(reason?._tag).toBe("Fail")
+      if (reason?._tag === "Fail") {
+        expect(reason.error._tag).toBe("CartInUseError")
       }
     }
   })

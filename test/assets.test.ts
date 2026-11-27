@@ -164,3 +164,38 @@ describe("document head", () => {
     expect(tags).toContain('href="/a&quot;b.js"')
   })
 })
+
+describe("resolveRouteAssets locale chunks", () => {
+  it("preloads only the active locale chunk when the manifest lists locale catalogs", () => {
+    const withLocales: Assets.Manifest = {
+      [Assets.ENTRY_SOURCE]: {
+        file: "assets/main-E1.js",
+        isEntry: true,
+        dynamicImports: ["src/pages/WarehousePage.ts", "src/i18n/catalogs/en.ts", "src/i18n/catalogs/de.ts"]
+      },
+      "src/pages/WarehousePage.ts": {
+        file: "assets/WarehousePage-W1.js",
+        isDynamicEntry: true,
+        imports: ["assets/shared-S1.js"]
+      },
+      "assets/shared-S1.js": { file: "assets/shared-S1.js" },
+      "src/i18n/catalogs/en.ts": { file: "assets/en-EN1.js", isDynamicEntry: true },
+      "src/i18n/catalogs/de.ts": { file: "assets/de-DE1.js", isDynamicEntry: true }
+    }
+    const enAssets = Assets.resolveRouteAssets(withLocales, "Warehouse", "en")
+    expect(enAssets.modulePreloads).toEqual([
+      "/assets/WarehousePage-W1.js",
+      "/assets/shared-S1.js",
+      "/assets/en-EN1.js"
+    ])
+    expect(enAssets.modulePreloads).not.toContain("/assets/de-DE1.js")
+
+    const deAssets = Assets.resolveRouteAssets(withLocales, "Warehouse", "de")
+    expect(deAssets.modulePreloads).toEqual([
+      "/assets/WarehousePage-W1.js",
+      "/assets/shared-S1.js",
+      "/assets/de-DE1.js"
+    ])
+    expect(deAssets.modulePreloads).not.toContain("/assets/en-EN1.js")
+  })
+})

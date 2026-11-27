@@ -1,4 +1,5 @@
 import { Context, Effect, Layer, Ref } from "effect"
+import type * as I18n from "../../i18n/I18n.ts"
 import * as Order from "../../order/domain/Order.ts"
 import * as ApiError from "../../rpc/domain/ApiError.ts"
 
@@ -10,10 +11,11 @@ interface OrderStoreState {
 
 const initialTakenCodes: ReadonlyArray<string> = ["taken-code", "legacy-01"]
 
-const validPromos: ReadonlyMap<string, { readonly discountPercent: number; readonly description: string }> = new Map([
-  ["STUDIO15", { discountPercent: 15, description: "15% studio discount" }],
-  ["WHOLESALE25", { discountPercent: 25, description: "25% wholesale discount" }]
-])
+const validPromos: ReadonlyMap<string, { readonly discountPercent: number; readonly en: string; readonly de: string }> =
+  new Map([
+    ["STUDIO15", { discountPercent: 15, en: "15% studio discount", de: "15 % Studio-Rabatt" }],
+    ["WHOLESALE25", { discountPercent: 25, en: "25% wholesale discount", de: "25 % Großhandelsrabatt" }]
+  ])
 
 const nextAvailableSuggestion = (code: string, takenCodes: ReadonlySet<string>): string => {
   for (let suffix = 2; suffix < 100; suffix++) {
@@ -26,16 +28,17 @@ const nextAvailableSuggestion = (code: string, takenCodes: ReadonlySet<string>):
 /**
  * `Ref`-backed store for `/order` and `POST /rpc/order`.
  * Supports live order-code availability checks, promo validation, atomic
- * submission claiming, typed field-level `OrderValidationError`, and simulated
- * `ApiError` failure for `"server-error"`.
+ * submission claiming, typed field-level `OrderValidationError`, localized
+ * server messages via `Accept-Language`, and simulated `ApiError` failure for `"server-error"`.
  */
 export class OrderStore extends Context.Service<
   OrderStore,
   {
-    readonly checkOrderCode: (code: string) => Effect.Effect<Order.OrderCodeCheckResult>
-    readonly validatePromoCode: (code: string) => Effect.Effect<Order.PromoValidationResult>
+    readonly checkOrderCode: (code: string, locale?: I18n.AppLocale) => Effect.Effect<Order.OrderCodeCheckResult>
+    readonly validatePromoCode: (code: string, locale?: I18n.AppLocale) => Effect.Effect<Order.PromoValidationResult>
     readonly submitOrder: (
-      order: Order.OrderSubmission
+      order: Order.OrderSubmission,
+      locale?: I18n.AppLocale
     ) => Effect.Effect<Order.OrderReceipt, Order.OrderValidationError | ApiError.ApiError>
   }
 >()("server/OrderStore") {
@@ -49,13 +52,16 @@ export class OrderStore extends Context.Service<
       })
 
       return OrderStore.of({
-        checkOrderCode: (code) =>
+        checkOrderCode: (code, locale = "en") =>
           Effect.map(Ref.get(stateRef), (state) => {
             const trimmed = code.trim()
             if (state.takenCodes.has(trimmed)) {
               return {
                 available: false,
-                reason: `Project code "${trimmed}" is already taken`,
+                reason:
+                  locale === "de"
+                    ? `Projektcode „${trimmed}“ ist bereits vergeben`
+                    : `Project code "${trimmed}" is already taken`,
                 suggestion: nextAvailableSuggestion(trimmed, state.takenCodes)
               }
             }
@@ -66,7 +72,7 @@ export class OrderStore extends Context.Service<
             }
           }),
 
-        validatePromoCode: (code) =>
+        validatePromoCode: (code, locale = "en") =>
           Effect.sync(() => {
             const trimmed = code.trim().toUpperCase()
             const promo = validPromos.get(trimmed)
@@ -74,36 +80,54 @@ export class OrderStore extends Context.Service<
               return {
                 valid: true,
                 discountPercent: promo.discountPercent,
-                description: promo.description
+                description: locale === "de" ? promo.de : promo.en
               }
             }
             return {
               valid: false,
               discountPercent: 0,
-              description: `Promo code "${code.trim()}" is not recognized`
+              description:
+                locale === "de"
+                  ? `Aktionscode „${code.trim()}“ ist nicht bekannt`
+                  : `Promo code "${code.trim()}" is not recognized`
             }
           }),
 
-        submitOrder: (order) =>
+        submitOrder: (order, locale = "en") =>
           Effect.gen(function* () {
             if (order.projectCode === "server-error") {
               return yield* new ApiError.ApiError({
-                message: "Order service temporarily unavailable. Please retry."
+                message:
+                  locale === "de"
+                    ? "Bestelldienst vorübergehend nicht erreichbar. Bitte erneut versuchen."
+                    : "Order service temporarily unavailable. Please retry."
               })
             }
 
             const fieldErrors: Record<string, ReadonlyArray<string>> = {}
             if (order.contactEmail.toLowerCase().endsWith("@blocked.test")) {
-              fieldErrors["contactEmail"] = ["Orders from @blocked.test domains require manual approval"]
+              fieldErrors["contactEmail"] = [
+                locale === "de"
+                  ? "Bestellungen von @blocked.test-Domains erfordern eine manuelle Freigabe"
+                  : "Orders from @blocked.test domains require manual approval"
+              ]
             }
             if (order.billing._tag === "Invoice" && order.billing.poNumber === "PO-REJECTED") {
-              fieldErrors["billing.poNumber"] = ["Purchase order PO-REJECTED has exceeded its credit limit"]
+              fieldErrors["billing.poNumber"] = [
+                locale === "de"
+                  ? "Bestellung PO-REJECTED hat das Kreditlimit überschritten"
+                  : "Purchase order PO-REJECTED has exceeded its credit limit"
+              ]
             }
             let discountPercent = 0
             if (order.promoCode !== "") {
               const promo = validPromos.get(order.promoCode.trim().toUpperCase())
               if (promo === undefined) {
-                fieldErrors["promoCode"] = [`Promo code "${order.promoCode}" is unknown or expired`]
+                fieldErrors["promoCode"] = [
+                  locale === "de"
+                    ? `Aktionscode „${order.promoCode}“ ist unbekannt oder abgelaufen`
+                    : `Promo code "${order.promoCode}" is unknown or expired`
+                ]
               } else {
                 discountPercent = promo.discountPercent
               }
@@ -121,7 +145,10 @@ export class OrderStore extends Context.Service<
                 return [
                   {
                     _tag: "Conflict",
-                    reason: `Order code "${order.projectCode}" was claimed before submission completed`
+                    reason:
+                      locale === "de"
+                        ? `Projektcode „${order.projectCode}“ wurde vor Abschluss vergeben`
+                        : `Order code "${order.projectCode}" was claimed before submission completed`
                   },
                   state
                 ]
@@ -156,7 +183,10 @@ export class OrderStore extends Context.Service<
               fieldErrors["projectCode"] = [outcome.reason]
             }
             return yield* new Order.OrderValidationError({
-              message: "Please review the highlighted server errors.",
+              message:
+                locale === "de"
+                  ? "Bitte prüfen Sie die markierten Serverfehler."
+                  : "Please review the highlighted server errors.",
               fieldErrors,
               formErrors: []
             })

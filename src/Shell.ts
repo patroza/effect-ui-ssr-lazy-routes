@@ -1,6 +1,7 @@
 import type { Html } from "@effect/ui/html"
 import * as Design from "./design/classes.ts"
 import * as Loading from "./design/loading.ts"
+import * as I18n from "./i18n/I18n.ts"
 import type * as Pages from "./pages.ts"
 import * as Routes from "./routes.ts"
 
@@ -9,44 +10,77 @@ const isCurrent = (linkTag: Routes.AppRouteTag, route: Routes.AppRouteValue): bo
   linkTag === route._tag || (linkTag === "Products" && route._tag === "ProductDetail")
 
 /**
- * The layout: the primary navigation and the outlet that mounts the page of
- * the current route. It is a plain view function, not a `Component`, so the
- * pages stay direct children of `App` and the state paths the server
- * serializes (`/App/<name>[<path>]`) are the same on both sides.
- *
- * It imports no page module statically: every page is a `Component.lazy`
- * child of the `pages` it is created with (`Pages.createPages()`; production
- * uses `Pages.pages`). The browser awaits `preloadRoute` for its landing page
- * before hydrating, so that child adopts the server's DOM instead of showing
- * its fallback.
+ * The layout: the primary navigation, progressive-enhancement POST locale
+ * switcher, and the outlet that mounts the page of the current route directly
+ * under `App` so serialized state paths (`/App/<name>[<path>]`) match on server
+ * and client.
  */
 export const createShell =
   (pages: Pages.Pages) =>
-  <M>(h: Html.H<M>, route: Routes.AppRouteValue) => {
+  <M>(h: Html.H<M>, route: Routes.AppRouteValue, locale: I18n.AppLocale = "en") => {
     const fallback = Loading.pageFallback(h)
+    const { t } = I18n.translatorFor(locale)
+    const currentHref = Routes.AppRoute.print(route)
     const links = [
-      { tag: "Home", href: Routes.AppRoute.print(Routes.AppRoute.Home()), label: "Home" },
-      { tag: "Products", href: Routes.AppRoute.print(Routes.AppRoute.Products({ search: {} })), label: "Products" },
-      { tag: "Analytics", href: Routes.AppRoute.print(Routes.AppRoute.Analytics()), label: "Analytics" },
-      { tag: "Status", href: Routes.AppRoute.print(Routes.AppRoute.Status({ search: {} })), label: "Status" },
-      { tag: "Order", href: Routes.AppRoute.print(Routes.AppRoute.Order()), label: "Order" }
+      { tag: "Home", href: Routes.AppRoute.print(Routes.AppRoute.Home()), label: t("nav.home") },
+      {
+        tag: "Products",
+        href: Routes.AppRoute.print(Routes.AppRoute.Products({ search: {} })),
+        label: t("nav.products")
+      },
+      { tag: "Analytics", href: Routes.AppRoute.print(Routes.AppRoute.Analytics()), label: t("nav.analytics") },
+      { tag: "Status", href: Routes.AppRoute.print(Routes.AppRoute.Status({ search: {} })), label: t("nav.status") },
+      { tag: "Order", href: Routes.AppRoute.print(Routes.AppRoute.Order()), label: t("nav.order") },
+      { tag: "Warehouse", href: Routes.AppRoute.print(Routes.AppRoute.Warehouse()), label: t("nav.warehouse") }
     ] as const
+    const locales: ReadonlyArray<{ readonly code: I18n.AppLocale; readonly label: string }> = [
+      { code: "en", label: t("nav.localeEn") },
+      { code: "de", label: t("nav.localeDe") }
+    ]
     return h.div(
-      h.header.class("border-b border-neutral-200 pb-3 dark:border-neutral-800").children(
-        h.nav
-          .class("flex gap-1")
-          .attr("aria-label", "Primary")
-          .children(
-            links.map((link) =>
-              h.a
-                .key(link.tag)
-                .class(Design.ui.navLink)
-                .attr("href", link.href)
-                .attr("aria-current", isCurrent(link.tag, route) ? "page" : undefined)
-                .children(link.label)
+      h.header
+        .class(
+          "flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 pb-3 dark:border-neutral-800"
+        )
+        .children(
+          h.nav
+            .class("flex flex-wrap gap-1")
+            .attr("aria-label", t("nav.primaryAria"))
+            .children(
+              links.map((link) =>
+                h.a
+                  .key(link.tag)
+                  .class(Design.ui.navLink)
+                  .attr("href", link.href)
+                  .attr("aria-current", isCurrent(link.tag, route) ? "page" : undefined)
+                  .children(link.label)
+              )
+            ),
+          h.div
+            .class("flex items-center gap-1")
+            .attr("role", "group")
+            .attr("aria-label", t("nav.languageLabel"))
+            .attr("data-testid", "locale-switcher")
+            .attr("data-i18n-chunk", I18n.getChunkMarker(locale))
+            .children(
+              locales.map((item) =>
+                h.button
+                  .key(`locale-${item.code}`)
+                  .attr("type", "submit")
+                  .attr("form", `locale-form-${item.code}`)
+                  .attr("data-testid", `locale-switch-${item.code}`)
+                  .attr("aria-pressed", locale === item.code ? "true" : "false")
+                  .class(
+                    `rounded-md border px-2 py-1 text-xs font-semibold transition ${
+                      locale === item.code
+                        ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
+                        : "border-neutral-300 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                    }`
+                  )
+                  .children(item.label)
+              )
             )
-          )
-      ),
+        ),
       h.main.class("pt-6").children(
         // Key by `printPath` (no search): a new path mounts a fresh page, while
         // a search change updates the live page in place with new props.
@@ -66,7 +100,8 @@ export const createShell =
               props: { mode: r.search.mode },
               fallback
             }),
-          Order: (r) => pages.Order(h, { key: Routes.AppRoute.printPath(r), fallback }),
+          Order: (r) => pages.Order(h, { key: Routes.AppRoute.printPath(r), props: { locale }, fallback }),
+          Warehouse: (r) => pages.Warehouse(h, { key: Routes.AppRoute.printPath(r), props: { locale }, fallback }),
           NotFound: (r) =>
             pages.NotFound(h, {
               key: Routes.AppRoute.printPath(r),
@@ -74,6 +109,18 @@ export const createShell =
               fallback
             })
         })
+      ),
+      locales.map((item) =>
+        h.form
+          .key(`locale-form-${item.code}`)
+          .attr("id", `locale-form-${item.code}`)
+          .attr("method", "post")
+          .attr("action", "/locale")
+          .class("hidden")
+          .children(
+            h.input.attr("type", "hidden").attr("name", "locale").attr("value", item.code),
+            h.input.attr("type", "hidden").attr("name", "next").attr("value", currentHref)
+          )
       )
     )
   }

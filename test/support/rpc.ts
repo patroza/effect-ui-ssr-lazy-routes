@@ -13,6 +13,8 @@ import * as BookmarkStore from "../../src/server/services/BookmarkStore.ts"
 import * as CatalogStore from "../../src/server/services/CatalogStore.ts"
 import * as OrderStore from "../../src/server/services/OrderStore.ts"
 import * as StatusStore from "../../src/server/services/StatusStore.ts"
+import * as WarehouseStore from "../../src/server/services/WarehouseStore.ts"
+import * as WarehouseRpcs from "../../src/warehouse/domain/WarehouseRpcs.ts"
 
 /** How many times each RPC operation ran. */
 export interface RpcCounts {
@@ -24,6 +26,14 @@ export interface RpcCounts {
   readonly checkOrderCode: number
   readonly validatePromoCode: number
   readonly submitOrder: number
+  readonly getWarehouseCarts: number
+  readonly unblockCart: number
+  readonly blockCart: number
+  readonly preflightReleaseCart: number
+  readonly releaseCart: number
+  readonly preflightDispatchCart: number
+  readonly dispatchCartStep: number
+  readonly refreshSession: number
 }
 
 export const noCalls: RpcCounts = {
@@ -34,7 +44,15 @@ export const noCalls: RpcCounts = {
   getStatus: 0,
   checkOrderCode: 0,
   validatePromoCode: 0,
-  submitOrder: 0
+  submitOrder: 0,
+  getWarehouseCarts: 0,
+  unblockCart: 0,
+  blockCart: 0,
+  preflightReleaseCart: 0,
+  releaseCart: 0,
+  preflightDispatchCart: 0,
+  dispatchCartStep: 0,
+  refreshSession: 0
 }
 
 /**
@@ -150,6 +168,42 @@ const makeCountingOrderHandlers = () =>
     })
   )
 
+const makeCountingWarehouseHandlers = () =>
+  WarehouseRpcs.WarehouseRpcs.toLayer(
+    Effect.gen(function* () {
+      const calls = yield* RpcCalls
+      const warehouse = yield* WarehouseStore.WarehouseStore
+      return {
+        getWarehouseCarts: () =>
+          calls.record("getWarehouseCarts").pipe(Effect.andThen(roundTripDelay), Effect.andThen(warehouse.listCarts)),
+        unblockCart: (params) =>
+          calls
+            .record("unblockCart")
+            .pipe(Effect.andThen(roundTripDelay), Effect.andThen(warehouse.unblockCart(params))),
+        blockCart: (params) =>
+          calls.record("blockCart").pipe(Effect.andThen(roundTripDelay), Effect.andThen(warehouse.blockCart(params))),
+        preflightReleaseCart: (params) =>
+          calls
+            .record("preflightReleaseCart")
+            .pipe(Effect.andThen(roundTripDelay), Effect.andThen(warehouse.preflightReleaseCart(params))),
+        releaseCart: (params) =>
+          calls
+            .record("releaseCart")
+            .pipe(Effect.andThen(roundTripDelay), Effect.andThen(warehouse.releaseCart(params))),
+        preflightDispatchCart: (params) =>
+          calls
+            .record("preflightDispatchCart")
+            .pipe(Effect.andThen(roundTripDelay), Effect.andThen(warehouse.preflightDispatchCart(params))),
+        dispatchCartStep: (params) =>
+          calls
+            .record("dispatchCartStep")
+            .pipe(Effect.andThen(roundTripDelay), Effect.andThen(warehouse.dispatchCartStep(params))),
+        refreshSession: () =>
+          calls.record("refreshSession").pipe(Effect.andThen(roundTripDelay), Effect.andThen(warehouse.refreshSession))
+      }
+    })
+  )
+
 const makeCountingHandlers = (overrides?: {
   readonly bookmarkProduct?: (id: string) => Effect.Effect<void, ApiError.ApiError>
 }) =>
@@ -158,7 +212,8 @@ const makeCountingHandlers = (overrides?: {
     makeCountingProductHandlers(overrides),
     makeCountingAnalyticsHandlers(),
     makeCountingStatusHandlers(),
-    makeCountingOrderHandlers()
+    makeCountingOrderHandlers(),
+    makeCountingWarehouseHandlers()
   )
 
 /**

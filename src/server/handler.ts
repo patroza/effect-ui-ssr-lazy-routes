@@ -6,6 +6,7 @@ import { Effect, Exit, Layer, Scope } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import type * as Routes from "../routes.ts"
 import type * as Assets from "./assets.ts"
+import * as I18n from "../i18n/I18n.ts"
 import * as Render from "./render.ts"
 import * as Rpc from "./rpc.ts"
 
@@ -31,8 +32,8 @@ export const contentSecurityPolicy =
   "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'"
 
 export interface AppHandlerOptions {
-  /** Decides which assets the document loads for the matched route. */
-  readonly assetsFor: (route: Routes.AppRouteValue) => Assets.PageAssets
+  /** Decides which assets the document loads for the matched route and locale. */
+  readonly assetsFor: (route: Routes.AppRouteValue, locale?: I18n.AppLocale) => Assets.PageAssets
   /** The built client directory (`dist/client`) to serve files from. Omit in dev (Vite serves them). */
   readonly clientDir?: string | undefined
   /** Optional HTML transform (used in dev for Vite's `transformIndexHtml` so DevTools & HMR tags are injected). */
@@ -125,7 +126,9 @@ const rpcRawPaths: ReadonlySet<string> = new Set([
   "/rpc/status",
   "/rpc/status/",
   "/rpc/order",
-  "/rpc/order/"
+  "/rpc/order/",
+  "/rpc/warehouse",
+  "/rpc/warehouse/"
 ])
 
 const isRpcRawPath = (target: string): boolean => {
@@ -133,13 +136,57 @@ const isRpcRawPath = (target: string): boolean => {
   return rawPath !== undefined && rpcRawPaths.has(rawPath)
 }
 
+const resolveRequestLocale = (request: HttpServerRequest.HttpServerRequest): I18n.AppLocale => {
+  const cookieLocale = request.cookies["locale"]
+  return cookieLocale !== undefined
+    ? I18n.parseLocale(cookieLocale)
+    : I18n.parseLocaleFromCookie(request.headers["cookie"])
+}
+
+const handleLocaleSwitch = (
+  request: HttpServerRequest.HttpServerRequest,
+  method: string,
+  security: Record<string, string>
+) =>
+  Effect.gen(function* () {
+    if (method !== "POST") {
+      return textReply(method, 405, { allow: "POST", "content-type": "text/plain", ...security }, "Method Not Allowed")
+    }
+    const body = yield* request.text
+    const params = new URLSearchParams(body)
+    const locale = I18n.parseLocale(params.get("locale"))
+    const nextRaw = params.get("next") ?? "/"
+    const next = Render.isSafeRelativeLocation(nextRaw) ? nextRaw : "/"
+    return textReply(
+      method,
+      303,
+      {
+        location: next,
+        "set-cookie": I18n.localeCookieHeader(locale),
+        "content-type": "text/plain",
+        "cache-control": "no-cache",
+        ...security
+      },
+      ""
+    )
+  })
+
 /**
  * Handles static assets and SSR page routes (everything other than `/rpc`),
  * preserving all URL validation, open-redirect blocking, method checks, and
  * security headers.
  */
-const handlePageOrStatic = (url: URL, method: string, security: Record<string, string>, options: AppHandlerOptions) =>
+const handlePageOrStatic = (
+  request: HttpServerRequest.HttpServerRequest,
+  url: URL,
+  method: string,
+  security: Record<string, string>,
+  options: AppHandlerOptions
+) =>
   Effect.gen(function* () {
+    if (url.pathname === "/locale") {
+      return yield* handleLocaleSwitch(request, method, security)
+    }
     if (method !== "GET" && method !== "HEAD") {
       return textReply(
         method,
@@ -157,7 +204,12 @@ const handlePageOrStatic = (url: URL, method: string, security: Record<string, s
       return HttpServerResponse.empty({ status: 204, headers: security })
     }
 
-    const page = yield* Render.renderPageEffect(url.pathname + url.search, options.assetsFor)
+    const locale = resolveRequestLocale(request)
+    const page = yield* Render.renderPageEffect(
+      url.pathname + url.search,
+      (route, activeLocale) => options.assetsFor(route, activeLocale),
+      { locale }
+    )
     switch (page._tag) {
       case "BadRequest":
         return textReply(method, page.status, { "content-type": "text/plain", ...security }, "Bad Request")
@@ -220,7 +272,7 @@ export const makeHttpAppEffect = (options: AppHandlerOptions) => {
           const response = yield* rpcEffect
           return HttpServerResponse.setHeaders(response, security)
         }
-        return yield* handlePageOrStatic(url, method, security, options)
+        return yield* handlePageOrStatic(request, url, method, security, options)
       }).pipe(
         Effect.catchCause((cause) =>
           Effect.logError("Unhandled server error", cause).pipe(

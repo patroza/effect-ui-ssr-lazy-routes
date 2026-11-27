@@ -29,6 +29,12 @@ describe("SSR with Ssr.ssr: render on the server, hydrate in a fresh document, a
       marker: "SENTINEL:order-form-page",
       statePath: "/App/OrderFormPage[/order]",
       title: "Custom Order"
+    },
+    {
+      url: "/warehouse",
+      marker: "SENTINEL:warehouse-page",
+      statePath: "/App/WarehousePage[/warehouse]",
+      title: "Warehouse Console"
     }
   ] as const
 
@@ -96,7 +102,7 @@ describe("the status the server answers with", () => {
   it.layer(Helpers.browserEnv, { buildPerTest: true })("on the server", (it) => {
     it.effect("answers 200 for a page that renders", () =>
       Effect.gen(function* () {
-        for (const url of ["/", "/products?q=mug", "/products/42", "/analytics", "/order"]) {
+        for (const url of ["/", "/products?q=mug", "/products/42", "/analytics", "/order", "/warehouse"]) {
           expect((yield* Helpers.serverRender(url)).status, url).toBe(200)
         }
       })

@@ -7,6 +7,7 @@ import type { RpcClientError } from "effect/rpc"
 import * as Design from "../design/classes.ts"
 import * as FormControls from "../form/FormControls.ts"
 import * as SchemaForm from "../form/SchemaForm.ts"
+import * as I18n from "../i18n/I18n.ts"
 import * as SubmitOrder from "../order/commands/SubmitOrder.ts"
 import * as Order from "../order/domain/Order.ts"
 import * as CheckOrderCode from "../order/queries/CheckOrderCode.ts"
@@ -19,17 +20,6 @@ export const ORDER_FORM_PAGE_CHUNK = "SENTINEL:order-form-page"
 const BillingRadioGroup = makeRadioGroup({ value: Order.BillingMethodTag })
 const TermsSelect = makeSelect({ value: Order.PaymentTerms })
 const ErrorSummaryRef = Html.ref("OrderErrorSummary", "div")
-
-const billingItems = [
-  { value: "Card" as const, label: "Credit / Corporate Card" },
-  { value: "Invoice" as const, label: "Net Terms Invoice ($100+)" }
-] as const
-
-const paymentTermsItems = [
-  { value: "15" as const, label: "Net 15 days" },
-  { value: "30" as const, label: "Net 30 days" },
-  { value: "60" as const, label: "Net 60 days" }
-] as const
 
 const SubmitState = UiSchema.TaggedEnum({
   Idle: {},
@@ -74,38 +64,42 @@ type Msg = typeof OrderFormPageMessage.Type
 const evaluateCodeCheck = (
   form: SchemaForm.FormState<Order.OrderFormValues>,
   result: AsyncResult.AsyncResult<Order.OrderCodeCheckResult, ApiError.ApiError | RpcClientError.RpcClientError>,
-  passesSync: boolean
+  passesSync: boolean,
+  t: I18n.TranslateFn
 ): SchemaForm.AsyncCheckStatus => {
   if (form.values.projectCode.trim() === "" || !passesSync) return { _tag: "Idle" }
   return SchemaForm.asyncCheckFromResult(
     result,
-    (res) => (res.available ? [] : [res.reason ?? "Project code is unavailable"]),
-    "Could not verify project code availability — please try again"
+    (res) => (res.available ? [] : [res.reason ?? t("order.codeUnavailable")]),
+    t("order.codeCheckFailed")
   )
 }
 
 const evaluatePromoCheck = (
   form: SchemaForm.FormState<Order.OrderFormValues>,
   result: AsyncResult.AsyncResult<Order.PromoValidationResult, ApiError.ApiError | RpcClientError.RpcClientError>,
-  passesSync: boolean
+  passesSync: boolean,
+  t: I18n.TranslateFn
 ): SchemaForm.AsyncCheckStatus => {
   if (form.values.promoCode.trim() === "" || !passesSync) return { _tag: "Idle" }
   return SchemaForm.asyncCheckFromResult(
     result,
-    (res) => (res.valid ? [] : [res.description ?? "Promo code is not recognized"]),
-    "Could not verify promo code — please try again"
+    (res) => (res.valid ? [] : [res.description ?? t("order.promoInvalid")]),
+    t("order.promoCheckFailed")
   )
 }
 
 const deriveOrderForm = (
+  controller: Order.OrderSchemaFormController,
   form: SchemaForm.FormState<Order.OrderFormValues>,
   codeResult: AsyncResult.AsyncResult<Order.OrderCodeCheckResult, ApiError.ApiError | RpcClientError.RpcClientError>,
-  promoResult: AsyncResult.AsyncResult<Order.PromoValidationResult, ApiError.ApiError | RpcClientError.RpcClientError>
+  promoResult: AsyncResult.AsyncResult<Order.PromoValidationResult, ApiError.ApiError | RpcClientError.RpcClientError>,
+  t: I18n.TranslateFn
 ) => {
-  const syncDerived = Order.OrderSchemaForm.derive(form)
-  const codeStatus = evaluateCodeCheck(form, codeResult, syncDerived.fieldPassesSync("projectCode"))
-  const promoStatus = evaluatePromoCheck(form, promoResult, syncDerived.fieldPassesSync("promoCode"))
-  return Order.OrderSchemaForm.derive(form, {
+  const syncDerived = controller.derive(form)
+  const codeStatus = evaluateCodeCheck(form, codeResult, syncDerived.fieldPassesSync("projectCode"), t)
+  const promoStatus = evaluatePromoCheck(form, promoResult, syncDerived.fieldPassesSync("promoCode"), t)
+  return controller.derive(form, {
     projectCode: codeStatus,
     promoCode: promoStatus
   })
@@ -114,6 +108,7 @@ const deriveOrderForm = (
 type OrderDerivedForm = SchemaForm.DerivedFormState<Order.OrderSubmission, SchemaForm.FieldPath<Order.OrderFormValues>>
 
 const updateFormField = (
+  controller: Order.OrderSchemaFormController,
   model: {
     readonly form: SchemaForm.FormState<Order.OrderFormValues>
     readonly nextLineId: number
@@ -124,11 +119,12 @@ const updateFormField = (
   updater: (values: Order.OrderFormValues) => Order.OrderFormValues
 ) => ({
   ...model,
-  form: Order.OrderSchemaForm.update(model.form, path, updater),
+  form: controller.update(model.form, path, updater),
   submit: model.submit._tag === "Failed" ? SubmitState.Idle() : model.submit
 })
 
 const removeFormArrayItem = (
+  controller: Order.OrderSchemaFormController,
   model: {
     readonly form: SchemaForm.FormState<Order.OrderFormValues>
     readonly nextLineId: number
@@ -140,9 +136,12 @@ const removeFormArrayItem = (
   updater: (values: Order.OrderFormValues) => Order.OrderFormValues
 ) => ({
   ...model,
-  form: Order.OrderSchemaForm.removeArrayItem(model.form, arrayPath, index, updater),
+  form: controller.removeArrayItem(model.form, arrayPath, index, updater),
   submit: model.submit._tag === "Failed" ? SubmitState.Idle() : model.submit
 })
+
+const lineItemIndex = (values: Order.OrderFormValues, id: string): number =>
+  values.items.findIndex((item) => item.id === id)
 
 const updateLineItem = (
   values: Order.OrderFormValues,
@@ -153,27 +152,22 @@ const updateLineItem = (
   items: Arr.map(values.items, (item) => (item.id === id ? updater(item) : item))
 })
 
-const lineItemIndex = (values: Order.OrderFormValues, id: string): number =>
-  values.items.findIndex((item) => item.id === id)
-
 const renderCodeAdornment = (
   h: Html.H<Msg>,
   values: Order.OrderFormValues,
   fieldState: SchemaForm.DerivedFieldState,
-  codeResult: AsyncResult.AsyncResult<Order.OrderCodeCheckResult, ApiError.ApiError | RpcClientError.RpcClientError>
+  codeResult: AsyncResult.AsyncResult<Order.OrderCodeCheckResult, ApiError.ApiError | RpcClientError.RpcClientError>,
+  t: I18n.TranslateFn
 ) => {
   if (values.projectCode.trim() === "") return undefined
   if (fieldState.status === "Validating") {
-    return h.div
-      .class(Design.ui.muted)
-      .attr("data-testid", "project-code-status")
-      .children("Checking project code availability…")
+    return h.div.class(Design.ui.muted).attr("data-testid", "project-code-status").children(t("order.checkingCode"))
   }
   if (fieldState.status === "Valid" && AsyncResult.isSuccess(codeResult) && codeResult.value.available) {
     return h.div
       .class("text-sm text-emerald-700 dark:text-emerald-400")
       .attr("data-testid", "project-code-status")
-      .children("Available ✓")
+      .children(t("order.codeAvailable"))
   }
   if (
     fieldState.status === "Invalid" &&
@@ -186,13 +180,12 @@ const renderCodeAdornment = (
       .class(Design.ui.row)
       .attr("data-testid", "project-code-status")
       .children(
-        h.span.class(Design.ui.muted).children("Suggestion:"),
         Button(h, {
           onPress: OrderFormPageMessage.AppliedSuggestedCode({ code: suggestion })
         })
           .class(Design.ui.button)
           .attr("data-testid", "project-code-suggestion")
-          .children(`Use "${suggestion}"`)
+          .children(t("order.useSuggestion", { suggestion }))
       )
   }
   return undefined
@@ -202,31 +195,47 @@ const renderPromoAdornment = (
   h: Html.H<Msg>,
   values: Order.OrderFormValues,
   fieldState: SchemaForm.DerivedFieldState,
-  promoResult: AsyncResult.AsyncResult<Order.PromoValidationResult, ApiError.ApiError | RpcClientError.RpcClientError>
+  promoResult: AsyncResult.AsyncResult<Order.PromoValidationResult, ApiError.ApiError | RpcClientError.RpcClientError>,
+  t: I18n.TranslateFn
 ) => {
   if (values.promoCode.trim() === "") return undefined
   if (fieldState.status === "Validating") {
-    return h.div.class(Design.ui.muted).attr("data-testid", "promo-code-status").children("Validating promo code…")
+    return h.div.class(Design.ui.muted).attr("data-testid", "promo-code-status").children(t("common.loading"))
   }
   if (fieldState.status === "Valid" && AsyncResult.isSuccess(promoResult) && promoResult.value.valid) {
     return h.div
       .class("text-sm text-emerald-700 dark:text-emerald-400")
       .attr("data-testid", "promo-code-status")
-      .children(`Applied: ${promoResult.value.description ?? `${promoResult.value.discountPercent}% off`}`)
+      .children(
+        t("order.promoApplied", {
+          description: promoResult.value.description ?? `${promoResult.value.discountPercent}%`
+        })
+      )
   }
   return undefined
 }
 
 const renderBillingSection = (
   h: Html.H<Msg>,
+  controller: Order.OrderSchemaFormController,
   values: Order.OrderFormValues,
   derived: OrderDerivedForm,
   termsSelectOpen: boolean,
-  isSubmitting: boolean
+  isSubmitting: boolean,
+  t: I18n.TranslateFn
 ) => {
+  const billingItems = [
+    { value: "Card" as const, label: t("order.billingCardOption") },
+    { value: "Invoice" as const, label: t("order.billingInvoiceOption") }
+  ] as const
+  const paymentTermsItems = [
+    { value: "15" as const, label: t("order.terms15") },
+    { value: "30" as const, label: t("order.terms30") },
+    { value: "60" as const, label: t("order.terms60") }
+  ] as const
   const billingTypeState = derived.field("billing")
   return h.div.class(`${Design.ui.card} ${Design.ui.stack}`).children(
-    h.h2.class("text-lg font-semibold").children("2. Billing Method"),
+    h.h2.class("text-lg font-semibold").children(t("order.sectionBilling")),
     Field(h, {
       key: "field-billing-type",
       props: {
@@ -249,7 +258,7 @@ const renderBillingSection = (
           },
           view: (radioGroup) =>
             field.root(h.div.class("flex flex-col gap-2")).children(
-              field.legend(h.div.class("text-sm font-medium")).children("Billing method"),
+              field.legend(h.div.class("text-sm font-medium")).children(controller.labelFor("billing")),
               radioGroup.root(field.group(h.div.class("flex flex-wrap gap-3"))).children(
                 billingItems.map(({ value, label }) =>
                   h.label
@@ -290,7 +299,7 @@ const renderBillingSection = (
             FormControls.textField(h, {
               fieldKey: "field-cardholder-name",
               name: "billing.cardholderName",
-              label: Order.OrderSchemaForm.labelFor("billing.cardholderName"),
+              label: controller.labelFor("billing.cardholderName"),
               value: values.billing.cardholderName,
               state: derived.field("billing.cardholderName"),
               required: true,
@@ -304,7 +313,7 @@ const renderBillingSection = (
             FormControls.textField(h, {
               fieldKey: "field-billing-zip",
               name: "billing.billingZip",
-              label: Order.OrderSchemaForm.labelFor("billing.billingZip"),
+              label: controller.labelFor("billing.billingZip"),
               value: values.billing.billingZip,
               state: derived.field("billing.billingZip"),
               required: true,
@@ -326,7 +335,7 @@ const renderBillingSection = (
               FormControls.textField(h, {
                 fieldKey: "field-company-name",
                 name: "billing.companyName",
-                label: Order.OrderSchemaForm.labelFor("billing.companyName"),
+                label: controller.labelFor("billing.companyName"),
                 value: invoice.companyName,
                 state: derived.field("billing.companyName"),
                 required: true,
@@ -340,7 +349,7 @@ const renderBillingSection = (
               FormControls.textField(h, {
                 fieldKey: "field-po-number",
                 name: "billing.poNumber",
-                label: Order.OrderSchemaForm.labelFor("billing.poNumber"),
+                label: controller.labelFor("billing.poNumber"),
                 value: invoice.poNumber,
                 state: derived.field("billing.poNumber"),
                 required: true,
@@ -380,7 +389,9 @@ const renderBillingSection = (
                     },
                     view: (select) =>
                       field.root(h.div.class("relative flex flex-col gap-1.5")).children(
-                        select.label(h.div.class("text-sm font-medium")).children("Payment terms"),
+                        select
+                          .label(h.div.class("text-sm font-medium"))
+                          .children(controller.labelFor("billing.paymentTermsDays")),
                         field.focusWithin(h.div.class("relative")).children(
                           select
                             .trigger(field.member(h.button))
@@ -424,24 +435,24 @@ const renderBillingSection = (
 
 const renderLineItemsSection = (
   h: Html.H<Msg>,
+  controller: Order.OrderSchemaFormController,
   values: Order.OrderFormValues,
   derived: OrderDerivedForm,
-  isSubmitting: boolean
+  isSubmitting: boolean,
+  i18n: I18n.I18nTranslator
 ) => {
+  const { config, formatCurrency, t } = i18n
   const itemsState = derived.field("items")
   return h.div.class(`${Design.ui.card} ${Design.ui.stack}`).children(
     h.div.class(`${Design.ui.row} justify-between`).children(
-      h.div.children(
-        h.h2.class("text-lg font-semibold").children("3. Line Items"),
-        h.p.class(Design.ui.muted).children("Up to 5 items; duplicate SKUs are rejected across rows.")
-      ),
+      h.div.children(h.h2.class("text-lg font-semibold").children(t("order.sectionLineItems"))),
       Button(h, {
         props: { disabled: isSubmitting || values.items.length >= 5 },
         onPress: OrderFormPageMessage.AddedLineItem()
       })
         .class(Design.ui.button)
         .attr("data-testid", "add-line-item")
-        .children("Add item")
+        .children(t("order.addItem"))
     ),
     itemsState.errors[0] === undefined
       ? undefined
@@ -464,7 +475,7 @@ const renderLineItemsSection = (
             FormControls.textField(h, {
               fieldKey: `field-${item.id}-sku`,
               name: `items.${index}.sku`,
-              label: `Item #${index + 1} SKU`,
+              label: controller.labelFor(`items.${index}.sku`),
               value: item.sku,
               state: derived.field(`items.${index}.sku`),
               required: true,
@@ -478,7 +489,7 @@ const renderLineItemsSection = (
             FormControls.numberField(h, {
               fieldKey: `field-${item.id}-qty`,
               name: `items.${index}.quantity`,
-              label: "Quantity",
+              label: controller.meta["items.*.quantity"]?.label ?? t("order.fields.items.*.quantity"),
               value: item.quantity,
               state: derived.field(`items.${index}.quantity`),
               required: true,
@@ -486,6 +497,9 @@ const renderLineItemsSection = (
               min: 1,
               max: 100,
               step: 1,
+              locale: config.bcp47,
+              increaseLabel: t("common.increase"),
+              decreaseLabel: t("common.decrease"),
               testId: `item-${index}-quantity`,
               decrementTestId: `item-${index}-quantity-dec`,
               incrementTestId: `item-${index}-quantity-inc`,
@@ -496,7 +510,7 @@ const renderLineItemsSection = (
             FormControls.numberField(h, {
               fieldKey: `field-${item.id}-price`,
               name: `items.${index}.unitPriceDollars`,
-              label: "Unit price",
+              label: controller.meta["items.*.unitPriceDollars"]?.label ?? t("order.fields.items.*.unitPriceDollars"),
               value: item.unitPriceDollars,
               state: derived.field(`items.${index}.unitPriceDollars`),
               required: true,
@@ -504,7 +518,10 @@ const renderLineItemsSection = (
               min: 1,
               max: 10_000,
               step: 1,
-              format: { style: "currency", currency: "USD" },
+              locale: config.bcp47,
+              format: { style: "currency", currency: config.currency },
+              increaseLabel: t("common.increase"),
+              decreaseLabel: t("common.decrease"),
               testId: `item-${index}-price`,
               decrementTestId: `item-${index}-price-dec`,
               incrementTestId: `item-${index}-price-inc`,
@@ -516,14 +533,14 @@ const renderLineItemsSection = (
               h.span
                 .class(`${Design.ui.muted} pt-1 font-medium`)
                 .attr("data-testid", `item-${index}-subtotal`)
-                .children(Order.formatCents(lineTotals.subtotalCents)),
+                .children(formatCurrency(lineTotals.subtotalCents)),
               Button(h, {
                 props: { disabled: isSubmitting },
                 onPress: OrderFormPageMessage.RemovedLineItem({ id: item.id })
               })
                 .class(Design.ui.button)
                 .attr("data-testid", `item-${index}-remove`)
-                .children("Remove")
+                .children(t("order.removeItem"))
             )
           )
       })
@@ -531,8 +548,8 @@ const renderLineItemsSection = (
   )
 }
 
-const OrderFormPageNoDeps = Html.component({
-  name: "OrderFormPage",
+const OrderFormContentNoDeps = Html.component({
+  name: "OrderFormContent",
   model: Schema.Struct({
     form: Order.OrderSchemaForm.State,
     nextLineId: Schema.Finite,
@@ -540,6 +557,9 @@ const OrderFormPageNoDeps = Html.component({
     submit: SubmitState
   }),
   message: OrderFormPageMessage,
+  reads: {
+    i18n: I18n.I18nProvider
+  },
   queries: {
     codeCheck: {
       query: CheckOrderCode.CheckOrderCode,
@@ -570,39 +590,45 @@ const OrderFormPageNoDeps = Html.component({
     submit: SubmitState.Idle()
   }),
   subscriptions: ({ model }) => (Order.OrderSchemaForm.isDirty(model.form) ? [Router.blocked("order-form")] : []),
-  update: ($, message) =>
-    OrderFormPageMessage.match(message, {
-      UpdatedProjectCode: ({ value }) => updateFormField($.model, "projectCode", (v) => ({ ...v, projectCode: value })),
-      AppliedSuggestedCode: ({ code }) => updateFormField($.model, "projectCode", (v) => ({ ...v, projectCode: code })),
+  update: ($, message) => {
+    const { locale } = $.reads.i18n
+    const tr = I18n.translatorFor(locale)
+    const controller = Order.getOrderSchemaForm(locale)
+    return OrderFormPageMessage.match(message, {
+      UpdatedProjectCode: ({ value }) =>
+        updateFormField(controller, $.model, "projectCode", (v) => ({ ...v, projectCode: value })),
+      AppliedSuggestedCode: ({ code }) =>
+        updateFormField(controller, $.model, "projectCode", (v) => ({ ...v, projectCode: code })),
       UpdatedContactEmail: ({ value }) =>
-        updateFormField($.model, "contactEmail", (v) => ({ ...v, contactEmail: value })),
-      UpdatedPromoCode: ({ value }) => updateFormField($.model, "promoCode", (v) => ({ ...v, promoCode: value })),
+        updateFormField(controller, $.model, "contactEmail", (v) => ({ ...v, contactEmail: value })),
+      UpdatedPromoCode: ({ value }) =>
+        updateFormField(controller, $.model, "promoCode", (v) => ({ ...v, promoCode: value })),
       SwitchedBillingMethod: ({ method }) => ({
-        ...updateFormField($.model, "billing", (v) => ({
+        ...updateFormField(controller, $.model, "billing", (v) => ({
           ...v,
           billing: method === "Card" ? Order.defaultCardBilling() : Order.defaultInvoiceBilling()
         })),
         termsSelectOpen: false
       }),
       UpdatedCardholderName: ({ value }) =>
-        updateFormField($.model, "billing.cardholderName", (v) =>
+        updateFormField(controller, $.model, "billing.cardholderName", (v) =>
           v.billing._tag === "Card" ? { ...v, billing: { ...v.billing, cardholderName: value } } : v
         ),
       UpdatedBillingZip: ({ value }) =>
-        updateFormField($.model, "billing.billingZip", (v) =>
+        updateFormField(controller, $.model, "billing.billingZip", (v) =>
           v.billing._tag === "Card" ? { ...v, billing: { ...v.billing, billingZip: value } } : v
         ),
       UpdatedCompanyName: ({ value }) =>
-        updateFormField($.model, "billing.companyName", (v) =>
+        updateFormField(controller, $.model, "billing.companyName", (v) =>
           v.billing._tag === "Invoice" ? { ...v, billing: { ...v.billing, companyName: value } } : v
         ),
       UpdatedPoNumber: ({ value }) =>
-        updateFormField($.model, "billing.poNumber", (v) =>
+        updateFormField(controller, $.model, "billing.poNumber", (v) =>
           v.billing._tag === "Invoice" ? { ...v, billing: { ...v.billing, poNumber: value } } : v
         ),
       SetTermsSelectOpen: ({ open }) => $.evolve({ termsSelectOpen: open }),
       PickedPaymentTerms: ({ days }) => ({
-        ...updateFormField($.model, "billing.paymentTermsDays", (v) =>
+        ...updateFormField(controller, $.model, "billing.paymentTermsDays", (v) =>
           v.billing._tag === "Invoice" ? { ...v, billing: { ...v.billing, paymentTermsDays: days } } : v
         ),
         termsSelectOpen: false
@@ -611,7 +637,7 @@ const OrderFormPageNoDeps = Html.component({
         $.model.form.values.items.length >= 5
           ? $.model
           : {
-              ...updateFormField($.model, "items", (v) => ({
+              ...updateFormField(controller, $.model, "items", (v) => ({
                 ...v,
                 items: [...v.items, { id: `line-${$.model.nextLineId}`, sku: "", quantity: 1, unitPriceDollars: 25 }]
               })),
@@ -620,7 +646,7 @@ const OrderFormPageNoDeps = Html.component({
       RemovedLineItem: ({ id }) => {
         const index = lineItemIndex($.model.form.values, id)
         if (index < 0) return $.model
-        return removeFormArrayItem($.model, "items", index, (v) => ({
+        return removeFormArrayItem(controller, $.model, "items", index, (v) => ({
           ...v,
           items: v.items.filter((item) => item.id !== id)
         }))
@@ -628,40 +654,41 @@ const OrderFormPageNoDeps = Html.component({
       UpdatedLineSku: ({ id, value }) => {
         const index = lineItemIndex($.model.form.values, id)
         if (index < 0) return $.model
-        return updateFormField($.model, `items.${index}.sku`, (v) =>
+        return updateFormField(controller, $.model, `items.${index}.sku`, (v) =>
           updateLineItem(v, id, (item) => ({ ...item, sku: value }))
         )
       },
       UpdatedLineQuantity: ({ id, value }) => {
         const index = lineItemIndex($.model.form.values, id)
         if (index < 0) return $.model
-        return updateFormField($.model, `items.${index}.quantity`, (v) =>
+        return updateFormField(controller, $.model, `items.${index}.quantity`, (v) =>
           updateLineItem(v, id, (item) => ({ ...item, quantity: value }))
         )
       },
       UpdatedLinePrice: ({ id, value }) => {
         const index = lineItemIndex($.model.form.values, id)
         if (index < 0) return $.model
-        return updateFormField($.model, `items.${index}.unitPriceDollars`, (v) =>
+        return updateFormField(controller, $.model, `items.${index}.unitPriceDollars`, (v) =>
           updateLineItem(v, id, (item) => ({ ...item, unitPriceDollars: value }))
         )
       },
-      ToggledExpedited: ({ checked }) => updateFormField($.model, "expedited", (v) => ({ ...v, expedited: checked })),
+      ToggledExpedited: ({ checked }) =>
+        updateFormField(controller, $.model, "expedited", (v) => ({ ...v, expedited: checked })),
       UpdatedDeliveryNote: ({ value }) =>
-        updateFormField($.model, "deliveryNote", (v) => ({ ...v, deliveryNote: value })),
+        updateFormField(controller, $.model, "deliveryNote", (v) => ({ ...v, deliveryNote: value })),
       ToggledAcceptTerms: ({ checked }) =>
-        updateFormField($.model, "acceptTerms", (v) => ({ ...v, acceptTerms: checked })),
-      BlurredField: ({ path }) => $.evolve({ form: Order.OrderSchemaForm.blur($.model.form, path) }),
+        updateFormField(controller, $.model, "acceptTerms", (v) => ({ ...v, acceptTerms: checked })),
+      BlurredField: ({ path }) => $.evolve({ form: controller.blur($.model.form, path) }),
       ClickedReset: () => ({
-        form: Order.OrderSchemaForm.reset($.model.form, Order.defaultOrderFormValues),
+        form: controller.reset($.model.form, Order.defaultOrderFormValues),
         nextLineId: 2,
         termsSelectOpen: false,
         submit: SubmitState.Idle()
       }),
       SubmittedForm: () => {
         if ($.model.submit._tag === "Submitting") return $.model
-        const submittedForm = Order.OrderSchemaForm.submit($.model.form)
-        const derived = deriveOrderForm(submittedForm, $.queries.codeCheck, $.queries.promoCheck)
+        const submittedForm = controller.submit($.model.form)
+        const derived = deriveOrderForm(controller, submittedForm, $.queries.codeCheck, $.queries.promoCheck, tr.t)
         if (Option.isNone(derived.decoded)) {
           return $.evolve({ form: submittedForm })
         }
@@ -682,22 +709,25 @@ const OrderFormPageNoDeps = Html.component({
       },
       SucceededSubmit: ({ receipt }) =>
         $.evolve({
-          form: Order.OrderSchemaForm.rebase($.model.form),
+          form: controller.rebase($.model.form),
           submit: SubmitState.Succeeded({ receipt })
         }),
       FailedSubmitValidation: ({ fieldErrors, formErrors }) =>
         $.evolve({
-          form: Order.OrderSchemaForm.setServerErrors($.model.form, { fieldErrors, formErrors }),
+          form: controller.setServerErrors($.model.form, { fieldErrors, formErrors }),
           submit: SubmitState.Idle()
         }).run(HtmlCommand.focus(ErrorSummaryRef, () => Component.noop)),
       FailedSubmitTransport: ({ message }) =>
         $.evolve({
           submit: SubmitState.Failed({ message })
         }).run(HtmlCommand.focus(ErrorSummaryRef, () => Component.noop))
-    }),
-  head: () => [Head.title("Custom Order")],
+    })
+  },
   view: (h, model) => {
-    const derived = deriveOrderForm(model.form, h.queries.codeCheck, h.queries.promoCheck)
+    const i18n = I18n.translator(h.reads.i18n)
+    const { t, formatCurrency } = i18n
+    const controller = Order.getOrderSchemaForm(h.reads.i18n.locale)
+    const derived = deriveOrderForm(controller, model.form, h.queries.codeCheck, h.queries.promoCheck, t)
     const values = model.form.values
     const isSubmitting = model.submit._tag === "Submitting"
     const discountPercent =
@@ -721,12 +751,8 @@ const OrderFormPageNoDeps = Html.component({
       .children(
         h.div.class(`${Design.ui.row} justify-between`).children(
           h.div.children(
-            h.h1.class(Design.ui.title).children("Custom Studio Order"),
-            h.p
-              .class(Design.ui.muted)
-              .children(
-                "OmegaForm-style schema form: single Effect Schema, tagged union billing, dynamic rows, debounced async checks, and server-side rejection mapping."
-              )
+            h.h1.class(Design.ui.title).children(t("order.heading")),
+            h.p.class(Design.ui.muted).children(t("order.subtitle"))
           ),
           h.div.class(Design.ui.row).children(
             h.span
@@ -737,14 +763,14 @@ const OrderFormPageNoDeps = Html.component({
                   : "rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
               )
               .attr("data-testid", "form-dirty-badge")
-              .children(derived.isDirty ? "Unsaved changes" : "Saved / clean"),
+              .children(derived.isDirty ? t("order.dirtyUnsaved") : t("order.dirtyClean")),
             Button(h, {
               props: { disabled: isSubmitting },
               onPress: OrderFormPageMessage.ClickedReset()
             })
               .class(Design.ui.button)
               .attr("data-testid", "order-reset")
-              .children("Reset")
+              .children(t("order.reset"))
           )
         ),
         model.submit._tag === "Succeeded"
@@ -760,17 +786,19 @@ const OrderFormPageNoDeps = Html.component({
                   .children(
                     h.h2
                       .class("text-lg font-semibold text-emerald-800 dark:text-emerald-300")
-                      .children(`Order ${model.submit.receipt.orderId} submitted`),
+                      .children(t("order.receiptTitle", { orderId: model.submit.receipt.orderId })),
                     Button(h, { onPress: OrderFormPageMessage.ClickedReset() })
                       .class(Design.ui.button)
                       .attr("data-testid", "order-start-another")
-                      .children("Start another order")
+                      .children(t("order.reset"))
                   ),
-                h.p
-                  .class("text-sm text-emerald-800 dark:text-emerald-300")
-                  .children(
-                    `Reference ${model.submit.receipt.projectCode} · Total ${Order.formatCents(model.submit.receipt.totalCents)}${model.submit.receipt.discountPercent > 0 ? ` (${model.submit.receipt.discountPercent}% discount)` : ""}.`
-                  )
+                h.p.class("text-sm text-emerald-800 dark:text-emerald-300").children(
+                  t("order.receiptBody", {
+                    projectCode: model.submit.receipt.projectCode,
+                    total: formatCurrency(model.submit.receipt.totalCents),
+                    discount: model.submit.receipt.discountPercent
+                  })
+                )
               )
           : undefined,
         model.submit._tag === "Failed"
@@ -784,8 +812,7 @@ const OrderFormPageNoDeps = Html.component({
               .children(
                 h.h2
                   .class("text-sm font-semibold text-red-700 dark:text-red-300")
-                  .children("Submission failed — your edits are preserved"),
-                h.p.class("text-sm text-red-700 dark:text-red-300").children(model.submit.message)
+                  .children(t("order.submitFailed", { message: model.submit.message }))
               )
           : undefined,
         Form(h, {
@@ -799,13 +826,13 @@ const OrderFormPageNoDeps = Html.component({
                 view: (fieldset) =>
                   fieldset.root(h.fieldset.class(Design.ui.stack)).children(
                     h.div.class(`${Design.ui.card} ${Design.ui.stack}`).children(
-                      fieldset.legend(h.div.class("text-lg font-semibold")).children("1. Project & Contact"),
+                      fieldset.legend(h.div.class("text-lg font-semibold")).children(t("order.sectionDetails")),
                       h.div.class("grid gap-4 sm:grid-cols-2").children(
                         FormControls.textField(h, {
                           fieldKey: "field-project-code",
                           name: "projectCode",
-                          label: Order.OrderSchemaForm.labelFor("projectCode"),
-                          description: Order.OrderSchemaForm.meta["projectCode"]?.description,
+                          label: controller.labelFor("projectCode"),
+                          description: controller.meta["projectCode"]?.description,
                           value: values.projectCode,
                           state: projectCodeState,
                           required: true,
@@ -813,15 +840,15 @@ const OrderFormPageNoDeps = Html.component({
                           placeholder: "autumn-mug-run",
                           testId: "project-code-input",
                           errorTestId: "project-code-error",
-                          statusAdornment: renderCodeAdornment(h, values, projectCodeState, h.queries.codeCheck),
+                          statusAdornment: renderCodeAdornment(h, values, projectCodeState, h.queries.codeCheck, t),
                           onUpdate: (value) => OrderFormPageMessage.UpdatedProjectCode({ value }),
                           onBlur: OrderFormPageMessage.BlurredField({ path: "projectCode" })
                         }),
                         FormControls.textField(h, {
                           fieldKey: "field-contact-email",
                           name: "contactEmail",
-                          label: Order.OrderSchemaForm.labelFor("contactEmail"),
-                          description: Order.OrderSchemaForm.meta["contactEmail"]?.description,
+                          label: controller.labelFor("contactEmail"),
+                          description: controller.meta["contactEmail"]?.description,
                           value: values.contactEmail,
                           state: derived.field("contactEmail"),
                           required: true,
@@ -837,28 +864,28 @@ const OrderFormPageNoDeps = Html.component({
                       FormControls.textField(h, {
                         fieldKey: "field-promo-code",
                         name: "promoCode",
-                        label: Order.OrderSchemaForm.labelFor("promoCode"),
-                        description: Order.OrderSchemaForm.meta["promoCode"]?.description,
+                        label: controller.labelFor("promoCode"),
+                        description: controller.meta["promoCode"]?.description,
                         value: values.promoCode,
                         state: promoCodeState,
                         disabled: isSubmitting,
                         placeholder: "STUDIO15",
                         testId: "promo-code-input",
                         errorTestId: "promo-code-error",
-                        statusAdornment: renderPromoAdornment(h, values, promoCodeState, h.queries.promoCheck),
+                        statusAdornment: renderPromoAdornment(h, values, promoCodeState, h.queries.promoCheck, t),
                         onUpdate: (value) => OrderFormPageMessage.UpdatedPromoCode({ value }),
                         onBlur: OrderFormPageMessage.BlurredField({ path: "promoCode" })
                       })
                     ),
-                    renderBillingSection(h, values, derived, model.termsSelectOpen, isSubmitting),
-                    renderLineItemsSection(h, values, derived, isSubmitting),
+                    renderBillingSection(h, controller, values, derived, model.termsSelectOpen, isSubmitting, t),
+                    renderLineItemsSection(h, controller, values, derived, isSubmitting, i18n),
                     h.div.class(`${Design.ui.card} ${Design.ui.stack}`).children(
-                      h.h2.class("text-lg font-semibold").children("4. Delivery & Terms"),
+                      h.h2.class("text-lg font-semibold").children(t("order.sectionFulfillment")),
                       FormControls.switchField(h, {
                         fieldKey: "field-expedited",
                         name: "expedited",
-                        label: Order.OrderSchemaForm.labelFor("expedited"),
-                        description: Order.OrderSchemaForm.meta["expedited"]?.description,
+                        label: controller.labelFor("expedited"),
+                        description: controller.meta["expedited"]?.description,
                         checked: values.expedited,
                         state: derived.field("expedited"),
                         disabled: isSubmitting,
@@ -869,8 +896,8 @@ const OrderFormPageNoDeps = Html.component({
                       FormControls.textField(h, {
                         fieldKey: "field-delivery-note",
                         name: "deliveryNote",
-                        label: Order.OrderSchemaForm.labelFor("deliveryNote"),
-                        description: Order.OrderSchemaForm.meta["deliveryNote"]?.description,
+                        label: controller.labelFor("deliveryNote"),
+                        description: controller.meta["deliveryNote"]?.description,
                         value: values.deliveryNote,
                         state: derived.field("deliveryNote"),
                         required: values.expedited,
@@ -884,7 +911,8 @@ const OrderFormPageNoDeps = Html.component({
                       FormControls.checkboxField(h, {
                         fieldKey: "field-accept-terms",
                         name: "acceptTerms",
-                        label: "I accept the custom production terms and lead times",
+                        label: controller.labelFor("acceptTerms"),
+                        description: t("order.fields.acceptTerms.desc"),
                         checked: values.acceptTerms,
                         state: derived.field("acceptTerms"),
                         disabled: isSubmitting,
@@ -903,26 +931,31 @@ const OrderFormPageNoDeps = Html.component({
                           .children(
                             h.span
                               .attr("data-testid", "summary-subtotal")
-                              .children(`Subtotal: ${Order.formatCents(totals.subtotalCents)}`),
+                              .children(t("order.summarySubtotal", { amount: formatCurrency(totals.subtotalCents) })),
                             totals.discountCents > 0
                               ? h.span
                                   .attr("data-testid", "summary-discount")
-                                  .children(`Discount: −${Order.formatCents(totals.discountCents)}`)
+                                  .children(
+                                    t("order.summaryDiscount", { amount: formatCurrency(totals.discountCents) })
+                                  )
                               : undefined,
                             totals.expeditedFeeCents > 0
                               ? h.span
                                   .attr("data-testid", "summary-expedited")
-                                  .children(`Expedited: +${Order.formatCents(totals.expeditedFeeCents)}`)
+                                  .children(
+                                    t("order.summaryExpedited", { amount: formatCurrency(totals.expeditedFeeCents) })
+                                  )
                               : undefined
                           ),
                         h.div
                           .class("text-lg font-semibold")
                           .attr("data-testid", "summary-total")
-                          .children(`Total: ${Order.formatCents(totals.totalCents)}`)
+                          .children(t("order.summaryTotal", { amount: formatCurrency(totals.totalCents) }))
                       ),
                     FormControls.errorSummary(h, {
+                      title: t("validation.fixErrorsTitle"),
                       errors: derived.visibleErrors,
-                      labelFor: Order.OrderSchemaForm.labelFor,
+                      labelFor: controller.labelFor,
                       summaryRef: model.submit._tag === "Failed" ? undefined : ErrorSummaryRef
                     }),
                     h.div.class(`${Design.ui.row} justify-end`).children(
@@ -933,10 +966,10 @@ const OrderFormPageNoDeps = Html.component({
                         .attr("data-testid", "order-submit")
                         .children(
                           isSubmitting
-                            ? "Submitting order…"
+                            ? t("order.submitting")
                             : derived.isValidating
-                              ? "Waiting for checks…"
-                              : "Submit order"
+                              ? t("common.loading")
+                              : t("order.submit")
                         )
                     )
                   )
@@ -945,6 +978,24 @@ const OrderFormPageNoDeps = Html.component({
         })
       )
   }
+})
+
+const OrderFormPageNoDeps = Html.component({
+  name: "OrderFormPage",
+  props: Schema.Struct({
+    locale: Schema.optionalKey(I18n.AppLocale)
+  }),
+  model: Schema.Struct({}),
+  message: Schema.Never
+}).make({
+  init: () => ({}),
+  update: ($) => $.model,
+  head: ($) => [Head.title(I18n.translatorFor($.props.locale ?? "en").t("order.pageTitle"))],
+  view: (h) =>
+    I18n.I18nProvider(h, {
+      props: { locale: h.props.locale ?? "en" },
+      view: () => OrderFormContentNoDeps(h, {})
+    })
 })
 
 /**

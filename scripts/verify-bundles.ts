@@ -8,6 +8,7 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { gzipSync } from "node:zlib"
+import type * as I18n from "../src/i18n/I18n.ts"
 import type * as Routes from "../src/routes.ts"
 import * as Assets from "../src/server/assets.ts"
 
@@ -37,7 +38,6 @@ const owned: ReadonlyArray<Owned> = [
   ["product/BookmarkProduct", "BookmarkProduct command", "ProductDetail"],
   ["getProduct", "ProductRpcs getProduct rpc", "ProductDetail"],
   ["bookmarkProduct", "ProductRpcs bookmarkProduct rpc", "ProductDetail"],
-  ["data-dialog-backdrop", "ui-kit Dialog", "ProductDetail"],
   ["SENTINEL:analytics-page", "Analytics page", "Analytics"],
   ["SENTINEL:analytics-chart", "Analytics chart", "Analytics"],
   ["SENTINEL:analytics-schema", "Analytics schema", "Analytics"],
@@ -62,11 +62,28 @@ const owned: ReadonlyArray<Owned> = [
   ["validatePromoCode", "OrderRpcs validatePromoCode rpc", "Order"],
   ["submitOrder", "OrderRpcs submitOrder rpc", "Order"],
   ["FormRoot", "ui-kit Form", "Order"],
-  ["data-touched", "ui-kit Field", "Order"],
-  ["data-scrubbing", "ui-kit NumberField", "Order"],
   ["data-select-blocker", "ui-kit Select", "Order"],
-  ["data-parent", "ui-kit Checkbox", "Order"],
+  ["SENTINEL:warehouse-page", "Warehouse page", "Warehouse"],
+  ["SENTINEL:warehouse-schema", "Warehouse schema", "Warehouse"],
+  ["SENTINEL:get-warehouse-carts-query", "GetWarehouseCarts marker", "Warehouse"],
+  ["warehouse/GetWarehouseCarts", "GetWarehouseCarts query", "Warehouse"],
+  ["warehouse/UnblockCart", "UnblockCart command", "Warehouse"],
+  ["warehouse/BlockCart", "BlockCart command", "Warehouse"],
+  ["warehouse/PreflightReleaseCart", "PreflightReleaseCart command", "Warehouse"],
+  ["warehouse/ReleaseCart", "ReleaseCart command", "Warehouse"],
+  ["warehouse/PreflightDispatchCart", "PreflightDispatchCart command", "Warehouse"],
+  ["warehouse/DispatchCartBatch", "DispatchCartBatch command", "Warehouse"],
+  ["warehouse/RefreshSession", "RefreshSession command", "Warehouse"],
+  ["dispatchCartStep", "WarehouseRpcs dispatchCartStep rpc", "Warehouse"],
+  ["data-progressing", "ui-kit Progress", "Warehouse"],
+  ["--toast-index", "ui-kit ToastProvider", "Warehouse"],
   ["SENTINEL:not-found-page", "NotFound page", "NotFound"]
+]
+// Lazy-split translation catalog markers (dynamic imports only, never in entry or another locale).
+type LocaleOwned = readonly [needle: string, label: string, owner: I18n.AppLocale]
+const localeNeedles: ReadonlyArray<LocaleOwned> = [
+  ["SENTINEL:i18n-en", "i18n en catalog", "en"],
+  ["SENTINEL:i18n-de", "i18n de catalog", "de"]
 ]
 // Framework and kit code that only lazy pages use. It must exist in the build, in a chunk that is neither the
 // entry nor reachable from it by a static import: otherwise every visitor downloads it up front.
@@ -74,6 +91,10 @@ const pageOnlyFramework: ReadonlyArray<readonly [needle: string, label: string]>
   ["effect/ui/Query/Build", "@effect/ui Query.Service runtime"],
   ["effect/ui/Query/accessor", "@effect/ui Query.Service accessors"],
   ["~effect/rpc/RpcClientError", "effect/rpc RpcClient runtime"],
+  ["data-dialog-backdrop", "ui-kit Dialog"],
+  ["data-touched", "ui-kit Field"],
+  ["data-scrubbing", "ui-kit NumberField"],
+  ["data-parent", "ui-kit Checkbox"],
   ["Button: the element already handles click", "ui-kit Button"],
   ["Input: the element already handles input", "ui-kit Input"]
 ]
@@ -88,6 +109,7 @@ const serverOnlyNeedles: ReadonlyArray<readonly [needle: string, label: string]>
   ["server/AnalyticsStore", "server AnalyticsStore"],
   ["server/StatusStore", "server StatusStore"],
   ["server/OrderStore", "server OrderStore"],
+  ["server/WarehouseStore", "server WarehouseStore"],
   ["Ceramic pour-over", "server seed catalog dataset"],
   ["effect/rpc/RpcServer", "RpcServer runtime"]
 ]
@@ -105,9 +127,13 @@ const walk = (dir: string): ReadonlyArray<string> =>
     entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]
   )
 const declared = new Set(
-  walk(join(root, "src")).flatMap((file) => readFileSync(file, "utf8").match(/SENTINEL:[a-z-]+/g) ?? [])
+  walk(join(root, "src")).flatMap((file) => readFileSync(file, "utf8").match(/SENTINEL:[a-z0-9-]+/g) ?? [])
 )
-const known = new Set([...owned.map(([needle]) => needle), ...sharedNeedles.map(([needle]) => needle)])
+const known = new Set([
+  ...owned.map(([needle]) => needle),
+  ...sharedNeedles.map(([needle]) => needle),
+  ...localeNeedles.map(([needle]) => needle)
+])
 for (const sentinel of declared) {
   check(known.has(sentinel), `src declares ${sentinel} but verify-bundles.ts doesn't know its owner`)
 }
@@ -150,7 +176,7 @@ if (entry === undefined) {
 const entryCode = code.get(entry.file) ?? ""
 check(entryCode.length > 0, `entry chunk ${entry.file} not found in assets/`)
 
-for (const [needle, label] of [...owned, ...sharedNeedles]) {
+for (const [needle, label] of [...owned, ...sharedNeedles, ...localeNeedles]) {
   check(!entryCode.includes(needle), `ENTRY chunk ${entry.file} contains ${label} (${needle})`)
 }
 const entryClosure = staticClosureFiles(Assets.ENTRY_SOURCE)
@@ -163,10 +189,12 @@ for (const [needle, label] of pageOnlyFramework) {
   }
 }
 const pageSources: ReadonlyArray<string> = Object.values(Assets.routeSources)
+const localeSourcesList: ReadonlyArray<string> = Object.values(Assets.localeSources)
 for (const imported of entry.imports ?? []) {
   check(!pageSources.includes(imported), `entry statically imports page module ${imported}`)
+  check(!localeSourcesList.includes(imported), `entry statically imports locale module ${imported}`)
 }
-for (const source of pageSources) {
+for (const source of [...pageSources, ...localeSourcesList]) {
   check(
     (entry.dynamicImports ?? []).includes(source),
     `entry doesn't reach ${source} through a dynamic import() (is it imported statically elsewhere?)`
@@ -214,7 +242,7 @@ for (const [needle] of sharedNeedles) {
     )
   }
   // Transitively: a page that reaches the product schema through ANOTHER shared chunk would load it too.
-  for (const route of ["Home", "Analytics", "Status", "Order", "NotFound"] as const) {
+  for (const route of ["Home", "Analytics", "Status", "Order", "Warehouse", "NotFound"] as const) {
     check(
       holder === undefined || !staticClosureFiles(Assets.routeSources[route]).has(holder),
       `${route} chunk (transitively) imports the product schema chunk it doesn't need`
@@ -224,6 +252,38 @@ for (const [needle] of sharedNeedles) {
     holder === undefined || !entryClosure.has(holder),
     `the entry statically imports the product schema chunk ${holder}`
   )
+}
+
+// --- Locale catalogs: separate dynamic-entry chunks, zero static inclusion in entry, mutually isolated. ---
+const localeChunks = Object.entries(Assets.localeSources).map(([locale, source]) => {
+  const chunk: Assets.ManifestChunk | undefined = manifest[source]
+  check(chunk !== undefined, `manifest has no chunk for locale ${locale} (${source})`)
+  check(chunk?.isDynamicEntry === true, `locale ${locale} (${source}) is not a dynamic-entry chunk`)
+  check(chunk?.file !== entry.file, `locale ${locale} shares the entry chunk file`)
+  if (chunk !== undefined) {
+    check(!entryClosure.has(chunk.file), `entry statically closure-imports locale ${locale} chunk ${chunk.file}`)
+  }
+  return { locale, source, chunk }
+})
+const localeFiles = localeChunks.map(({ chunk }) => chunk?.file)
+check(new Set(localeFiles).size === localeFiles.length, "two locales share one chunk file")
+for (const [needle, label, owner] of localeNeedles) {
+  const ownerFile = localeChunks.find(({ locale }) => locale === owner)?.chunk?.file
+  const holders = holdersOf(needle)
+  check(
+    ownerFile !== undefined && holders.length === 1 && holders[0] === ownerFile,
+    `${label} (${needle}) should live only in locale:${owner} chunk ${ownerFile}, found in: ${holders.join(", ") || "no chunk"}`
+  )
+}
+const enChunkFile = localeChunks.find(({ locale }) => locale === "en")?.chunk?.file
+const deChunkFile = localeChunks.find(({ locale }) => locale === "de")?.chunk?.file
+if (enChunkFile !== undefined && deChunkFile !== undefined) {
+  const enAssets = Assets.resolveRouteAssets(manifest, "Warehouse", "en")
+  const deAssets = Assets.resolveRouteAssets(manifest, "Warehouse", "de")
+  check(enAssets.modulePreloads.includes(`/${enChunkFile}`), `Warehouse EN assets missing ${enChunkFile}`)
+  check(!enAssets.modulePreloads.includes(`/${deChunkFile}`), `Warehouse EN assets leaked ${deChunkFile}`)
+  check(deAssets.modulePreloads.includes(`/${deChunkFile}`), `Warehouse DE assets missing ${deChunkFile}`)
+  check(!deAssets.modulePreloads.includes(`/${enChunkFile}`), `Warehouse DE assets leaked ${enChunkFile}`)
 }
 
 // Home and NotFound use no queries, no RPC client and no transitions: neither may statically/transitively import them.
@@ -291,6 +351,7 @@ const add = (role: string, file: string): void => {
 }
 add("entry", entry.file)
 for (const { route, chunk } of pageChunks) if (chunk) add(`page:${route}`, chunk.file)
+for (const { locale, chunk } of localeChunks) if (chunk) add(`locale:${locale}`, chunk.file)
 const shared = Object.values(manifest).filter((chunk) => !chunk.isEntry && !chunk.isDynamicEntry)
 for (const chunk of shared) add("shared", chunk.file)
 const css = [...new Set(Object.values(manifest).flatMap((chunk) => chunk.css ?? []))]

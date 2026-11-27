@@ -1,5 +1,9 @@
 import { afterEach } from "vite-plus/test"
+import * as I18n from "../src/i18n/I18n.ts"
 import * as Frames from "./support/frames.ts"
+
+// Preload both lazy locale catalogs so synchronous SSR & unit assertions always resolve deterministically.
+await Promise.all([I18n.preloadLocale("en"), I18n.preloadLocale("de")])
 
 /**
  * happy-dom has no Popover API, and @effect/ui-kit's top-layer popups (Dialog,
