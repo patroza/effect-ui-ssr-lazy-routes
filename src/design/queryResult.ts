@@ -6,55 +6,84 @@ import * as ApiError from "../rpc/domain/ApiError.ts"
 import * as Design from "./classes.ts"
 
 /**
- * The data state handed to a page's `onReady` branch once `matchQuery` has
- * proved that usable data is present — either from the latest `Success` or
- * preserved via `Failure.previousSuccess` when a client refresh fails.
+ * Cold-load state returned by {@link read} before a query settles (never reached
+ * during hydrated SSR).
+ */
+export interface InitialQuery {
+  readonly _tag: "Initial"
+  readonly waiting: boolean
+}
+
+/**
+ * Unrecoverable failure state returned by {@link read} when a query fails with
+ * no previously loaded data to fall back on.
+ */
+export interface FailureQuery<E> {
+  readonly _tag: "Failure"
+  readonly cause: Cause.Cause<E>
+  readonly waiting: boolean
+}
+
+/**
+ * Usable data state returned by {@link read} once data is present — either from
+ * the latest `Success` or preserved via `Failure.previousSuccess` when a client
+ * refresh fails.
  */
 export interface ReadyQuery<A, E> {
+  readonly _tag: "Ready"
   readonly data: A
   readonly waiting: boolean
   readonly refreshFailure: Cause.Cause<E> | undefined
 }
 
-export interface MatchQueryHandlers<A, E, OutInitial, OutFailure, OutReady> {
-  readonly onInitial: (result: AsyncResult.Initial<A, E>) => OutInitial
-  readonly onFailure: (cause: Cause.Cause<E>, result: AsyncResult.Failure<A, E>) => OutFailure
-  readonly onReady: (ready: ReadyQuery<A, E>) => OutReady
-}
+export type QueryState<A, E> = InitialQuery | FailureQuery<E> | ReadyQuery<A, E>
+
+export const isInitial = <A, E>(state: QueryState<A, E>): state is InitialQuery => state._tag === "Initial"
+
+export const isFailure = <A, E>(state: QueryState<A, E>): state is FailureQuery<E> => state._tag === "Failure"
+
+export const isReady = <A, E>(state: QueryState<A, E>): state is ReadyQuery<A, E> => state._tag === "Ready"
 
 /**
- * Single boundary matcher for `@effect/ui` `h.queries.*` results.
+ * Single boundary reader for `@effect/ui` `h.queries.*` results.
  *
  * Unlike ad-hoc `AsyncResult.match` helpers that turn `Initial` and `Failure`
- * into `undefined` (forcing downstream `is defined` checks), this splits the
- * view cleanly into:
- * - `onInitial`: cold load (never reached during hydrated SSR),
- * - `onFailure`: failed with no previous data (renders an error panel),
- * - `onReady`: always receives defined `data: A` (plus optional `refreshFailure`
- *   when a client refresh failed over previously loaded SSR/cached data).
+ * into `undefined` (forcing downstream `is defined` checks), this flattens the
+ * result into one discriminated union checked with {@link isInitial},
+ * {@link isFailure}, and {@link isReady}:
+ * - `Initial`: cold load (never reached during hydrated SSR),
+ * - `Failure`: failed with no previous data (renders an error panel),
+ * - `Ready`: always carries defined `data: A` (plus `refreshFailure` when a
+ *   client refresh failed over previously loaded SSR/cached data).
  */
-export const matchQuery = <A, E, OutInitial, OutFailure, OutReady>(
-  result: AsyncResult.AsyncResult<A, E>,
-  handlers: MatchQueryHandlers<A, E, OutInitial, OutFailure, OutReady>
-): OutInitial | OutFailure | OutReady => {
+export const read = <A, E>(result: AsyncResult.AsyncResult<A, E>): QueryState<A, E> => {
   if (AsyncResult.isInitial(result)) {
-    return handlers.onInitial(result)
+    return {
+      _tag: "Initial",
+      waiting: result.waiting
+    }
   }
   if (AsyncResult.isSuccess(result)) {
-    return handlers.onReady({
+    return {
+      _tag: "Ready",
       data: result.value,
       waiting: result.waiting,
       refreshFailure: undefined
-    })
+    }
   }
   if (Option.isSome(result.previousSuccess)) {
-    return handlers.onReady({
+    return {
+      _tag: "Ready",
       data: result.previousSuccess.value.value,
       waiting: result.waiting,
       refreshFailure: result.cause
-    })
+    }
   }
-  return handlers.onFailure(result.cause, result)
+  return {
+    _tag: "Failure",
+    cause: result.cause,
+    waiting: result.waiting
+  }
 }
 
 const isApiError = Schema.is(ApiError.ApiError)

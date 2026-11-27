@@ -71,27 +71,31 @@ const AnalyticsPageNoDeps = Html.component({
   head: () => [Head.title("Analytics")],
   view: (h, model) => {
     const title = Analytics.metricTitle(model.metric)
-    const content = QueryResult.matchQuery(h.queries.series, {
-      onInitial: () => h.p.class(Design.ui.muted).children("Loading…"),
-      onFailure: (cause) =>
-        QueryResult.errorPanel(h, {
+    const renderSeriesPanel = () => {
+      const series = QueryResult.read(h.queries.series)
+      if (QueryResult.isInitial(series)) {
+        return h.p.class(Design.ui.muted).children("Loading…")
+      }
+      if (QueryResult.isFailure(series)) {
+        return QueryResult.errorPanel(h, {
           title: "Couldn't load analytics",
           heading: 2,
-          cause,
+          cause: series.cause,
           onRetry: AnalyticsPageMessage.ClickedRefresh()
-        }),
-      onReady: ({ data, refreshFailure, waiting }) =>
-        h.div.class(Design.ui.stack).children(
-          refreshFailure === undefined
-            ? undefined
-            : QueryResult.refreshErrorBanner(h, {
-                cause: refreshFailure,
-                waiting,
-                onRetry: AnalyticsPageMessage.ClickedRefresh()
-              }),
-          renderChartContent(h, title, data, waiting)
-        )
-    })
+        })
+      }
+      return h.div.class(Design.ui.stack).children(
+        series.refreshFailure === undefined
+          ? undefined
+          : QueryResult.refreshErrorBanner(h, {
+              cause: series.refreshFailure,
+              waiting: series.waiting,
+              onRetry: AnalyticsPageMessage.ClickedRefresh()
+            }),
+        renderChartContent(h, title, series.data, series.waiting)
+      )
+    }
+    const content = renderSeriesPanel()
 
     return h.section
       .attr("data-page-chunk", ANALYTICS_PAGE_CHUNK)

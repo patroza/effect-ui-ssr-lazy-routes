@@ -79,15 +79,13 @@ const ProductDetailPageNoDeps = Html.component({
           : $.evolve({ inquiryOpen: false, sentQuestion: $.model.question.trim(), question: "" }),
       ClickedRefresh: () => $.run(RefreshProduct.make({ id: $.props.id }))
     }),
-  head: ($) => [
-    Head.title(
-      QueryResult.matchQuery($.queries.product, {
-        onInitial: () => "Product",
-        onFailure: () => "Product",
-        onReady: ({ data }) => Option.match(data, { onNone: () => "Unknown product", onSome: (p) => p.name })
-      })
-    )
-  ],
+  head: ($) => {
+    const product = QueryResult.read($.queries.product)
+    if (!QueryResult.isReady(product)) {
+      return [Head.title("Product")]
+    }
+    return [Head.title(Option.match(product.data, { onNone: () => "Unknown product", onSome: (p) => p.name }))]
+  },
   view: (h, model) => {
     const back = h.a
       .class(Design.ui.link)
@@ -98,159 +96,155 @@ const ProductDetailPageNoDeps = Html.component({
       .attr("data-query", GetProduct.GET_PRODUCT_QUERY_CHUNK)
       .class(Design.ui.stack)
 
-    return QueryResult.matchQuery(h.queries.product, {
-      onInitial: () => shell.children(h.h1.class(Design.ui.title).children("Loading product…"), back),
-      onFailure: (cause) =>
-        shell.children(
-          QueryResult.errorPanel(h, {
-            title: "Couldn't load the product",
-            cause,
-            httpStatus: "503",
-            onRetry: ProductDetailPageMessage.ClickedRefresh()
-          }),
-          back
-        ),
-      onReady: ({ data, refreshFailure, waiting }) =>
-        Option.match(data, {
-          // `data-http-status` is what `renderPage` reads back to answer 404 for exactly this render.
-          onNone: () =>
-            shell.attr(Status.NOT_FOUND_ATTRIBUTE, "404").children(
-              refreshFailure === undefined
-                ? undefined
-                : QueryResult.refreshErrorBanner(h, {
-                    cause: refreshFailure,
-                    waiting,
-                    onRetry: ProductDetailPageMessage.ClickedRefresh()
-                  }),
-              h.h1.class(Design.ui.title).children("Unknown product"),
-              h.p.class(Design.ui.muted).children(`There is no product "${h.props.id}".`),
-              back
+    const result = QueryResult.read(h.queries.product)
+    if (QueryResult.isInitial(result)) {
+      return shell.children(h.h1.class(Design.ui.title).children("Loading product…"), back)
+    }
+    if (QueryResult.isFailure(result)) {
+      return shell.children(
+        QueryResult.errorPanel(h, {
+          title: "Couldn't load the product",
+          cause: result.cause,
+          httpStatus: "503",
+          onRetry: ProductDetailPageMessage.ClickedRefresh()
+        }),
+        back
+      )
+    }
+    if (Option.isNone(result.data)) {
+      // `data-http-status` is what `renderPage` reads back to answer 404 for exactly this render.
+      return shell.attr(Status.NOT_FOUND_ATTRIBUTE, "404").children(
+        result.refreshFailure === undefined
+          ? undefined
+          : QueryResult.refreshErrorBanner(h, {
+              cause: result.refreshFailure,
+              waiting: result.waiting,
+              onRetry: ProductDetailPageMessage.ClickedRefresh()
+            }),
+        h.h1.class(Design.ui.title).children("Unknown product"),
+        h.p.class(Design.ui.muted).children(`There is no product "${h.props.id}".`),
+        back
+      )
+    }
+
+    const product = result.data.value
+    const bookmarked = model.bookmark === "Saved" || product.bookmarked
+    return shell
+      .attr("data-product-schema", Product.PRODUCT_SCHEMA_CHUNK)
+      .attr("aria-busy", String(result.waiting))
+      .children(
+        result.refreshFailure === undefined
+          ? undefined
+          : QueryResult.refreshErrorBanner(h, {
+              cause: result.refreshFailure,
+              waiting: result.waiting,
+              onRetry: ProductDetailPageMessage.ClickedRefresh()
+            }),
+        h.div
+          .key("detail-content")
+          .class(Design.ui.stack)
+          .children(
+            h.div.class(`${Design.ui.row} justify-between`).children(
+              h.h1.class(Design.ui.title).children(product.name),
+              QueryResult.refreshButton(h, {
+                waiting: result.waiting,
+                onRefresh: ProductDetailPageMessage.ClickedRefresh(),
+                testId: "detail-refresh"
+              })
             ),
-          onSome: (product) => {
-            const bookmarked = model.bookmark === "Saved" || product.bookmarked
-            return shell
-              .attr("data-product-schema", Product.PRODUCT_SCHEMA_CHUNK)
-              .attr("aria-busy", String(waiting))
+            h.p.class(Design.ui.muted).children(product.blurb),
+            h.p
+              .attr("data-testid", "detail-total")
               .children(
-                refreshFailure === undefined
-                  ? undefined
-                  : QueryResult.refreshErrorBanner(h, {
-                      cause: refreshFailure,
-                      waiting,
-                      onRetry: ProductDetailPageMessage.ClickedRefresh()
-                    }),
-                h.div
-                  .key("detail-content")
-                  .class(Design.ui.stack)
-                  .children(
-                    h.div.class(`${Design.ui.row} justify-between`).children(
-                      h.h1.class(Design.ui.title).children(product.name),
-                      QueryResult.refreshButton(h, {
-                        waiting,
-                        onRefresh: ProductDetailPageMessage.ClickedRefresh(),
-                        testId: "detail-refresh"
-                      })
-                    ),
-                    h.p.class(Design.ui.muted).children(product.blurb),
-                    h.p
-                      .attr("data-testid", "detail-total")
-                      .children(
-                        `${model.quantity} × ${Product.formatPrice(product.priceCents)} = ${Product.formatPrice(model.quantity * product.priceCents)}`
-                      ),
-                    h.div.class(Design.ui.row).children(
-                      Button(h, { onPress: ProductDetailPageMessage.ClickedLessQuantity() })
-                        .class(Design.ui.button)
-                        .attr("aria-label", "Less")
-                        .attr("data-testid", "detail-less")
-                        .children("−"),
-                      Button(h, { onPress: ProductDetailPageMessage.ClickedMoreQuantity() })
-                        .class(Design.ui.button)
-                        .attr("aria-label", "More")
-                        .attr("data-testid", "detail-more")
-                        .children("+"),
-                      Button(h, {
-                        props: { disabled: model.bookmark === "Saving" || bookmarked },
-                        onPress: ProductDetailPageMessage.ClickedBookmark()
-                      })
-                        .class(Design.ui.button)
-                        .attr("data-testid", "detail-bookmark")
-                        .children(
-                          bookmarked
-                            ? "Bookmarked ✓"
-                            : model.bookmark === "Saving"
-                              ? "Saving…"
-                              : model.bookmark === "Failed"
-                                ? "Bookmark failed — retry"
-                                : "Bookmark"
-                        ),
-                      Dialog(h, {
-                        props: { open: model.inquiryOpen },
-                        onEmit: {
-                          RequestedOpen: () => ProductDetailPageMessage.RequestedOpenInquiry(),
-                          RequestedClose: () => ProductDetailPageMessage.RequestedCloseInquiry(),
-                          Settled: () => undefined
-                        },
-                        view: (dialog) =>
-                          h.div.class("contents").children(
-                            dialog
-                              .trigger(h.button.class(Design.ui.button))
-                              .attr("data-testid", "inquiry-trigger")
-                              .children("Ask a question"),
-                            dialog.portal(h.dialog)?.children(
-                              dialog.backdrop(h.div.class(backdropClass)),
-                              dialog.viewport(h.div.class(viewportClass)).children(
-                                dialog
-                                  .popup(h.div.class(popupClass))
-                                  .attr("data-testid", "inquiry-popup")
-                                  .children(
-                                    h.div.class(Design.ui.stack).children(
-                                      dialog
-                                        .title(h.h2.class("text-lg font-semibold"))
-                                        .children(`About ${product.name}`),
-                                      dialog
-                                        .description(h.p.class(Design.ui.muted))
-                                        .children("We usually reply within a day."),
-                                      Input(h, {
-                                        props: { value: model.question },
-                                        onUpdate: ({ value }) => ProductDetailPageMessage.UpdatedQuestion({ value })
-                                      })
-                                        .class(Design.ui.input)
-                                        .attrs({
-                                          placeholder: "Your question",
-                                          "aria-label": "Your question",
-                                          "data-testid": "inquiry-input"
-                                        }),
-                                      h.div
-                                        .class(`${Design.ui.row} justify-end`)
-                                        .children(
-                                          dialog
-                                            .close(h.button.class(Design.ui.button))
-                                            .attr("data-testid", "inquiry-close")
-                                            .children("Cancel"),
-                                          Button(h, { onPress: ProductDetailPageMessage.ClickedSendQuestion() })
-                                            .class(Design.ui.button)
-                                            .attr("data-testid", "inquiry-send")
-                                            .children("Send")
-                                        )
-                                    )
-                                  )
-                              )
+                `${model.quantity} × ${Product.formatPrice(product.priceCents)} = ${Product.formatPrice(model.quantity * product.priceCents)}`
+              ),
+            h.div.class(Design.ui.row).children(
+              Button(h, { onPress: ProductDetailPageMessage.ClickedLessQuantity() })
+                .class(Design.ui.button)
+                .attr("aria-label", "Less")
+                .attr("data-testid", "detail-less")
+                .children("−"),
+              Button(h, { onPress: ProductDetailPageMessage.ClickedMoreQuantity() })
+                .class(Design.ui.button)
+                .attr("aria-label", "More")
+                .attr("data-testid", "detail-more")
+                .children("+"),
+              Button(h, {
+                props: { disabled: model.bookmark === "Saving" || bookmarked },
+                onPress: ProductDetailPageMessage.ClickedBookmark()
+              })
+                .class(Design.ui.button)
+                .attr("data-testid", "detail-bookmark")
+                .children(
+                  bookmarked
+                    ? "Bookmarked ✓"
+                    : model.bookmark === "Saving"
+                      ? "Saving…"
+                      : model.bookmark === "Failed"
+                        ? "Bookmark failed — retry"
+                        : "Bookmark"
+                ),
+              Dialog(h, {
+                props: { open: model.inquiryOpen },
+                onEmit: {
+                  RequestedOpen: () => ProductDetailPageMessage.RequestedOpenInquiry(),
+                  RequestedClose: () => ProductDetailPageMessage.RequestedCloseInquiry(),
+                  Settled: () => undefined
+                },
+                view: (dialog) =>
+                  h.div.class("contents").children(
+                    dialog
+                      .trigger(h.button.class(Design.ui.button))
+                      .attr("data-testid", "inquiry-trigger")
+                      .children("Ask a question"),
+                    dialog.portal(h.dialog)?.children(
+                      dialog.backdrop(h.div.class(backdropClass)),
+                      dialog.viewport(h.div.class(viewportClass)).children(
+                        dialog
+                          .popup(h.div.class(popupClass))
+                          .attr("data-testid", "inquiry-popup")
+                          .children(
+                            h.div.class(Design.ui.stack).children(
+                              dialog.title(h.h2.class("text-lg font-semibold")).children(`About ${product.name}`),
+                              dialog.description(h.p.class(Design.ui.muted)).children("We usually reply within a day."),
+                              Input(h, {
+                                props: { value: model.question },
+                                onUpdate: ({ value }) => ProductDetailPageMessage.UpdatedQuestion({ value })
+                              })
+                                .class(Design.ui.input)
+                                .attrs({
+                                  placeholder: "Your question",
+                                  "aria-label": "Your question",
+                                  "data-testid": "inquiry-input"
+                                }),
+                              h.div
+                                .class(`${Design.ui.row} justify-end`)
+                                .children(
+                                  dialog
+                                    .close(h.button.class(Design.ui.button))
+                                    .attr("data-testid", "inquiry-close")
+                                    .children("Cancel"),
+                                  Button(h, { onPress: ProductDetailPageMessage.ClickedSendQuestion() })
+                                    .class(Design.ui.button)
+                                    .attr("data-testid", "inquiry-send")
+                                    .children("Send")
+                                )
                             )
                           )
-                      })
-                    ),
-                    model.sentQuestion === null
-                      ? undefined
-                      : h.p
-                          .class(Design.ui.muted)
-                          .attr("data-testid", "inquiry-sent")
-                          .children(`Question sent: “${model.sentQuestion}”`),
-                    back
+                      )
+                    )
                   )
-              )
-          }
-        })
-    })
+              })
+            ),
+            model.sentQuestion === null
+              ? undefined
+              : h.p
+                  .class(Design.ui.muted)
+                  .attr("data-testid", "inquiry-sent")
+                  .children(`Question sent: “${model.sentQuestion}”`),
+            back
+          )
+      )
   }
 })
 

@@ -19,7 +19,7 @@ const RefreshStatus = Command.make("RefreshStatus", { args: { mode: Status.Statu
 )
 
 /**
- * Pure content branch: only runs when `QueryResult.matchQuery` proved `data`
+ * Pure content branch: only runs after `QueryResult.read` narrowed past `isInitial`/`isFailure` and proved `data`
  * exists (either a fresh `Success` or a preserved `previousSuccess` after a
  * failed refresh). Zero `undefined` / `is defined` checks live here.
  */
@@ -106,43 +106,44 @@ const StatusPageNoDeps = Html.component({
       .attr("data-query", GetStatus.GET_STATUS_QUERY_CHUNK)
       .class(Design.ui.stack)
 
-    return QueryResult.matchQuery(h.queries.status, {
-      onInitial: () =>
-        shell.children(
-          h.h1.class(Design.ui.title).children("System Status"),
-          modeLinks,
-          h.p.class(Design.ui.muted).attr("data-testid", "status-loading").children("Loading status…")
-        ),
-      onFailure: (cause) =>
-        shell.children(
-          modeLinks,
-          QueryResult.errorPanel(h, {
-            title: "Couldn't load system status",
-            cause,
-            httpStatus: "503",
+    const status = QueryResult.read(h.queries.status)
+    if (QueryResult.isInitial(status)) {
+      return shell.children(
+        h.h1.class(Design.ui.title).children("System Status"),
+        modeLinks,
+        h.p.class(Design.ui.muted).attr("data-testid", "status-loading").children("Loading status…")
+      )
+    }
+    if (QueryResult.isFailure(status)) {
+      return shell.children(
+        modeLinks,
+        QueryResult.errorPanel(h, {
+          title: "Couldn't load system status",
+          cause: status.cause,
+          httpStatus: "503",
+          onRetry: StatusPageMessage.ClickedRefresh()
+        })
+      )
+    }
+
+    return shell.children(
+      h.h1.class(Design.ui.title).children("System Status"),
+      modeLinks,
+      status.refreshFailure === undefined
+        ? undefined
+        : QueryResult.refreshErrorBanner(h, {
+            cause: status.refreshFailure,
+            waiting: status.waiting,
             onRetry: StatusPageMessage.ClickedRefresh()
-          })
-        ),
-      onReady: ({ data, refreshFailure, waiting }) =>
-        shell.children(
-          h.h1.class(Design.ui.title).children("System Status"),
-          modeLinks,
-          refreshFailure === undefined
-            ? undefined
-            : QueryResult.refreshErrorBanner(h, {
-                cause: refreshFailure,
-                waiting,
-                onRetry: StatusPageMessage.ClickedRefresh()
-              }),
-          renderStatusContent(h, data, waiting)
-        )
-    })
+          }),
+      renderStatusContent(h, status.data, status.waiting)
+    )
   }
 })
 
 /**
  * Golden boundary demo: proves SSR failure rendering (HTTP 503), SSR-to-client
  * error preservation on failed refreshes (`Failure.previousSuccess`), manual
- * invalidation, and pure `onReady` content free of `undefined` checks.
+ * invalidation, and flat ready-path content free of `undefined` checks.
  */
 export const StatusPage = StatusPageNoDeps.pipe(Component.provide(GetStatus.GetStatus.layer))

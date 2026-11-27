@@ -62,6 +62,35 @@ const renderProductResults = (
     )
 }
 
+const renderResultsSection = <E>(
+  h: Html.H<typeof ProductsPageMessage.Type>,
+  query: AsyncResult.AsyncResult<Parameters<typeof renderProductResults>[1], E>,
+  compared: ReadonlyArray<string>
+) => {
+  const results = QueryResult.read(query)
+  if (QueryResult.isInitial(results)) {
+    return h.p.class(Design.ui.muted).attr("data-testid", "products-status").children("Searching…")
+  }
+  if (QueryResult.isFailure(results)) {
+    return QueryResult.errorPanel(h, {
+      title: "Couldn't load products",
+      heading: 2,
+      cause: results.cause,
+      onRetry: ProductsPageMessage.ClickedRefresh()
+    })
+  }
+  return h.div.class(Design.ui.stack).children(
+    results.refreshFailure === undefined
+      ? undefined
+      : QueryResult.refreshErrorBanner(h, {
+          cause: results.refreshFailure,
+          waiting: results.waiting,
+          onRetry: ProductsPageMessage.ClickedRefresh()
+        }),
+    renderProductResults(h, results.data, compared, results.waiting)
+  )
+}
+
 const ProductsPageNoDeps = Html.component({
   name: "ProductsPage",
   props: Schema.Struct({ route: ProductsRoute }),
@@ -125,27 +154,7 @@ const ProductsPageNoDeps = Html.component({
           .class(Design.ui.muted)
           .attr("data-testid", "products-compared")
           .children(`Comparing ${model.compared.length} product(s)`),
-        QueryResult.matchQuery(h.queries.results, {
-          onInitial: () => h.p.class(Design.ui.muted).attr("data-testid", "products-status").children("Searching…"),
-          onFailure: (cause) =>
-            QueryResult.errorPanel(h, {
-              title: "Couldn't load products",
-              heading: 2,
-              cause,
-              onRetry: ProductsPageMessage.ClickedRefresh()
-            }),
-          onReady: ({ data, refreshFailure, waiting }) =>
-            h.div.class(Design.ui.stack).children(
-              refreshFailure === undefined
-                ? undefined
-                : QueryResult.refreshErrorBanner(h, {
-                    cause: refreshFailure,
-                    waiting,
-                    onRetry: ProductsPageMessage.ClickedRefresh()
-                  }),
-              renderProductResults(h, data, model.compared, waiting)
-            )
-        })
+        renderResultsSection(h, h.queries.results, model.compared)
       )
   }
 })
