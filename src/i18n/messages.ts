@@ -155,6 +155,7 @@ export const MESSAGE_KEYS = [
   "warehouse.traceEmpty",
   "warehouse.traceOriginLabel",
   "warehouse.traceExecLabel",
+  "warehouse.traceUnifiedBadge",
   "warehouse.statusFree",
   "warehouse.statusInUse",
   "warehouse.statusBlocked",

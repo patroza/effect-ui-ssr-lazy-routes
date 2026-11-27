@@ -1,9 +1,9 @@
 import { Effect, Option, Schema, Stream, Tracer } from "effect"
 
 /**
- * Schema-serializable OTel span coordinates so MVU state and logs can link
- * follow-up Commands across human confirmation pauses without keeping a span
- * open during idle user think-time.
+ * Schema-serializable OTel span coordinates so MVU state can continue follow-up
+ * Commands under the same unified `traceId` across human confirmation or
+ * recovery pauses without keeping a span open during idle user think-time.
  */
 export const SpanPointer = Schema.Struct({
   traceId: Schema.String,
@@ -21,51 +21,72 @@ export const captureSpanPointer: Effect.Effect<SpanPointer | null> = Effect.opti
   )
 )
 
-/** Runs `effect` and captures the active span coordinates for downstream linking. */
+/** Runs `effect` and captures the active span coordinates for downstream continuation. */
 export const captureCommandOutcome = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
   const value = yield* effect
-  const originSpan = yield* captureSpanPointer
-  return { value, originSpan }
+  const span = yield* captureSpanPointer
+  return { value, span }
 })
 
 /** Returns a short reference token suitable for UI error banners. */
 export const shortTraceRef = (span: SpanPointer | null | undefined): string | undefined =>
   span === null || span === undefined ? undefined : span.traceId.slice(0, 8)
 
+const annotateOuterCommandSpan = (parent: SpanPointer): Effect.Effect<void> =>
+  Effect.option(Effect.currentSpan).pipe(
+    Effect.tap(
+      Option.match({
+        onNone: () => Effect.void,
+        onSome: (current) =>
+          Effect.sync(() => {
+            if (current.traceId !== parent.traceId) {
+              current.attribute("workflow.trace_id", parent.traceId)
+              current.attribute("workflow.parent_span_id", parent.spanId)
+            }
+          })
+      })
+    ),
+    Effect.asVoid
+  )
+
+const workflowSpanOptions = (
+  phaseName: string,
+  parent: SpanPointer | null,
+  extraAttributes?: Readonly<Record<string, unknown>> | undefined
+) => ({
+  ...(parent === null ? {} : { parent: Tracer.externalSpan({ traceId: parent.traceId, spanId: parent.spanId }) }),
+  attributes: {
+    "workflow.phase": phaseName,
+    ...(parent === null
+      ? {}
+      : {
+          "workflow.origin_trace_id": parent.traceId,
+          "workflow.parent_span_id": parent.spanId
+        }),
+    ...extraAttributes
+  }
+})
+
 /**
- * Links both the currently running Command root span (if any) AND any child
- * spans opened inside `effect` to an originating `SpanPointer`.
+ * Runs `effect` inside a workflow span, continuing `parent`'s `traceId` via
+ * `Tracer.externalSpan` when provided so multi-phase MVU workflows share one
+ * unified trace without holding any span open across human think-time.
  */
-export const withOriginSpanLink =
-  (origin: SpanPointer | null, relationship: string, extraAttributes?: Readonly<Record<string, unknown>> | undefined) =>
+export const withWorkflowSpan =
+  (phaseName: string, parent: SpanPointer | null, extraAttributes?: Readonly<Record<string, unknown>> | undefined) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
-    if (origin === null) return effect
-    const external = Tracer.externalSpan({ traceId: origin.traceId, spanId: origin.spanId })
-    const linkAttrs: Record<string, unknown> = {
-      "workflow.relationship": relationship,
-      ...extraAttributes
-    }
-    return Effect.gen(function* () {
-      const current = yield* Effect.option(Effect.currentSpan)
-      if (Option.isSome(current)) {
-        current.value.addLinks([{ span: external, attributes: linkAttrs }])
-        current.value.attribute("workflow.origin_trace_id", origin.traceId)
-        current.value.attribute("workflow.origin_span_id", origin.spanId)
-      }
-      return yield* Effect.linkSpans(effect, external, linkAttrs)
-    })
+    const spanned = Effect.withSpan(effect, phaseName, workflowSpanOptions(phaseName, parent, extraAttributes))
+    return parent === null ? spanned : annotateOuterCommandSpan(parent).pipe(Effect.andThen(spanned))
   }
 
-/** Stream variant of `withOriginSpanLink` for multi-phase streaming Commands. */
-export const withOriginSpanLinkStream =
-  (origin: SpanPointer | null, relationship: string, extraAttributes?: Readonly<Record<string, unknown>> | undefined) =>
-  <A, E, R>(stream: Stream.Stream<A, E, R>): Stream.Stream<A, E, R> =>
-    origin === null
-      ? stream
-      : Stream.unwrap(
-          withOriginSpanLink(
-            origin,
-            relationship,
-            extraAttributes
-          )(Effect.context<R>()).pipe(Effect.map((ctx) => Stream.provideContext(stream, ctx)))
-        )
+/**
+ * Runs `stream` inside a workflow span, continuing `parent`'s `traceId` via
+ * `Tracer.externalSpan` so all stream steps execute as child spans in the same
+ * unified trace and close cleanly on completion, failure, or interruption.
+ */
+export const withWorkflowSpanStream =
+  (phaseName: string, parent: SpanPointer | null, extraAttributes?: Readonly<Record<string, unknown>> | undefined) =>
+  <A, E, R>(stream: Stream.Stream<A, E, R>): Stream.Stream<A, E, Exclude<R, Tracer.ParentSpan>> => {
+    const wrapped = stream.pipe(Stream.withSpan(phaseName, workflowSpanOptions(phaseName, parent, extraAttributes)))
+    return parent === null ? wrapped : Stream.unwrap(annotateOuterCommandSpan(parent).pipe(Effect.as(wrapped)))
+  }

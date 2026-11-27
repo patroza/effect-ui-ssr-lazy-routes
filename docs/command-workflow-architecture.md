@@ -18,7 +18,7 @@ This RFC evaluates how to bring the strongest ergonomics of `effect-app/packages
    - **Commands remain atomic per execution phase** (`Preflight` -> user dialog -> `Execute`). Side effects only run inside `Command.Service` bodies after `update` approves the transition.
    - **Scoped `Deferred` bridges** (`SubscriptionRef<Option<Deferred<Answer>>>` + `Effect.acquireUseRelease`, as in Tim Smart's `bunnings-lite` `StoreSearchPrompt`) are reserved strictly for singleton shell drawers outside an inert page, and the prompt Command returns the user's answer to `update` rather than chaining mutations behind the caller's back.
    - **`stream: true` Commands** are reserved strictly for genuine multi-phase backend/runtime progress after user confirmation (such as streaming job steps or `PendingJoin`), rendered via inline `@effect/ui-kit` `Progress` and `CommandResult` panels — with `ToastProvider` strictly opt-in from `update` via `$.send`.
-   - **OTel trace correlation across human pauses** uses a Schema-serializable `SpanPointer` (`{ traceId, spanId }`) stored in `Model` and attached to downstream execution spans via `span.addLinks(...)` + `Effect.linkSpans(...)` (zero human think-time inflation on execution spans).
+   - **Unified OTel trace parenting across human pauses** uses a Schema-serializable `SpanPointer` (`{ traceId, spanId }`) stored in `Model` and passed to downstream execution spans as `Tracer.externalSpan(parentSpan)` via `Effect.withSpan` / `Stream.withSpan` (zero human think-time inflation on execution spans, and zero `SpanLink` hops).
 
 ---
 
@@ -82,13 +82,13 @@ sequenceDiagram
   Note over U,S: Pattern B + Disciplined Hybrid (Recommended)
   U->>Up: ClickedStartPreflight
   Up->>C: PreflightRelease.make(...)
-  C->>S: preflight RPC (Span A)
+  C->>S: preflight RPC (Trace T, Span A)
   S-->>C: warnings + originSpan (SpanPointer)
   C-->>Up: SucceededPreflight({ intent, warningCount, originSpan })
   Up-->>U: Model = Prompting(intent, draft, originSpan) -> AlertDialog/Dialog open
   U->>Up: UpdatedReason / ClickedConfirmDeploy
-  Up->>C: DeployRelease.make(..., originSpan) [stream: true]
-  Note right of C: Span B links to originSpan (no human idle time!)
+  Up->>C: DeployRelease.make(..., parentSpan) [stream: true]
+  Note right of C: Span B uses parent: externalSpan(originSpan) -> same Trace T (no human idle time!)
   C-->>Up: ProgressedDeploy (Step 1..N) -> Progress UI
   C-->>Up: SucceededDeploy -> Model = Succeeded
 ```
@@ -98,7 +98,7 @@ sequenceDiagram
 | Dimension                                                     | Pattern A: Long-lived `stream: true` Command + `Deferred` + `WaitingGate`                                                                                | Pattern B: Pure MVU State Machine + Atomic Commands + Kit Dialogs                                                        | Disciplined Hybrid (Recommended): MVU + Atomic Commands + Scoped Bridge/Stream Only Where Justified                                                                            |
 | :------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **MVU / `update` purity**                                     | Breaks: workflow progression and confirmation branching hide inside an imperative Effect generator.                                                      | Pure: every transition is `(Model, Msg) -> Step`.                                                                        | Pure: `update` owns every decision; a bridge Command only returns `Answered*`.                                                                                                 |
-| **OTel trace latency**                                        | **Broken by default:** root span stays open across unbounded human think-time, distorting p95/p99 latency and SLA alerts.                                | Clean: each execution phase is its own short-lived span correlated via `SpanLink` / `SpanPointer`.                       | Clean: preflight and execution spans record real work duration, linked via `SpanPointer`.                                                                                      |
+| **OTel trace latency**                                        | **Broken by default:** root span stays open across unbounded human think-time, distorting p95/p99 latency and SLA alerts.                                | Clean: each execution phase is a short-lived child span in the same trace (`Tracer.externalSpan` parent).                | Clean: preflight, recovery, and execution spans share one `traceId` while recording real work duration.                                                                        |
 | **Query cache (`optimistic`, `invalidates`, `afterRefetch`)** | Broken: `optimistic` applies before confirmation, `invalidates` fires only on final exit, `afterRefetch` cannot be used on `stream: true`.               | Exact: confirmation happens before `Execute` issues `optimistic`; `afterRefetch` works on `"Effect"` execution Commands. | Exact: `SearchAllStores` carries no mutation cache options; `ChooseStore` carries `optimistic` + `invalidates`.                                                                |
 | **`h.isRunning` & `mode: "switch" \| "queue"`**               | Broken: `h.isRunning` stays `true` while dialog is open unless a secondary `WaitingGate` suppresses it; queued runs block behind user hesitation.        | Exact: `h.isRunning` reflects actual active async execution; `Prompting` is a distinct Model tag.                        | Exact: `preflighting` / `Prompting` / `Running` are explicit and non-overlapping.                                                                                              |
 | **`Story`, `Scene`, `Story.explore`**                         | Degraded: `Story.explore` cannot enumerate confirmation/input paths cleanly without driving a fake `Deferred` service.                                   | First-class: every dialog branch, validation guard, and error path is explored as pure `(Model, Msg)` steps.             | First-class: prompt components (`StoreSearch`) and callers (`StoreSelector`) test independently in `Story`/`Scene`.                                                            |
@@ -119,65 +119,30 @@ Every `Command.Service` run (both single-shot `"Effect"` and `"Stream"`) opens o
 When a workflow pauses for human input between two Commands (e.g., `PreflightRelease` -> `Dialog` -> `DeployRelease`), **do not** keep a root span open across the dialog. Instead:
 
 1. **Capture a Schema-serializable `SpanPointer`** inside the originating Command's Effect (`Effect.currentSpan`) and return it in the Command's success/failure message. Never call `Effect.currentSpan` or `Date.now()` inside `update` — keep span metadata as explicit Message/Model data so `Story.fromLog` stays deterministic.
-2. **Correlate downstream Commands using OTel `SpanLink` (Recommended Default):**
-   - Look closely at `effect@4.1.6` (`internal/effect.js#L2857-L2881` vs `observability/OtlpTracer.js#L215-L219`, `L285-L294`): because `commandRun.ts` calls `Effect.useSpan` _before_ evaluating `command.work`, `Effect.linkSpans(...)` inside `command.work` adds links only to **child spans** created inside the Command body. To attach the link to **the Command run span itself**, call `currentSpan.addLinks([{ span: Tracer.externalSpan(origin), attributes }])` as well!
-   - Annotate `workflow.origin_trace_id` and `workflow.origin_span_id` on the active Command span so log/trace search finds all phases by one `origin_trace_id` even in trace backends with limited `SpanLink` UI indexing.
-3. **Alternative (`ExternalSpan` Parenting):** Wrap the inner work in `Effect.withSpan("phase.execute", { parent: Tracer.externalSpan(origin) })`. This groups preflight and post-confirm RPC spans into a single waterfall `traceId` with a visible human-think-time gap and zero duration inflation on the closed preflight span. Trade-off: `@effect/ui`'s outer `commandRun` span still belongs to the new trace, whereas `SpanLink` + `workflow.origin_trace_id` keeps `@effect/ui`'s outer Command span directly linked.
-4. **Support Trace Reference on Inline Failures:** Store `failureSpan` / `originSpan` (`SpanPointer`) on the `Failed` state and show a muted `Ref <8-char-traceId>` badge in the inline error banner instead of dumping raw `Trace: ... / Span: ...` lines into toasts.
+2. **Continue One Unified Workflow Trace via `Tracer.externalSpan` (Default):**
+   - Look closely at `@effect/ui`'s `commandRun.ts`: it calls `Effect.useSpan(command.name, ...)` _before_ evaluating `command.work`. That outer Command span belongs to `@effect/ui`'s immediate interaction trace, while `command.work` can reparent the phase span (and every downstream Effect/RPC span inside it) onto the stored workflow parent using `Effect.withSpan(phaseName, { parent: Tracer.externalSpan(parentSpan) })` (or `Stream.withSpan` for streaming commands).
+   - **Why unified `ExternalSpan` parenting replaces `SpanLink`s:** Each execution phase (preflight, confirm execution, `RefreshSession` recovery, replay) closes cleanly before human think-time begins (zero duration inflation on p95/p99 latency), yet all spans — including server-side RPC handler and store spans propagated automatically via W3C `traceparent` (`RpcClient` -> `RpcServer` `remoteParentSpan`) — appear in a **single waterfall under one `traceId`** with `links.length === 0`.
+   - **Bridge attribute on the outer `@effect/ui` span:** `withWorkflowSpan` / `withWorkflowSpanStream` internally annotates `workflow.trace_id` and `workflow.parent_span_id` on `@effect/ui`'s outer Command span whenever its `traceId` differs from `parentSpan.traceId`, keeping click-level telemetry searchable too. Upstream in `@effect/ui`, allowing `Command` definitions/inputs to pass an optional `parentSpan` directly to `commandRun` would place even that outer Command span inside the workflow trace without a bridge attribute.
+   - **When `SpanLink`s still apply:** Reserve `SpanLink`s for true many-to-one fan-in (for example, a scheduled batch job aggregating `N` unrelated user traces where no single parent trace owns the batch).
+3. **Support Trace Reference on Inline Failures:** Capture `failureSpan` inside the `withWorkflowSpan` scope (`Effect.catch` inside the span) and store `failureSpan` / `originSpan` (`SpanPointer`) on `Failed` state so inline error banners show a muted `Ref <8-char-traceId>` badge (and recovery flows like `SessionExpiredError` -> `RefreshSession` -> replay stay on the exact same `traceId`).
+
+See [`src/workflow/CommandTrace.ts`](../src/workflow/CommandTrace.ts) for the full implementation (`SpanPointer`, `captureSpanPointer`, `captureCommandOutcome`, `shortTraceRef`, `withWorkflowSpan`, `withWorkflowSpanStream`):
 
 ```ts
-export const SpanPointer = Schema.Struct({
-  traceId: Schema.String,
-  spanId: Schema.String
-})
-export type SpanPointer = typeof SpanPointer.Type
-
-export const captureSpanPointer: Effect.Effect<SpanPointer | null> = Effect.option(Effect.currentSpan).pipe(
-  Effect.map(
-    Option.match({
-      onNone: () => null,
-      onSome: (span) => ({ traceId: span.traceId, spanId: span.spanId })
-    })
-  )
-)
-
-export const captureCommandOutcome = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
-  const value = yield* effect
-  const originSpan = yield* captureSpanPointer
-  return { value, originSpan }
-})
-
-export const withOriginSpanLink =
-  (origin: SpanPointer | null, relationship: string, extraAttributes?: Readonly<Record<string, unknown>> | undefined) =>
-  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
-    if (origin === null) return effect
-    const external = Tracer.externalSpan({ traceId: origin.traceId, spanId: origin.spanId })
-    const linkAttrs: Record<string, unknown> = {
-      "workflow.relationship": relationship,
-      ...extraAttributes
-    }
-    return Effect.gen(function* () {
-      const current = yield* Effect.option(Effect.currentSpan)
-      if (Option.isSome(current)) {
-        // Attach to the already-opened Command root span (exported on span.end)
-        current.value.addLinks([{ span: external, attributes: linkAttrs }])
-        current.value.attribute("workflow.origin_trace_id", origin.traceId)
-        current.value.attribute("workflow.origin_span_id", origin.spanId)
-      }
-      // Also propagate link to any child spans opened inside `effect` (e.g. RpcClient)
-      return yield* Effect.linkSpans(effect, external, linkAttrs)
-    })
-  }
-
-export const withOriginSpanLinkStream =
-  (origin: SpanPointer | null, relationship: string, extraAttributes?: Readonly<Record<string, unknown>> | undefined) =>
-  <A, E, R>(stream: Stream.Stream<A, E, R>): Stream.Stream<A, E, R> =>
-    origin === null
-      ? stream
-      : Stream.unwrap(withOriginSpanLink(origin, relationship, extraAttributes)(Effect.succeed(stream)))
+// Usage pattern in a Command handler (see src/workflow/CommandTrace.ts):
+//
+// 1. Preflight runs with `parentSpan: null` -> opens root workflow span in trace T
+//    and returns `{ value, span: originSpan }` via `captureCommandOutcome`.
+// 2. Model holds `originSpan` (`SpanPointer`) while human reviews the dialog (no open span / no parked fiber).
+// 3. Downstream Confirm / Dispatch / RefreshSession / Replay wraps RPC work in:
+//      CommandTrace.withWorkflowSpan("warehouse.release_execute", parentSpan)
+//      // or for streaming commands (e.g. DispatchCartBatch):
+//      CommandTrace.withWorkflowSpanStream("warehouse.dispatch_execute", parentSpan)
+//    which runs `Effect.withSpan` / `Stream.withSpan` with `{ parent: Tracer.externalSpan(parentSpan) }`.
+//    `RpcClient` -> `RpcServer` (`remoteParentSpan`) propagates trace T + child spanId to server handlers.
 ```
 
-_(Verified with `tsrs` + `vp lint` in spike against `effect@4.1.6`.)_
+_(Verified with `tsrs` + `vp lint` and `test/command-flow.test.ts` against `effect@4.1.6`.)_
 
 ---
 
@@ -286,13 +251,13 @@ Key properties verified under `tsrs` (`strict` + `exactOptionalPropertyTypes`) a
 ### Phase 1: Core Primitives & Unit/Story Verification
 
 - **New modules:**
-  - `src/workflow/CommandTrace.ts` — `SpanPointer`, `captureSpanPointer`, `captureCommandOutcome`, `withOriginSpanLink`, `withOriginSpanLinkStream`, `withOriginParentSpan`.
+  - `src/workflow/CommandTrace.ts` — `SpanPointer`, `captureSpanPointer`, `captureCommandOutcome`, `shortTraceRef`, `withWorkflowSpan`, `withWorkflowSpanStream`.
   - `src/workflow/CommandFlow.ts` — `CommandFlowState`, `ProgressSnapshotSchema`, `makeCommandFlow`.
   - `src/design/commandResult.ts` — `describeCommandError`, `commandErrorBanner`, `commandProgressPanel` (counterpart to `src/design/queryResult.ts`).
 - **Bundle guardrail:** Neither existing pages (`Home`, `NotFound`, `Products`, `Analytics`, `Status`, `Order`) nor `Shell.ts` import `src/workflow/` or `src/design/commandResult.ts` in Phase 1, keeping entry/existing chunks untouched (`pnpm verify:bundles` stays green).
 - **Tests (`test/command-flow.test.ts`):**
   - Pure `CommandFlow` transition + `restore` + JSON codec round-trip tests.
-  - OTel `Tracer.make` unit test proving `captureCommandOutcome` + `withOriginSpanLink` records `SpanLink`s and `workflow.origin_trace_id` on both the Command span and child spans without extending the preflight span across simulated `TestClock` human think-time.
+  - OTel `Tracer.make` tests proving `captureCommandOutcome` + `withWorkflowSpan` / `withWorkflowSpanStream` + `Rpc.InProcessRpcClientLayer` continue one unified `traceId` across simulated `TestClock` human think-time, server RPC handlers, and `SessionExpiredError` recovery replays with `links.length === 0` and zero span duration inflation.
 
 ### Phase 2: Lazy Workflow Demo Route (`/releases` or `/workflows`)
 
@@ -300,7 +265,7 @@ Key properties verified under `tsrs` (`strict` + `exactOptionalPropertyTypes`) a
   - `src/release/domain/Release.ts` + `ReleaseRpcs.ts` (`preflightRelease`, `deployRelease` RPC stream or chunked steps, `getReleases` query) — strictly feature-scoped so Vite isolates them into the new route chunk.
   - `src/server/services/ReleaseStore.ts` (`Ref`-backed state) + `src/server/handlers/ReleaseHandlers.ts` mounted at `POST /rpc/release` in `src/server/rpc.ts`.
 - **Commands & UI:**
-  - `PreflightRelease` (`Command.Service` capturing `SpanPointer`), `DeployRelease` (`Command.Service` with `stream: true`, `mode: "switch"`, `group: ["releaseId"]`, `invalidates: () => [GetReleases]`, `withOriginSpanLinkStream`).
+  - `PreflightRelease` (`Command.Service` capturing `SpanPointer`), `DeployRelease` (`Command.Service` with `stream: true`, `mode: "switch"`, `group: ["releaseId"]`, `invalidates: () => [GetReleases]`, `withWorkflowSpanStream`).
   - `src/pages/ReleasesPage.ts` demonstrating:
     - Simple yes/no `AlertDialog` confirmation path (0 warnings) vs `Dialog` text-input path (warnings require audit note).
     - Inline `commandProgressPanel` with working `Cancel` (`Command.interrupt`).

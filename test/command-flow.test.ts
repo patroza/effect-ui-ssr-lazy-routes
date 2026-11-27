@@ -1,7 +1,10 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Fiber, Option, Schema, Stream, Tracer } from "effect"
+import { Effect, Fiber, Layer, Option, Schema, Stream, Tracer } from "effect"
+import { RpcClient } from "effect/rpc"
 import { TestClock } from "effect/testing"
 import * as JsonString from "../src/lib/jsonString.ts"
+import * as Rpc from "../src/server/rpc.ts"
+import * as WarehouseRpcs from "../src/warehouse/domain/WarehouseRpcs.ts"
 import * as CommandFlow from "../src/workflow/CommandFlow.ts"
 import * as CommandTrace from "../src/workflow/CommandTrace.ts"
 
@@ -121,111 +124,273 @@ describe("CommandFlow state machine", () => {
   })
 })
 
-describe("CommandTrace OTel SpanLinks", () => {
+const makeRecordingTracer = () => {
+  const spans: Array<Tracer.NativeSpan> = []
+  const tracer = Tracer.make({
+    span: (options) => {
+      const span = new Tracer.NativeSpan(options)
+      spans.push(span)
+      return span
+    }
+  })
+  return { spans, tracer }
+}
+
+describe("CommandTrace unified workflow trace parenting", () => {
   it.effect(
-    "links follow-up Command root and child spans across simulated human think-time without duration inflation",
+    "continues one traceId across preflight, human pause, execute, and streaming phases without SpanLinks or duration inflation",
     () =>
       Effect.gen(function* () {
-        const spans: Array<Tracer.NativeSpan> = []
-        const recordingTracer = Tracer.make({
-          span: (options) => {
-            const span = new Tracer.NativeSpan(options)
-            spans.push(span)
-            return span
-          }
-        })
+        const { spans, tracer } = makeRecordingTracer()
 
         const origin = yield* Effect.gen(function* () {
-          // Phase 1: Preflight Command captures SpanPointer and ends immediately.
-          const preflightFiber = yield* CommandTrace.captureCommandOutcome(Effect.sleep("10 millis")).pipe(
-            Effect.withSpan("warehouse.dispatch_preflight"),
+          // Phase 1: Preflight runs with no parent and captures its SpanPointer before closing.
+          const preflightFiber = yield* CommandTrace.withWorkflowSpan(
+            "warehouse.dispatch_preflight",
+            null
+          )(CommandTrace.captureCommandOutcome(Effect.sleep("10 millis"))).pipe(
+            Effect.withSpan("Command: PreflightDispatchCart"),
             Effect.forkChild
           )
           yield* TestClock.adjust("10 millis")
           const preflight = yield* Fiber.join(preflightFiber)
-          expect(preflight.originSpan).not.toBeNull()
-          const originSpan = preflight.originSpan
+          expect(preflight.span).not.toBeNull()
+          const originSpan = preflight.span
           if (originSpan === null) return undefined
 
-          // Human reads AlertDialog/Dialog for 30 seconds — zero spans remain open!
+          // Human reads AlertDialog/Dialog for 30 seconds — zero workflow spans stay open.
           yield* TestClock.adjust("30 seconds")
 
-          // Phase 2: User confirms; downstream Command + child RPC spans link to origin.
-          const executeFiber = yield* CommandTrace.withOriginSpanLink(originSpan, "warehouse.dispatch_execute", {
+          // Phase 2: User confirms under a fresh outer @effect/ui Command span; inner work reparents to originSpan.
+          const executeFiber = yield* CommandTrace.withWorkflowSpan("warehouse.dispatch_execute", originSpan, {
             "warehouse.cart_id": "cart-101"
-          })(Effect.sleep("15 millis").pipe(Effect.withSpan("rpc.dispatchCartStep"))).pipe(
-            Effect.withSpan("warehouse.dispatch_execute"),
-            Effect.forkChild
-          )
+          })(
+            CommandTrace.captureCommandOutcome(Effect.sleep("15 millis").pipe(Effect.withSpan("rpc.dispatchCartStep")))
+          ).pipe(Effect.withSpan("Command: DispatchCartBatch"), Effect.forkChild)
           yield* TestClock.adjust("15 millis")
-          yield* Fiber.join(executeFiber)
+          const executed = yield* Fiber.join(executeFiber)
+          expect(executed.span?.traceId).toBe(originSpan.traceId)
+          expect(executed.span?.spanId).not.toBe(originSpan.spanId)
 
-          // Streaming variant links child stream phases too.
-          const streamed = yield* CommandTrace.withOriginSpanLinkStream(
-            originSpan,
-            "warehouse.dispatch_stream"
+          // Streaming phase reparents onto originSpan and keeps stream step children inside the unified trace.
+          const streamed = yield* CommandTrace.withWorkflowSpanStream(
+            "warehouse.dispatch_stream",
+            originSpan
           )(
             Stream.fromIterable(["validate", "erp"]).pipe(
               Stream.mapEffect((step) => Effect.succeed(step).pipe(Effect.withSpan(`stream.step.${step}`)))
             )
-          ).pipe(Stream.runCollect, Effect.withSpan("warehouse.dispatch_stream_root"))
+          ).pipe(Stream.runCollect, Effect.withSpan("Command: StreamDispatchBatch"))
           expect(streamed).toEqual(["validate", "erp"])
 
           return originSpan
-        }).pipe(Effect.withTracer(recordingTracer))
+        }).pipe(Effect.withTracer(tracer))
 
         expect(origin).not.toBeNull()
         if (origin === undefined) return
 
         const preflightSpan = spans.find((s) => s.name === "warehouse.dispatch_preflight")
-        const executeRootSpan = spans.find((s) => s.name === "warehouse.dispatch_execute")
+        const outerExecuteSpan = spans.find((s) => s.name === "Command: DispatchCartBatch")
+        const executePhaseSpan = spans.find((s) => s.name === "warehouse.dispatch_execute")
         const childRpcSpan = spans.find((s) => s.name === "rpc.dispatchCartStep")
+        const streamPhaseSpan = spans.find((s) => s.name === "warehouse.dispatch_stream")
         const streamStepSpan = spans.find((s) => s.name === "stream.step.erp")
 
         expect(preflightSpan?.status._tag).toBe("Ended")
-        expect(executeRootSpan?.status._tag).toBe("Ended")
+        expect(outerExecuteSpan?.status._tag).toBe("Ended")
+        expect(executePhaseSpan?.status._tag).toBe("Ended")
         expect(childRpcSpan?.status._tag).toBe("Ended")
+        expect(streamPhaseSpan?.status._tag).toBe("Ended")
         expect(streamStepSpan?.status._tag).toBe("Ended")
 
         if (
           preflightSpan?.status._tag !== "Ended" ||
-          executeRootSpan?.status._tag !== "Ended" ||
-          childRpcSpan?.status._tag !== "Ended"
+          outerExecuteSpan?.status._tag !== "Ended" ||
+          executePhaseSpan?.status._tag !== "Ended" ||
+          childRpcSpan?.status._tag !== "Ended" ||
+          streamPhaseSpan?.status._tag !== "Ended" ||
+          streamStepSpan?.status._tag !== "Ended"
         ) {
           return
         }
 
-        // 1. Neither span absorbs the 30-second human think-time pause.
+        // 1. Neither phase span absorbs the 30-second human think-time pause.
         const preflightDuration = preflightSpan.status.endTime - preflightSpan.status.startTime
-        const executeDuration = executeRootSpan.status.endTime - executeRootSpan.status.startTime
-        const pauseGap = executeRootSpan.status.startTime - preflightSpan.status.endTime
+        const executeDuration = executePhaseSpan.status.endTime - executePhaseSpan.status.startTime
+        const pauseGap = executePhaseSpan.status.startTime - preflightSpan.status.endTime
         expect(pauseGap >= 30_000_000_000n).toBe(true)
         expect(preflightDuration < 1_000_000_000n).toBe(true)
         expect(executeDuration < 1_000_000_000n).toBe(true)
 
-        // 2. Execute root span records origin trace attributes & explicit SpanLink.
-        expect(executeRootSpan.attributes.get("workflow.origin_trace_id")).toBe(origin.traceId)
-        expect(executeRootSpan.attributes.get("workflow.origin_span_id")).toBe(origin.spanId)
-        const execLink = executeRootSpan.links.find(
-          (link) => link.span.traceId === origin.traceId && link.span.spanId === origin.spanId
-        )
-        expect(execLink?.attributes["workflow.relationship"]).toBe("warehouse.dispatch_execute")
-        expect(execLink?.attributes["warehouse.cart_id"]).toBe("cart-101")
+        // 2. Execute phase, child RPC, and stream steps all belong to origin.traceId with zero SpanLinks.
+        expect(executePhaseSpan.traceId).toBe(origin.traceId)
+        expect(Option.getOrNull(executePhaseSpan.parent)?.traceId).toBe(origin.traceId)
+        expect(Option.getOrNull(executePhaseSpan.parent)?.spanId).toBe(origin.spanId)
+        expect(executePhaseSpan.attributes.get("workflow.phase")).toBe("warehouse.dispatch_execute")
+        expect(executePhaseSpan.attributes.get("workflow.origin_trace_id")).toBe(origin.traceId)
+        expect(executePhaseSpan.attributes.get("workflow.parent_span_id")).toBe(origin.spanId)
+        expect(executePhaseSpan.attributes.get("warehouse.cart_id")).toBe("cart-101")
 
-        // 3. Downstream child RPC & stream spans inherit the SpanLink via Effect.linkSpans.
-        const childLink = childRpcSpan.links.find(
-          (link) => link.span.traceId === origin.traceId && link.span.spanId === origin.spanId
-        )
-        expect(childLink?.attributes["workflow.relationship"]).toBe("warehouse.dispatch_execute")
+        expect(childRpcSpan.traceId).toBe(origin.traceId)
+        expect(Option.getOrNull(childRpcSpan.parent)?.spanId).toBe(executePhaseSpan.spanId)
 
-        const streamLink = streamStepSpan?.links.find(
-          (link) => link.span.traceId === origin.traceId && link.span.spanId === origin.spanId
-        )
-        expect(streamLink?.attributes["workflow.relationship"]).toBe("warehouse.dispatch_stream")
+        expect(streamPhaseSpan.traceId).toBe(origin.traceId)
+        expect(Option.getOrNull(streamPhaseSpan.parent)?.spanId).toBe(origin.spanId)
+        expect(streamStepSpan.traceId).toBe(origin.traceId)
+        expect(Option.getOrNull(streamStepSpan.parent)?.spanId).toBe(streamPhaseSpan.spanId)
+        expect(spans.flatMap((s) => s.links)).toEqual([])
+
+        // 3. Outer @effect/ui Command span stays decoupled on click trace while carrying bridge attributes.
+        expect(outerExecuteSpan.traceId).not.toBe(origin.traceId)
+        expect(outerExecuteSpan.attributes.get("workflow.trace_id")).toBe(origin.traceId)
+        expect(outerExecuteSpan.attributes.get("workflow.parent_span_id")).toBe(origin.spanId)
 
         expect(CommandTrace.shortTraceRef(origin)).toBe(origin.traceId.slice(0, 8))
         expect(CommandTrace.shortTraceRef(null)).toBeUndefined()
-        expect(Option.getOrNull(Option.none())).toBeNull()
       })
+  )
+
+  it.effect(
+    "propagates unified workflow traceId end-to-end across InProcessRpcClientLayer to WarehouseStore server spans",
+    () =>
+      Effect.gen(function* () {
+        const { spans, tracer } = makeRecordingTracer()
+
+        const origin = yield* Effect.gen(function* () {
+          const serverLayer = RpcClient.layerProtocolHttp({ url: "/rpc/warehouse" }).pipe(
+            Layer.provide(
+              Rpc.InProcessRpcClientLayer.pipe(
+                Layer.provide(Rpc.HandlersLayer.pipe(Layer.provide(Layer.fresh(Rpc.ServerStoresLayer))))
+              )
+            )
+          )
+          return yield* Effect.scoped(
+            Effect.gen(function* () {
+              const client = yield* RpcClient.make(WarehouseRpcs.WarehouseRpcs)
+
+              const preflight = yield* CommandTrace.withWorkflowSpan(
+                "warehouse.release_preflight",
+                null
+              )(
+                CommandTrace.captureCommandOutcome(
+                  client.preflightReleaseCart({ cartId: "cart-101", simulateExpired: false })
+                )
+              ).pipe(Effect.withSpan("Command: PreflightReleaseCart"))
+              const originSpan = preflight.span
+              if (originSpan === null) return undefined
+
+              yield* TestClock.adjust("5 seconds")
+
+              const executed = yield* CommandTrace.withWorkflowSpan(
+                "warehouse.release_execute",
+                originSpan
+              )(
+                CommandTrace.captureCommandOutcome(client.releaseCart({ cartId: "cart-101", simulateExpired: false }))
+              ).pipe(Effect.withSpan("Command: ReleaseCart"))
+              expect(executed.span?.traceId).toBe(originSpan.traceId)
+              expect(executed.span?.spanId).not.toBe(originSpan.spanId)
+
+              return originSpan
+            }).pipe(Effect.provide(serverLayer))
+          )
+        }).pipe(Effect.withTracer(tracer))
+
+        expect(origin).toBeDefined()
+        if (origin === undefined) return
+
+        const preflightPhase = spans.find((s) => s.name === "warehouse.release_preflight")
+        const serverPreflight = spans.find((s) => s.name === "WarehouseStore.preflightReleaseCart")
+        const executePhase = spans.find((s) => s.name === "warehouse.release_execute")
+        const serverExecute = spans.find((s) => s.name === "WarehouseStore.releaseCart")
+
+        expect(preflightPhase?.status._tag).toBe("Ended")
+        expect(serverPreflight?.status._tag).toBe("Ended")
+        expect(executePhase?.status._tag).toBe("Ended")
+        expect(serverExecute?.status._tag).toBe("Ended")
+        if (
+          preflightPhase?.status._tag !== "Ended" ||
+          serverPreflight?.status._tag !== "Ended" ||
+          executePhase?.status._tag !== "Ended" ||
+          serverExecute?.status._tag !== "Ended"
+        ) {
+          return
+        }
+
+        expect(serverPreflight.traceId).toBe(origin.traceId)
+        expect(executePhase.traceId).toBe(origin.traceId)
+        expect(serverExecute.traceId).toBe(origin.traceId)
+        expect(serverExecute.spanId).not.toBe(executePhase.spanId)
+        expect(executePhase.status.startTime - preflightPhase.status.endTime >= 5_000_000_000n).toBe(true)
+        expect(spans.flatMap((s) => s.links)).toEqual([])
+      })
+  )
+
+  it.effect("preserves one unified traceId across failure, RefreshSession, and replay recovery without SpanLinks", () =>
+    Effect.gen(function* () {
+      const { spans, tracer } = makeRecordingTracer()
+
+      const outcome = yield* Effect.gen(function* () {
+        const attempt1Fiber = yield* CommandTrace.withWorkflowSpan(
+          "warehouse.block",
+          null
+        )(
+          Effect.gen(function* () {
+            yield* Effect.sleep("5 millis")
+            const failureSpan = yield* CommandTrace.captureSpanPointer
+            return yield* Effect.fail({ _tag: "SessionExpiredError" as const, failureSpan })
+          }).pipe(Effect.catch((err) => Effect.succeed(err.failureSpan)))
+        ).pipe(Effect.withSpan("Command: BlockCart"), Effect.forkChild)
+        yield* TestClock.adjust("5 millis")
+        const failureSpan = yield* Fiber.join(attempt1Fiber)
+        if (failureSpan === null) return undefined
+
+        yield* TestClock.adjust("12 seconds")
+
+        const refreshFiber = yield* CommandTrace.withWorkflowSpan(
+          "warehouse.refresh_session",
+          failureSpan
+        )(CommandTrace.captureCommandOutcome(Effect.sleep("8 millis").pipe(Effect.as({ renewed: true })))).pipe(
+          Effect.withSpan("Command: RefreshSession"),
+          Effect.forkChild
+        )
+        yield* TestClock.adjust("8 millis")
+        const refreshOutcome = yield* Fiber.join(refreshFiber)
+        const refreshSpan = refreshOutcome.span
+        if (refreshSpan === null) return undefined
+
+        const replayFiber = yield* CommandTrace.withWorkflowSpan(
+          "warehouse.block",
+          refreshSpan
+        )(CommandTrace.captureCommandOutcome(Effect.sleep("10 millis").pipe(Effect.as("blocked")))).pipe(
+          Effect.withSpan("Command: BlockCart"),
+          Effect.forkChild
+        )
+        yield* TestClock.adjust("10 millis")
+        const replayOutcome = yield* Fiber.join(replayFiber)
+        const replaySpan = replayOutcome.span
+        if (replaySpan === null) return undefined
+
+        return { failureSpan, refreshSpan, replaySpan }
+      }).pipe(Effect.withTracer(tracer))
+
+      expect(outcome).toBeDefined()
+      if (outcome === undefined) return
+
+      expect(outcome.refreshSpan.traceId).toBe(outcome.failureSpan.traceId)
+      expect(outcome.replaySpan.traceId).toBe(outcome.failureSpan.traceId)
+      expect(new Set([outcome.failureSpan.spanId, outcome.refreshSpan.spanId, outcome.replaySpan.spanId]).size).toBe(3)
+
+      const refreshPhase = spans.find((s) => s.name === "warehouse.refresh_session")
+      const blockPhases = spans.filter((s) => s.name === "warehouse.block")
+      const replayPhase = blockPhases[1]
+      const outerRefresh = spans.find((s) => s.name === "Command: RefreshSession")
+
+      expect(refreshPhase?.traceId).toBe(outcome.failureSpan.traceId)
+      expect(Option.getOrNull(refreshPhase?.parent ?? Option.none())?.spanId).toBe(outcome.failureSpan.spanId)
+      expect(replayPhase?.traceId).toBe(outcome.failureSpan.traceId)
+      expect(Option.getOrNull(replayPhase?.parent ?? Option.none())?.spanId).toBe(outcome.refreshSpan.spanId)
+      expect(outerRefresh?.attributes.get("workflow.trace_id")).toBe(outcome.failureSpan.traceId)
+      expect(spans.flatMap((s) => s.links)).toEqual([])
+    })
   )
 })

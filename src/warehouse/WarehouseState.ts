@@ -211,7 +211,7 @@ const issuePendingAction = (
   options: {
     readonly simulateConflict: boolean
     readonly simulateExpired: boolean
-    readonly originSpan: CommandTrace.SpanPointer | null
+    readonly parentSpan: CommandTrace.SpanPointer | null
   }
 ) => {
   const intent = intentOfAction(action)
@@ -224,7 +224,7 @@ const issuePendingAction = (
         cartId: action.cartId,
         simulateConflict: options.simulateConflict,
         simulateExpired: options.simulateExpired,
-        originSpan: options.originSpan
+        parentSpan: options.parentSpan
       }).pipe(
         Command.afterRefetch("2 seconds"),
         Command.match({
@@ -239,7 +239,7 @@ const issuePendingAction = (
         reason: action.reason,
         note: action.note,
         simulateExpired: options.simulateExpired,
-        originSpan: options.originSpan
+        parentSpan: options.parentSpan
       }).pipe(
         Command.match({
           onSuccess: ({ value, span }) =>
@@ -255,7 +255,7 @@ const issuePendingAction = (
       return WarehouseCommands.PreflightReleaseCart.make({
         cartId: action.cartId,
         simulateExpired: options.simulateExpired,
-        originSpan: options.originSpan
+        parentSpan: options.parentSpan
       }).pipe(
         Command.match({
           onSuccess: ({ value, span }) => WarehouseMessage.SucceededPreflightRelease({ preflight: value, span }),
@@ -266,7 +266,7 @@ const issuePendingAction = (
       return WarehouseCommands.ReleaseCart.make({
         cartId: action.preflight.cartId,
         simulateExpired: options.simulateExpired,
-        originSpan: options.originSpan
+        parentSpan: options.parentSpan
       }).pipe(
         Command.match({
           onSuccess: ({ value, span }) =>
@@ -283,7 +283,7 @@ const issuePendingAction = (
         cartId: action.cartId,
         simulateConflict: options.simulateConflict,
         simulateExpired: options.simulateExpired,
-        originSpan: options.originSpan
+        parentSpan: options.parentSpan
       }).pipe(
         Command.match({
           onSuccess: ({ value, span }) => WarehouseMessage.SucceededPreflightDispatch({ preflight: value, span }),
@@ -295,7 +295,7 @@ const issuePendingAction = (
         cartId: action.preflight.cartId,
         auditNote: action.auditNote,
         simulateExpired: options.simulateExpired,
-        originSpan: options.originSpan
+        parentSpan: options.parentSpan
       }).pipe(
         Command.match({
           onSuccess: ({ value, span }) =>
@@ -394,7 +394,7 @@ export const updateWarehouseModel = WarehouseConsoleSpec.update(($, message) => 
 
   const startPendingAction = (
     action: PendingRetryAction,
-    originSpan: CommandTrace.SpanPointer | null,
+    parentSpan: CommandTrace.SpanPointer | null,
     overrides?: {
       readonly simulateExpired?: boolean
       readonly clearSessionPrompt?: boolean
@@ -404,21 +404,27 @@ export const updateWarehouseModel = WarehouseConsoleSpec.update(($, message) => 
   ) => {
     const model = $.model
     const intent = intentOfAction(action)
+    const resetTrace =
+      parentSpan === null && overrides?.clearSessionPrompt !== true && overrides?.nextOriginSpan === undefined
     const extraEvolve = {
       ...(overrides?.clearSessionPrompt === true ? { sessionPrompt: null } : {}),
-      ...(overrides?.nextOriginSpan !== undefined ? { lastOriginSpan: overrides.nextOriginSpan } : {})
+      ...(overrides?.nextOriginSpan !== undefined
+        ? { lastOriginSpan: overrides.nextOriginSpan }
+        : resetTrace
+          ? { lastOriginSpan: null, lastExecutionSpan: null }
+          : {})
     }
     const effect = issuePendingAction(action, {
       simulateConflict: model.simCheckoutConflict,
       simulateExpired: overrides?.simulateExpired ?? model.simSessionExpired,
-      originSpan
+      parentSpan
     })
     switch (action._tag) {
       case "RetryUnblock":
         return $.evolve({
           ...extraEvolve,
           lastRetry: action,
-          flow: WarehouseFlow.start(model.flow, intent, originSpan, null)
+          flow: WarehouseFlow.start(model.flow, intent, parentSpan, null)
         }).run(effect)
       case "RetryBlock": {
         const blockDialog =
@@ -434,7 +440,7 @@ export const updateWarehouseModel = WarehouseConsoleSpec.update(($, message) => 
           ...extraEvolve,
           blockDialog,
           lastRetry: action,
-          flow: blockDialog === null ? WarehouseFlow.start(model.flow, intent, originSpan, null) : model.flow
+          flow: blockDialog === null ? WarehouseFlow.start(model.flow, intent, parentSpan, null) : model.flow
         }).run(effect)
       }
       case "RetryPreflightRelease":
@@ -453,10 +459,10 @@ export const updateWarehouseModel = WarehouseConsoleSpec.update(($, message) => 
           ...extraEvolve,
           releaseAlert: model.releaseAlert === null ? null : { ...model.releaseAlert, submitting: true },
           lastRetry: action,
-          flow: WarehouseFlow.start(model.flow, intent, originSpan, null)
+          flow: WarehouseFlow.start(model.flow, intent, parentSpan, null)
         }).run(effect)
       case "RetryDispatchStream": {
-        const flow = WarehouseFlow.start(model.flow, intent, originSpan, {
+        const flow = WarehouseFlow.start(model.flow, intent, parentSpan, {
           cartId: action.preflight.cartId,
           cartCode: action.preflight.cartCode,
           step: "validate",
@@ -594,7 +600,8 @@ export const updateWarehouseModel = WarehouseConsoleSpec.update(($, message) => 
       $.evolve({
         preparing: null,
         lastRetry: null,
-        lastOriginSpan: span ?? $.model.lastOriginSpan,
+        lastOriginSpan: span,
+        lastExecutionSpan: null,
         releaseAlert: {
           preflight,
           originSpan: span,
@@ -641,7 +648,8 @@ export const updateWarehouseModel = WarehouseConsoleSpec.update(($, message) => 
       $.evolve({
         preparing: null,
         lastRetry: null,
-        lastOriginSpan: span ?? $.model.lastOriginSpan,
+        lastOriginSpan: span,
+        lastExecutionSpan: null,
         dispatchModal: {
           preflight,
           auditNote: "",
@@ -739,7 +747,8 @@ export const updateWarehouseModel = WarehouseConsoleSpec.update(($, message) => 
             originSpan,
             refreshing: false
           },
-          lastOriginSpan: originSpan ?? $.model.lastOriginSpan
+          lastOriginSpan: $.model.lastOriginSpan ?? originSpan,
+          lastExecutionSpan: null
         })
         return intent._tag === "Dispatch" && $.model.toastsEnabled
           ? paused.send(ToastProvider, { _tag: "RequestedClose", id: dispatchToastId(intent.cartId) })
@@ -836,7 +845,7 @@ export const updateWarehouseModel = WarehouseConsoleSpec.update(($, message) => 
         simSessionExpired: false,
         sessionPrompt: { ...prompt, refreshing: true }
       }).run(
-        WarehouseCommands.RefreshSession.make({ originSpan: prompt.originSpan }).pipe(
+        WarehouseCommands.RefreshSession.make({ parentSpan: prompt.originSpan }).pipe(
           Command.match({
             onSuccess: ({ span }) => WarehouseMessage.SucceededSessionRefresh({ span }),
             onFailure: (failure) => WarehouseMessage.FailedSessionRefresh({ failure })
@@ -852,7 +861,7 @@ export const updateWarehouseModel = WarehouseConsoleSpec.update(($, message) => 
       return startPendingAction(prompt.pending, nextOrigin, {
         simulateExpired: false,
         clearSessionPrompt: true,
-        nextOriginSpan: nextOrigin ?? $.model.lastOriginSpan
+        nextOriginSpan: $.model.lastOriginSpan ?? nextOrigin
       })
     },
 

@@ -128,17 +128,19 @@ export const catalog: MessageCatalog = {
   "warehouse.pageTitle": "Lagerkonsole",
   "warehouse.heading": "Lager-Command-Konsole",
   "warehouse.subtitle":
-    "MVU-Command-Workflows nach Vorbild von macs-holding/scanner: atomare Vorprüfungs- & Ausführungs-Commands, AlertDialog-/Dialog-Abfragen ohne versteckte Seiteneffekte, SpanLink-Korrelation, Streaming-Fortschritt und optionale Toasts.",
+    "MVU-Command-Workflows nach Vorbild von macs-holding/scanner: atomare Vorprüfungs- & Ausführungs-Commands, AlertDialog-/Dialog-Abfragen ohne versteckte Seiteneffekte, einheitliche ExternalSpan-Workflow-Traces, Streaming-Fortschritt und optionale Toasts.",
   "warehouse.patternSummary":
-    "Das Model steuert Bestätigungen & Entwürfe · Commands kapseln RPC & Invalidierung · OTel SpanLinks messen ohne Wartezeit-Verzerrung",
+    "Das Model steuert Bestätigungen & Entwürfe · Commands kapseln RPC & Invalidierung · ExternalSpan-Parenting hält eine Trace-ID ohne Wartezeit-Verzerrung",
   "warehouse.simSessionExpired": "Abgelaufene Sitzung simulieren",
   "warehouse.simCheckoutConflict": "Checkout-Konflikt simulieren",
   "warehouse.optInToasts": "Zusätzlich Toast-Benachrichtigungen anzeigen",
   "warehouse.actionFeedbackHeading": "Workflow-Status",
   "warehouse.tracePanelTitle": "Trace- & Span-Korrelation",
-  "warehouse.traceEmpty": "Führen Sie einen Command aus, um Vorprüfungs- und verknüpfte Ausführungs-Spans zu prüfen.",
+  "warehouse.traceEmpty":
+    "Führen Sie einen Command aus, um Origin- und Ausführungs-Spans unter einer gemeinsamen Workflow-Trace-ID zu prüfen.",
   "warehouse.traceOriginLabel": "Origin-/Vorprüfungs-Span: {traceId} ({spanId})",
   "warehouse.traceExecLabel": "Ausführungs-Span: {traceId} ({spanId})",
+  "warehouse.traceUnifiedBadge": "Einheitliche Trace-ID",
   "warehouse.statusFree": "Frei",
   "warehouse.statusInUse": "In Benutzung",
   "warehouse.statusBlocked": "Gesperrt",
