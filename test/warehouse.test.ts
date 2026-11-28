@@ -135,6 +135,12 @@ describe("/warehouse Scanner Command Console", () => {
         expect(container.querySelector('[data-testid="release-alert-popup"]')).toBeNull()
         expect(Helpers.byTestId(container, "warehouse-success-banner").textContent).toContain("6 picks cleared")
         expect(Helpers.byTestId(container, "trace-exec-span").textContent).toContain("Execution span:")
+        const originSpanEl = Helpers.byTestId(container, "trace-origin-span")
+        const execSpanEl = Helpers.byTestId(container, "trace-exec-span")
+        expect(originSpanEl.getAttribute("data-trace-id")).toBeTruthy()
+        expect(execSpanEl.getAttribute("data-trace-id")).toBe(originSpanEl.getAttribute("data-trace-id"))
+        expect(execSpanEl.getAttribute("data-span-id")).not.toBe(originSpanEl.getAttribute("data-span-id"))
+        expect(Helpers.byTestId(container, "trace-unified-badge").textContent).toBeTruthy()
       })
     )
 
@@ -169,6 +175,12 @@ describe("/warehouse Scanner Command Console", () => {
           expect(container.querySelector('[data-testid="dispatch-progress-panel"]')).toBeNull()
           expect(Helpers.byTestId(container, "cart-status-cart-102").textContent).toBe("Dispatched")
           expect(Helpers.byTestId(container, "warehouse-success-banner").textContent).toContain("BATCH-0001")
+          const originSpanEl = Helpers.byTestId(container, "trace-origin-span")
+          const execSpanEl = Helpers.byTestId(container, "trace-exec-span")
+          expect(originSpanEl.getAttribute("data-trace-id")).toBeTruthy()
+          expect(execSpanEl.getAttribute("data-trace-id")).toBe(originSpanEl.getAttribute("data-trace-id"))
+          expect(execSpanEl.getAttribute("data-span-id")).not.toBe(originSpanEl.getAttribute("data-span-id"))
+          expect(Helpers.byTestId(container, "trace-unified-badge").textContent).toBeTruthy()
 
           // cart-101 has 0 warnings -> opens AlertDialog -> cancel mid-stream interrupts fiber cleanly.
           const stepsBeforeCancel = (yield* Helpers.portCounts).dispatchCartStep
@@ -222,6 +234,12 @@ describe("/warehouse Scanner Command Console", () => {
         const counts = yield* Helpers.portCounts
         expect(counts.refreshSession).toBe(1)
         expect(counts.blockCart).toBe(2)
+        const originSpanEl = Helpers.byTestId(container, "trace-origin-span")
+        const execSpanEl = Helpers.byTestId(container, "trace-exec-span")
+        expect(originSpanEl.getAttribute("data-trace-id")).toBeTruthy()
+        expect(execSpanEl.getAttribute("data-trace-id")).toBe(originSpanEl.getAttribute("data-trace-id"))
+        expect(execSpanEl.getAttribute("data-span-id")).not.toBe(originSpanEl.getAttribute("data-span-id"))
+        expect(Helpers.byTestId(container, "trace-unified-badge").textContent).toBeTruthy()
       })
     )
 

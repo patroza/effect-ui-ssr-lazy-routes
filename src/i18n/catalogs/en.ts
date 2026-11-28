@@ -128,17 +128,19 @@ export const catalog: MessageCatalog = {
   "warehouse.pageTitle": "Warehouse Console",
   "warehouse.heading": "Warehouse Command Console",
   "warehouse.subtitle":
-    "MVU Command workflows modeled after macs-holding/scanner: atomic preflight & execution Commands, Signal-free AlertDialog / Dialog gates, SpanLink trace correlation, inline streaming progress, and opt-in ToastProvider.",
+    "MVU Command workflows modeled after macs-holding/scanner: atomic preflight & execution Commands, Signal-free AlertDialog / Dialog gates, unified ExternalSpan workflow traces, inline streaming progress, and opt-in ToastProvider.",
   "warehouse.patternSummary":
-    "Model owns confirmation & draft gates · Commands own RPC execution & invalidation · OTel SpanLinks avoid human think-time inflation",
+    "Model owns confirmation & draft gates · Commands own RPC execution & invalidation · ExternalSpan parenting keeps one traceId without think-time inflation",
   "warehouse.simSessionExpired": "Simulate expired session",
   "warehouse.simCheckoutConflict": "Simulate checkout conflict",
   "warehouse.optInToasts": "Also show toast notifications",
   "warehouse.actionFeedbackHeading": "Workflow Status",
   "warehouse.tracePanelTitle": "Trace & Span Correlation",
-  "warehouse.traceEmpty": "Run any Command to inspect preflight origin spans and linked downstream execution spans.",
+  "warehouse.traceEmpty":
+    "Run any Command to inspect origin and downstream execution spans sharing one unified workflow traceId.",
   "warehouse.traceOriginLabel": "Preflight / Origin span: {traceId} ({spanId})",
   "warehouse.traceExecLabel": "Execution span: {traceId} ({spanId})",
+  "warehouse.traceUnifiedBadge": "Unified Trace ID",
   "warehouse.statusFree": "Free",
   "warehouse.statusInUse": "In use",
   "warehouse.statusBlocked": "Blocked",

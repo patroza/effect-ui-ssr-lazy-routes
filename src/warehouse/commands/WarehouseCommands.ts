@@ -25,19 +25,20 @@ const mapFailure = (
 
 const wrapWarehouseRpc = <A>(
   effect: Effect.Effect<A, Warehouse.WarehouseDomainError | RpcClientError.RpcClientError>,
-  originSpan: CommandTrace.SpanPointer | null,
-  relationship: string
+  parentSpan: CommandTrace.SpanPointer | null,
+  phase: string
 ): Effect.Effect<
   { readonly value: A; readonly span: CommandTrace.SpanPointer | null },
   Warehouse.WarehouseCommandFailure
 > =>
-  CommandTrace.withOriginSpanLink(
-    originSpan,
-    relationship
-  )(CommandTrace.captureCommandOutcome(effect)).pipe(
-    Effect.map(({ value, originSpan: span }) => ({ value, span })),
-    Effect.catch((err) =>
-      Effect.flatMap(CommandTrace.captureSpanPointer, (failureSpan) => Effect.fail(mapFailure(err, failureSpan)))
+  CommandTrace.withWorkflowSpan(
+    phase,
+    parentSpan
+  )(
+    CommandTrace.captureCommandOutcome(effect).pipe(
+      Effect.catch((err) =>
+        Effect.flatMap(CommandTrace.captureSpanPointer, (failureSpan) => Effect.fail(mapFailure(err, failureSpan)))
+      )
     )
   )
 
@@ -47,7 +48,7 @@ export class UnblockCart extends Command.Service<UnblockCart>()("warehouse/Unblo
     cartId: Schema.String,
     simulateConflict: Schema.Boolean,
     simulateExpired: Schema.Boolean,
-    originSpan: Schema.NullOr(CommandTrace.SpanPointer)
+    parentSpan: Schema.NullOr(CommandTrace.SpanPointer)
   },
   group: ["cartId"],
   mode: "switch",
@@ -68,10 +69,10 @@ export class UnblockCart extends Command.Service<UnblockCart>()("warehouse/Unblo
   static readonly layer = this.toLayer(
     Effect.gen(function* () {
       const client = yield* RpcClient.make(WarehouseRpcs.WarehouseRpcs)
-      return ({ cartId, simulateConflict, simulateExpired, originSpan }) =>
+      return ({ cartId, simulateConflict, simulateExpired, parentSpan }) =>
         wrapWarehouseRpc(
           client.unblockCart({ cartId, simulateConflict, simulateExpired }),
-          originSpan,
+          parentSpan,
           "warehouse.unblock"
         )
     })
@@ -85,7 +86,7 @@ export class BlockCart extends Command.Service<BlockCart>()("warehouse/BlockCart
     reason: Warehouse.BlockReason,
     note: Schema.String,
     simulateExpired: Schema.Boolean,
-    originSpan: Schema.NullOr(CommandTrace.SpanPointer)
+    parentSpan: Schema.NullOr(CommandTrace.SpanPointer)
   },
   group: ["cartId"],
   mode: "switch",
@@ -99,8 +100,8 @@ export class BlockCart extends Command.Service<BlockCart>()("warehouse/BlockCart
   static readonly layer = this.toLayer(
     Effect.gen(function* () {
       const client = yield* RpcClient.make(WarehouseRpcs.WarehouseRpcs)
-      return ({ cartId, reason, note, simulateExpired, originSpan }) =>
-        wrapWarehouseRpc(client.blockCart({ cartId, reason, note, simulateExpired }), originSpan, "warehouse.block")
+      return ({ cartId, reason, note, simulateExpired, parentSpan }) =>
+        wrapWarehouseRpc(client.blockCart({ cartId, reason, note, simulateExpired }), parentSpan, "warehouse.block")
     })
   ).pipe(Layer.provide(RpcClient.layerProtocolHttp({ url: "/rpc/warehouse" })))
 }
@@ -110,7 +111,7 @@ export class PreflightReleaseCart extends Command.Service<PreflightReleaseCart>(
   args: {
     cartId: Schema.String,
     simulateExpired: Schema.Boolean,
-    originSpan: Schema.NullOr(CommandTrace.SpanPointer)
+    parentSpan: Schema.NullOr(CommandTrace.SpanPointer)
   },
   group: ["cartId"],
   mode: "switch",
@@ -123,22 +124,22 @@ export class PreflightReleaseCart extends Command.Service<PreflightReleaseCart>(
   static readonly layer = this.toLayer(
     Effect.gen(function* () {
       const client = yield* RpcClient.make(WarehouseRpcs.WarehouseRpcs)
-      return ({ cartId, simulateExpired, originSpan }) =>
+      return ({ cartId, simulateExpired, parentSpan }) =>
         wrapWarehouseRpc(
           client.preflightReleaseCart({ cartId, simulateExpired }),
-          originSpan,
+          parentSpan,
           "warehouse.release_preflight"
         )
     })
   ).pipe(Layer.provide(RpcClient.layerProtocolHttp({ url: "/rpc/warehouse" })))
 }
 
-/** Commits cart release after the user confirms the `AlertDialog`, linked via `SpanLink`. */
+/** Commits cart release after the user confirms the `AlertDialog`, parented to the preflight `SpanPointer`. */
 export class ReleaseCart extends Command.Service<ReleaseCart>()("warehouse/ReleaseCart", {
   args: {
     cartId: Schema.String,
     simulateExpired: Schema.Boolean,
-    originSpan: Schema.NullOr(CommandTrace.SpanPointer)
+    parentSpan: Schema.NullOr(CommandTrace.SpanPointer)
   },
   group: ["cartId"],
   mode: "switch",
@@ -152,8 +153,8 @@ export class ReleaseCart extends Command.Service<ReleaseCart>()("warehouse/Relea
   static readonly layer = this.toLayer(
     Effect.gen(function* () {
       const client = yield* RpcClient.make(WarehouseRpcs.WarehouseRpcs)
-      return ({ cartId, simulateExpired, originSpan }) =>
-        wrapWarehouseRpc(client.releaseCart({ cartId, simulateExpired }), originSpan, "warehouse.release_execute")
+      return ({ cartId, simulateExpired, parentSpan }) =>
+        wrapWarehouseRpc(client.releaseCart({ cartId, simulateExpired }), parentSpan, "warehouse.release_execute")
     })
   ).pipe(Layer.provide(RpcClient.layerProtocolHttp({ url: "/rpc/warehouse" })))
 }
@@ -164,7 +165,7 @@ export class PreflightDispatchCart extends Command.Service<PreflightDispatchCart
     cartId: Schema.String,
     simulateConflict: Schema.Boolean,
     simulateExpired: Schema.Boolean,
-    originSpan: Schema.NullOr(CommandTrace.SpanPointer)
+    parentSpan: Schema.NullOr(CommandTrace.SpanPointer)
   },
   group: ["cartId"],
   mode: "switch",
@@ -177,10 +178,10 @@ export class PreflightDispatchCart extends Command.Service<PreflightDispatchCart
   static readonly layer = this.toLayer(
     Effect.gen(function* () {
       const client = yield* RpcClient.make(WarehouseRpcs.WarehouseRpcs)
-      return ({ cartId, simulateConflict, simulateExpired, originSpan }) =>
+      return ({ cartId, simulateConflict, simulateExpired, parentSpan }) =>
         wrapWarehouseRpc(
           client.preflightDispatchCart({ cartId, simulateConflict, simulateExpired }),
-          originSpan,
+          parentSpan,
           "warehouse.dispatch_preflight"
         )
     })
@@ -196,15 +197,15 @@ const dispatchSteps: ReadonlyArray<{ readonly index: number; readonly step: Ware
 
 /**
  * Multi-step `stream: true` Command executing the 4 dispatch stages over RPC
- * under a single Command span linked to `originSpan`. Supports mid-stream
- * cancellation via `Command.interrupt(DispatchCartBatch, { cartId })`.
+ * under one unified `warehouse.dispatch_execute` span parented to `parentSpan`.
+ * Supports mid-stream cancellation via `Command.interrupt(DispatchCartBatch, { cartId })`.
  */
 export class DispatchCartBatch extends Command.Service<DispatchCartBatch>()("warehouse/DispatchCartBatch", {
   args: {
     cartId: Schema.String,
     auditNote: Schema.String,
     simulateExpired: Schema.Boolean,
-    originSpan: Schema.NullOr(CommandTrace.SpanPointer)
+    parentSpan: Schema.NullOr(CommandTrace.SpanPointer)
   },
   group: ["cartId"],
   mode: "switch",
@@ -219,7 +220,7 @@ export class DispatchCartBatch extends Command.Service<DispatchCartBatch>()("war
   static readonly layer = this.toLayer(
     Effect.gen(function* () {
       const client = yield* RpcClient.make(WarehouseRpcs.WarehouseRpcs)
-      return ({ cartId, auditNote, simulateExpired, originSpan }) =>
+      return ({ cartId, auditNote, simulateExpired, parentSpan }) =>
         Stream.fromIterable(dispatchSteps).pipe(
           Stream.mapEffect(({ index, step }) =>
             wrapWarehouseRpc(
@@ -227,20 +228,20 @@ export class DispatchCartBatch extends Command.Service<DispatchCartBatch>()("war
                 if (index > 0) yield* Effect.sleep("120 millis")
                 return yield* client.dispatchCartStep({ cartId, step, auditNote, simulateExpired })
               }),
-              originSpan,
-              "warehouse.dispatch_execute"
+              null,
+              `warehouse.dispatch_step.${step}`
             )
           ),
-          CommandTrace.withOriginSpanLinkStream(originSpan, "warehouse.dispatch_execute")
+          CommandTrace.withWorkflowSpanStream("warehouse.dispatch_execute", parentSpan)
         )
     })
   ).pipe(Layer.provide(RpcClient.layerProtocolHttp({ url: "/rpc/warehouse" })))
 }
 
-/** Renews the warehouse operator session before replaying a paused Command. */
+/** Renews the warehouse operator session under the paused workflow's `traceId` before replay. */
 export class RefreshSession extends Command.Service<RefreshSession>()("warehouse/RefreshSession", {
   args: {
-    originSpan: Schema.NullOr(CommandTrace.SpanPointer)
+    parentSpan: Schema.NullOr(CommandTrace.SpanPointer)
   },
   success: Schema.Struct({
     value: Schema.Struct({ renewed: Schema.Boolean }),
@@ -251,7 +252,7 @@ export class RefreshSession extends Command.Service<RefreshSession>()("warehouse
   static readonly layer = this.toLayer(
     Effect.gen(function* () {
       const client = yield* RpcClient.make(WarehouseRpcs.WarehouseRpcs)
-      return ({ originSpan }) => wrapWarehouseRpc(client.refreshSession(), originSpan, "warehouse.session_refresh")
+      return ({ parentSpan }) => wrapWarehouseRpc(client.refreshSession(), parentSpan, "warehouse.session_refresh")
     })
   ).pipe(Layer.provide(RpcClient.layerProtocolHttp({ url: "/rpc/warehouse" })))
 }

@@ -12,7 +12,7 @@ export type ProgressSnapshot = typeof ProgressSnapshot.Type
 /**
  * Explicit MVU state machine union for multi-step Command workflows
  * (`Idle -> Prompting -> Running -> Succeeded | Failed`) preserving drafts,
- * attempt counters, and OTel `SpanPointer` correlation across human pauses.
+ * attempt counters, and unified OTel `SpanPointer` trace continuation across human pauses.
  */
 export type CommandFlowState<Intent, Draft, Prog, Res, Err> =
   | { readonly _tag: "Idle" }

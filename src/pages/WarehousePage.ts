@@ -54,33 +54,58 @@ const renderTracePanel = (
   h: Html.H<WarehouseState.WarehouseMsg>,
   model: WarehouseState.WarehouseModel,
   t: I18n.TranslateFn
-) =>
-  h.div
+) => {
+  const sameTrace =
+    model.lastOriginSpan !== null &&
+    model.lastExecutionSpan !== null &&
+    model.lastOriginSpan.traceId === model.lastExecutionSpan.traceId
+  return h.div
     .class(`${Design.ui.card} flex flex-col gap-1.5`)
     .attr("data-testid", "warehouse-trace-panel")
     .children(
-      h.h2.class("text-sm font-semibold").children(t("warehouse.tracePanelTitle")),
+      h.div
+        .class("flex flex-wrap items-center justify-between gap-2")
+        .children(
+          h.h2.class("text-sm font-semibold").children(t("warehouse.tracePanelTitle")),
+          sameTrace
+            ? h.span
+                .attr("data-testid", "trace-unified-badge")
+                .class(
+                  "rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                )
+                .children(t("warehouse.traceUnifiedBadge"))
+            : undefined
+        ),
       model.lastOriginSpan === null && model.lastExecutionSpan === null
         ? h.p.class(Design.ui.muted).children(t("warehouse.traceEmpty"))
         : h.div.class("flex flex-col gap-1 font-mono text-xs text-neutral-600 dark:text-neutral-400").children(
             model.lastOriginSpan === null
               ? undefined
-              : h.div.attr("data-testid", "trace-origin-span").children(
-                  t("warehouse.traceOriginLabel", {
-                    traceId: model.lastOriginSpan.traceId,
-                    spanId: model.lastOriginSpan.spanId
-                  })
-                ),
+              : h.div
+                  .attr("data-testid", "trace-origin-span")
+                  .attr("data-trace-id", model.lastOriginSpan.traceId)
+                  .attr("data-span-id", model.lastOriginSpan.spanId)
+                  .children(
+                    t("warehouse.traceOriginLabel", {
+                      traceId: model.lastOriginSpan.traceId,
+                      spanId: model.lastOriginSpan.spanId
+                    })
+                  ),
             model.lastExecutionSpan === null
               ? undefined
-              : h.div.attr("data-testid", "trace-exec-span").children(
-                  t("warehouse.traceExecLabel", {
-                    traceId: model.lastExecutionSpan.traceId,
-                    spanId: model.lastExecutionSpan.spanId
-                  })
-                )
+              : h.div
+                  .attr("data-testid", "trace-exec-span")
+                  .attr("data-trace-id", model.lastExecutionSpan.traceId)
+                  .attr("data-span-id", model.lastExecutionSpan.spanId)
+                  .children(
+                    t("warehouse.traceExecLabel", {
+                      traceId: model.lastExecutionSpan.traceId,
+                      spanId: model.lastExecutionSpan.spanId
+                    })
+                  )
           )
     )
+}
 
 const WarehouseConsoleNoDeps = WarehouseState.WarehouseConsoleSpec.make({
   init: WarehouseState.initWarehouseModel,
