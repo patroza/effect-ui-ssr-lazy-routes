@@ -53,7 +53,7 @@ const WorkflowSuccess = Schema.Struct({
   message: Schema.String
 })
 
-export const WarehouseFlow = CommandFlow.makeCommandFlow({
+const WarehouseFlow = CommandFlow.makeCommandFlow({
   intent: WorkflowIntent,
   draft: Schema.Null,
   progress: Schema.Struct({
@@ -67,7 +67,7 @@ export const WarehouseFlow = CommandFlow.makeCommandFlow({
   error: Warehouse.WarehouseCommandFailure
 })
 
-export const BlockDialogState = Schema.Struct({
+const BlockDialogState = Schema.Struct({
   cartId: Schema.String,
   cartCode: Schema.String,
   form: BlockDraftSchema,
@@ -76,26 +76,26 @@ export const BlockDialogState = Schema.Struct({
   failure: Schema.NullOr(Warehouse.WarehouseCommandFailure)
 })
 
-export const ReleaseAlertState = Schema.Struct({
+const ReleaseAlertState = Schema.Struct({
   preflight: Warehouse.PreflightReleaseResult,
   originSpan: Schema.NullOr(CommandTrace.SpanPointer),
   submitting: Schema.Boolean
 })
 
-export const DispatchModalState = Schema.Struct({
+const DispatchModalState = Schema.Struct({
   preflight: Warehouse.PreflightDispatchResult,
   auditNote: Schema.String,
   noteError: Schema.Boolean,
   originSpan: Schema.NullOr(CommandTrace.SpanPointer)
 })
 
-export const SessionPromptState = Schema.Struct({
+const SessionPromptState = Schema.Struct({
   pending: PendingRetryAction,
   originSpan: Schema.NullOr(CommandTrace.SpanPointer),
   refreshing: Schema.Boolean
 })
 
-export const WarehouseModelSchema = Schema.Struct({
+const WarehouseModelSchema = Schema.Struct({
   simSessionExpired: Schema.Boolean,
   simCheckoutConflict: Schema.Boolean,
   toastsEnabled: Schema.Boolean,
@@ -187,9 +187,9 @@ const RefreshCarts = Command.make("warehouse/RefreshCarts", { args: {} }, () =>
   GetWarehouseCarts.GetWarehouseCarts.invalidate({}).pipe(Effect.as(Component.noop))
 )
 
-export const dispatchToastId = (cartId: string): string => `warehouse-dispatch-${cartId}`
+const dispatchToastId = (cartId: string): string => `warehouse-dispatch-${cartId}`
 
-export const intentOfAction = (action: PendingRetryAction): WorkflowIntent => {
+const intentOfAction = (action: PendingRetryAction): WorkflowIntent => {
   switch (action._tag) {
     case "RetryUnblock":
       return { _tag: "Unblock", cartId: action.cartId, cartCode: action.cartCode }
@@ -820,7 +820,6 @@ export const updateWarehouseModel = WarehouseConsoleSpec.update(($, message) => 
           intent: intentOfAction(prompt.pending),
           error: new Warehouse.WarehouseCommandFailure({
             error: new Warehouse.SessionExpiredError({ action: t("warehouse.sessionDialogDeclined") }),
-            transportMessage: null,
             failureSpan: prompt.originSpan
           }),
           originSpan: prompt.originSpan,

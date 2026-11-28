@@ -27,33 +27,36 @@ const withBookmark = (item: SeedProduct, bookmarked: ReadonlySet<string>): Produ
  * Server-only product catalog store. Holds the seed dataset and joins it with
  * `BookmarkStore` so bookmark mutations are reflected in subsequent reads.
  */
-export class CatalogStore extends Context.Service<CatalogStore>()("server/CatalogStore", {
-  make: Effect.gen(function* () {
-    const bookmarks = yield* BookmarkStore.BookmarkStore
+export class CatalogStore extends Context.Service<CatalogStore>()(
+  "effect-ui-ssr-lazy-routes/server/services/CatalogStore",
+  {
+    make: Effect.gen(function* () {
+      const bookmarks = yield* BookmarkStore.BookmarkStore
 
-    const search = Effect.fn("CatalogStore.search")(function* (query: string | undefined) {
-      const needle = query?.trim().toLowerCase() ?? ""
-      const bookmarked = yield* bookmarks.all
-      const matched =
-        needle === ""
-          ? seedProducts
-          : seedProducts.filter((product) => `${product.name} ${product.blurb}`.toLowerCase().includes(needle))
-      return matched.map((item) => withBookmark(item, bookmarked))
+      const search = Effect.fn("CatalogStore.search")(function* (query: string | undefined) {
+        const needle = query?.trim().toLowerCase() ?? ""
+        const bookmarked = yield* bookmarks.all
+        const matched =
+          needle === ""
+            ? seedProducts
+            : seedProducts.filter((product) => `${product.name} ${product.blurb}`.toLowerCase().includes(needle))
+        return matched.map((item) => withBookmark(item, bookmarked))
+      })
+
+      const find = Effect.fn("CatalogStore.find")(function* (id: string) {
+        const item = seedProducts.find((product) => product.id === id)
+        if (item === undefined) return Option.none<Product.Product>()
+        const bookmarked = yield* bookmarks.all
+        return Option.some(withBookmark(item, bookmarked))
+      })
+
+      const exists = Effect.fn("CatalogStore.exists")(function* (id: string) {
+        return seedProducts.some((product) => product.id === id)
+      })
+
+      return { search, find, exists } as const
     })
-
-    const find = Effect.fn("CatalogStore.find")(function* (id: string) {
-      const item = seedProducts.find((product) => product.id === id)
-      if (item === undefined) return Option.none<Product.Product>()
-      const bookmarked = yield* bookmarks.all
-      return Option.some(withBookmark(item, bookmarked))
-    })
-
-    const exists = Effect.fn("CatalogStore.exists")(function* (id: string) {
-      return seedProducts.some((product) => product.id === id)
-    })
-
-    return { search, find, exists } as const
-  })
-}) {
+  }
+) {
   static readonly layer = Layer.effect(this, this.make)
 }

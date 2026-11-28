@@ -22,7 +22,8 @@
     "test": "vp test run",
     "verify:bundles": "node scripts/verify-bundles.ts",
     "smoke": "node scripts/smoke.ts",
-    "check": "vp run format:check && vp run lint && vp run typecheck && vp run build:client && vp run build:server && vp run verify:bundles && vp run test && vp run smoke"
+    "knip": "knip --no-progress",
+    "check": "vp run format:check && vp run lint && vp run typecheck && vp run build:client && vp run build:server && vp run verify:bundles && vp run test && vp run smoke && vp run knip"
   },
   "dependencies": {
     "@effect/ui": "https://pkg.pr.new/Effect-TS/ui/@effect/ui@f4cddd0",
@@ -37,6 +38,7 @@
     "@tailwindcss/vite": "4.3.5",
     "@types/node": "26.6.11",
     "happy-dom": "21.0.4",
+    "knip": "^6.48.0",
     "tailwindcss": "4.3.5",
     "vite-plus": "1.8.0"
   },

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "@effect/vitest"
-import { Effect, Exit, Scope } from "effect"
+import { Clock, Effect, Exit, Scope } from "effect"
 import * as Prefetch from "../src/browser/prefetch.ts"
 
 /** A `ReloadTarget` over the real `window`'s event system, with a spy for `reload` and an in-memory storage. */
@@ -40,7 +40,8 @@ describe("installPreloadErrorReload", () => {
 
   it.effect("leaves the real chunk error alone (no preventDefault, no reload) when it just reloaded", () =>
     Effect.gen(function* () {
-      const { win, reload } = target({ "effect-ui-ssr-lazy-routes:reloaded-at": String(Date.now()) })
+      const now = yield* Clock.currentTimeMillis
+      const { win, reload } = target({ "effect-ui-ssr-lazy-routes:reloaded-at": String(now) })
       yield* Prefetch.installPreloadErrorReload(win)
       const event = preloadError()
       window.dispatchEvent(event)
@@ -73,7 +74,8 @@ describe("installPreloadErrorReload", () => {
 
   it.effect("treats a stored timestamp older than the loop window as no recent reload", () =>
     Effect.gen(function* () {
-      const { win, reload } = target({ "effect-ui-ssr-lazy-routes:reloaded-at": String(Date.now() - 60_000) })
+      const now = yield* Clock.currentTimeMillis
+      const { win, reload } = target({ "effect-ui-ssr-lazy-routes:reloaded-at": String(now - 60_000) })
       yield* Prefetch.installPreloadErrorReload(win)
       const event = preloadError()
       window.dispatchEvent(event)

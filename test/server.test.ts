@@ -7,7 +7,7 @@ import { join } from "node:path"
 import { Effect, Exit, Layer, Option, Schema } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { type Rpc as RpcDef, RpcClient, RpcClientError, type RpcGroup, RpcSerialization } from "effect/rpc"
-import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test"
+import { afterAll, beforeAll, describe, expect, it } from "@effect/vitest"
 import * as AnalyticsRpcs from "../src/analytics/domain/AnalyticsRpcs.ts"
 import * as JsonString from "../src/lib/jsonString.ts"
 import * as OrderRpcs from "../src/order/domain/OrderRpcs.ts"
@@ -103,8 +103,7 @@ const runRpc = <Rpcs extends RpcDef.Any, A, E>(
         Layer.provide(RpcSerialization.layerJson),
         Layer.provide(FetchHttpClient.layer)
       )
-    ),
-    Effect.runPromise
+    )
   )
 
 describe("static files", () => {
@@ -276,58 +275,68 @@ describe("pages", () => {
 })
 
 describe("Effect RPC over HTTP (POST /rpc/{search,product,analytics})", () => {
-  it("serves searchProducts and getAnalytics over their dedicated per-group HTTP routes", async () => {
-    const products = await runRpc(SearchRpcs.SearchRpcs, "/rpc/search", (client) => client.searchProducts({ q: "mug" }))
-    expect(products).toHaveLength(1)
-    expect(products[0]?.name).toBe("Enamel camp mug")
-    expect(products[0]?.bookmarked).toBe(false)
+  it.live("serves searchProducts and getAnalytics over their dedicated per-group HTTP routes", () =>
+    Effect.gen(function* () {
+      const products = yield* runRpc(SearchRpcs.SearchRpcs, "/rpc/search", (client) =>
+        client.searchProducts({ q: "mug" })
+      )
+      expect(products).toHaveLength(1)
+      expect(products[0]?.name).toBe("Enamel camp mug")
+      expect(products[0]?.bookmarked).toBe(false)
 
-    const revenue = await runRpc(AnalyticsRpcs.AnalyticsRpcs, "/rpc/analytics", (client) =>
-      client.getAnalytics({ metric: "revenue" })
-    )
-    expect(revenue).toHaveLength(12)
-    expect(revenue.reduce((sum, point) => sum + point.value, 0)).toBe(237500)
+      const revenue = yield* runRpc(AnalyticsRpcs.AnalyticsRpcs, "/rpc/analytics", (client) =>
+        client.getAnalytics({ metric: "revenue" })
+      )
+      expect(revenue).toHaveLength(12)
+      expect(revenue.reduce((sum, point) => sum + point.value, 0)).toBe(237500)
 
-    const orders = await runRpc(AnalyticsRpcs.AnalyticsRpcs, "/rpc/analytics", (client) =>
-      client.getAnalytics({ metric: "orders" })
-    )
-    expect(orders.reduce((sum, point) => sum + point.value, 0)).toBe(5664)
-  })
+      const orders = yield* runRpc(AnalyticsRpcs.AnalyticsRpcs, "/rpc/analytics", (client) =>
+        client.getAnalytics({ metric: "orders" })
+      )
+      expect(orders.reduce((sum, point) => sum + point.value, 0)).toBe(5664)
+    })
+  )
 
-  it("persists bookmarkProduct mutations across subsequent RPC reads and in-process SSR renders", async () => {
-    const before = await runRpc(ProductRpcs.ProductRpcs, "/rpc/product", (client) => client.getProduct({ id: "42" }))
-    expect(Option.isSome(before)).toBe(true)
-    if (Option.isSome(before)) {
-      expect(before.value.name).toBe("Field notebook")
-      expect(before.value.bookmarked).toBe(false)
-    }
+  it.live("persists bookmarkProduct mutations across subsequent RPC reads and in-process SSR renders", () =>
+    Effect.gen(function* () {
+      const before = yield* runRpc(ProductRpcs.ProductRpcs, "/rpc/product", (client) => client.getProduct({ id: "42" }))
+      expect(Option.isSome(before)).toBe(true)
+      if (Option.isSome(before)) {
+        expect(before.value.name).toBe("Field notebook")
+        expect(before.value.bookmarked).toBe(false)
+      }
 
-    await runRpc(ProductRpcs.ProductRpcs, "/rpc/product", (client) => client.bookmarkProduct({ id: "42" }))
+      yield* runRpc(ProductRpcs.ProductRpcs, "/rpc/product", (client) => client.bookmarkProduct({ id: "42" }))
 
-    const after = await runRpc(ProductRpcs.ProductRpcs, "/rpc/product", (client) => client.getProduct({ id: "42" }))
-    expect(Option.isSome(after)).toBe(true)
-    if (Option.isSome(after)) {
-      expect(after.value.bookmarked).toBe(true)
-    }
+      const after = yield* runRpc(ProductRpcs.ProductRpcs, "/rpc/product", (client) => client.getProduct({ id: "42" }))
+      expect(Option.isSome(after)).toBe(true)
+      if (Option.isSome(after)) {
+        expect(after.value.bookmarked).toBe(true)
+      }
 
-    // In-process SSR reads from the same server store layer instance.
-    const ssrAfter = await raw("/products/42")
-    expect(ssrAfter.status).toBe(200)
-    expect(ssrAfter.body).toContain("Bookmarked ✓")
-  })
+      // In-process SSR reads from the same server store layer instance.
+      const ssrAfter = yield* Effect.promise(() => raw("/products/42"))
+      expect(ssrAfter.status).toBe(200)
+      expect(ssrAfter.body).toContain("Bookmarked ✓")
+    })
+  )
 
-  it("returns None for an unknown product and fails bookmarkProduct with typed ApiError", async () => {
-    const missing = await runRpc(ProductRpcs.ProductRpcs, "/rpc/product", (client) => client.getProduct({ id: "999" }))
-    expect(Option.isNone(missing)).toBe(true)
+  it.live("returns None for an unknown product and fails bookmarkProduct with typed ApiError", () =>
+    Effect.gen(function* () {
+      const missing = yield* runRpc(ProductRpcs.ProductRpcs, "/rpc/product", (client) =>
+        client.getProduct({ id: "999" })
+      )
+      expect(Option.isNone(missing)).toBe(true)
 
-    const exit = await runRpc(ProductRpcs.ProductRpcs, "/rpc/product", (client) =>
-      Effect.exit(client.bookmarkProduct({ id: "999" }))
-    )
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      expect(String(exit.cause)).toContain('Product "999" not found')
-    }
-  })
+      const exit = yield* runRpc(ProductRpcs.ProductRpcs, "/rpc/product", (client) =>
+        Effect.exit(client.bookmarkProduct({ id: "999" }))
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(String(exit.cause)).toContain('Product "999" not found')
+      }
+    })
+  )
 
   it("applies security headers to POST /rpc/* responses and handles query strings and non-POST methods cleanly", async () => {
     const response = await fetch(`http://127.0.0.1:${port}/rpc/product?x=1`, {
@@ -355,11 +364,8 @@ describe("Effect RPC over HTTP (POST /rpc/{search,product,analytics})", () => {
     }
   })
 
-  it("handles repeated in-process RPC calls cleanly via InProcessRpcClientLayer", async () => {
-    const inProcessLayer = Rpc.InProcessRpcClientLayer.pipe(
-      Layer.provide(Rpc.HandlersLayer.pipe(Layer.provide(Layer.fresh(Rpc.ServerStoresLayer))))
-    )
-    const results = await Effect.gen(function* () {
+  it.effect("handles repeated in-process RPC calls cleanly via InProcessRpcClientLayer", () =>
+    Effect.gen(function* () {
       const products: Array<string> = []
       for (let index = 0; index < 20; index++) {
         const product = yield* Effect.gen(function* () {
@@ -368,102 +374,115 @@ describe("Effect RPC over HTTP (POST /rpc/{search,product,analytics})", () => {
         }).pipe(Effect.scoped, Effect.provide(RpcClient.layerProtocolHttp({ url: "/rpc/product" })))
         if (Option.isSome(product)) products.push(product.value.name)
       }
-      return products
-    }).pipe(Effect.provide(inProcessLayer), Effect.runPromise)
 
-    expect(results).toHaveLength(20)
-    expect(results.every((name) => name === "Field notebook")).toBe(true)
-  })
-
-  it("round-trips ApiError (with and without optional cause) and RpcClientError through JSON codecs", async () => {
-    const apiErrorCodec = JsonString.jsonString(ApiError.ApiError)
-    const plain = new ApiError.ApiError({ message: "not found" })
-    const decodedPlain = Schema.decodeSync(apiErrorCodec)(Schema.encodeSync(apiErrorCodec)(plain))
-    expect(decodedPlain._tag).toBe("ApiError")
-    expect(decodedPlain.message).toBe("not found")
-    expect(decodedPlain.cause).toBeUndefined()
-
-    const withCause = new ApiError.ApiError({ message: "upstream failed", cause: new Error("connection reset") })
-    const decodedWithCause = Schema.decodeSync(apiErrorCodec)(Schema.encodeSync(apiErrorCodec)(withCause))
-    expect(decodedWithCause._tag).toBe("ApiError")
-    expect(decodedWithCause.message).toBe("upstream failed")
-    expect(decodedWithCause.cause).toBeInstanceOf(Error)
-    expect(decodedWithCause.cause instanceof Error ? decodedWithCause.cause.message : "").toBe("connection reset")
-
-    // Real HTTP transport failure flows straight through as RpcClientError and round-trips through JSON.
-    const exit = await runRpc(ProductRpcs.ProductRpcs, "/not-an-rpc-endpoint", (client) =>
-      Effect.exit(client.getProduct({ id: "42" }))
+      expect(products).toHaveLength(20)
+      expect(products.every((name) => name === "Field notebook")).toBe(true)
+    }).pipe(
+      Effect.provide(
+        Rpc.InProcessRpcClientLayer.pipe(
+          Layer.provide(Rpc.HandlersLayer.pipe(Layer.provide(Layer.fresh(Rpc.ServerStoresLayer))))
+        )
+      )
     )
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      const failure = exit.cause.reasons[0]
-      expect(failure?._tag).toBe("Fail")
-      if (failure?._tag === "Fail") {
-        expect(failure.error._tag).toBe("RpcClientError")
-        const rpcErrorCodec = JsonString.jsonString(RpcClientError.RpcClientError)
-        const roundTripped = Schema.decodeSync(rpcErrorCodec)(Schema.encodeSync(rpcErrorCodec)(failure.error))
-        expect(roundTripped._tag).toBe("RpcClientError")
-        expect(roundTripped.message).toBe(failure.error.message)
-        expect(roundTripped.message).toContain("Error decoding HTTP response")
-      }
-    }
-  })
+  )
 
-  it("serves POST /rpc/order (checkOrderCode, validatePromoCode, submitOrder + OrderValidationError)", async () => {
-    const taken = await runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
-      client.checkOrderCode({ code: "taken-code" })
-    )
-    expect(taken.available).toBe(false)
-    expect(taken.suggestion).toBe("taken-code-2")
+  it.live("round-trips ApiError (with and without optional cause) and RpcClientError through JSON codecs", () =>
+    Effect.gen(function* () {
+      const apiErrorCodec = JsonString.jsonString(ApiError.ApiError)
+      const encodeApiError = Schema.encodeEffect(apiErrorCodec)
+      const decodeApiError = Schema.decodeEffect(apiErrorCodec)
+      const plain = new ApiError.ApiError({ message: "not found" })
+      const decodedPlain = yield* decodeApiError(yield* encodeApiError(plain))
+      expect(decodedPlain._tag).toBe("ApiError")
+      expect(decodedPlain.message).toBe("not found")
+      expect(decodedPlain.cause).toBeUndefined()
 
-    const promo = await runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
-      client.validatePromoCode({ code: "STUDIO15" })
-    )
-    expect(promo).toEqual({ valid: true, discountPercent: 15, description: "15% studio discount" })
+      const withCause = new ApiError.ApiError({ message: "upstream failed", cause: new Error("connection reset") })
+      const decodedWithCause = yield* decodeApiError(yield* encodeApiError(withCause))
+      expect(decodedWithCause._tag).toBe("ApiError")
+      expect(decodedWithCause.message).toBe("upstream failed")
+      expect(decodedWithCause.cause).toBeInstanceOf(Error)
+      expect(decodedWithCause.cause instanceof Error ? decodedWithCause.cause.message : "").toBe("connection reset")
 
-    const receipt = await runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
-      client.submitOrder({
-        order: {
-          projectCode: "http-order-1",
-          contactEmail: "buyer@studio.test",
-          promoCode: "STUDIO15",
-          billing: { _tag: "Card", cardholderName: "Ada Lovelace", billingZip: "94107" },
-          items: [{ id: "line-1", sku: "MUG-01", quantity: 2, unitPriceDollars: 50 }],
-          expedited: false,
-          deliveryNote: "",
-          acceptTerms: true
+      // Real HTTP transport failure flows straight through as RpcClientError and round-trips through JSON.
+      const exit = yield* runRpc(ProductRpcs.ProductRpcs, "/not-an-rpc-endpoint", (client) =>
+        Effect.exit(client.getProduct({ id: "42" }))
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const failure = exit.cause.reasons[0]
+        expect(failure?._tag).toBe("Fail")
+        if (failure?._tag === "Fail") {
+          expect(failure.error._tag).toBe("RpcClientError")
+          const rpcErrorCodec = JsonString.jsonString(RpcClientError.RpcClientError)
+          const encodeRpcError = Schema.encodeEffect(rpcErrorCodec)
+          const decodeRpcError = Schema.decodeEffect(rpcErrorCodec)
+          const roundTripped = yield* decodeRpcError(yield* encodeRpcError(failure.error))
+          expect(roundTripped._tag).toBe("RpcClientError")
+          expect(roundTripped.message).toBe(failure.error.message)
+          expect(roundTripped.message).toContain("Error decoding HTTP response")
         }
-      })
-    )
-    expect(receipt.orderId).toBe("ORD-0001")
-    expect(receipt.projectCode).toBe("http-order-1")
-    expect(receipt.totalCents).toBe(8500)
+      }
+    })
+  )
 
-    const duplicate = await runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
-      Effect.exit(
+  it.live("serves POST /rpc/order (checkOrderCode, validatePromoCode, submitOrder + OrderValidationError)", () =>
+    Effect.gen(function* () {
+      const taken = yield* runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
+        client.checkOrderCode({ code: "taken-code" })
+      )
+      expect(taken.available).toBe(false)
+      expect(taken.suggestion).toBe("taken-code-2")
+
+      const promo = yield* runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
+        client.validatePromoCode({ code: "STUDIO15" })
+      )
+      expect(promo).toEqual({ valid: true, discountPercent: 15, description: "15% studio discount" })
+
+      const receipt = yield* runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
         client.submitOrder({
           order: {
             projectCode: "http-order-1",
             contactEmail: "buyer@studio.test",
-            promoCode: "",
+            promoCode: "STUDIO15",
             billing: { _tag: "Card", cardholderName: "Ada Lovelace", billingZip: "94107" },
-            items: [{ id: "line-1", sku: "MUG-01", quantity: 1, unitPriceDollars: 20 }],
+            items: [{ id: "line-1", sku: "MUG-01", quantity: 2, unitPriceDollars: 50 }],
             expedited: false,
             deliveryNote: "",
             acceptTerms: true
           }
         })
       )
-    )
-    expect(Exit.isFailure(duplicate)).toBe(true)
-    if (Exit.isFailure(duplicate)) {
-      const reason = duplicate.cause.reasons[0]
-      expect(reason?._tag).toBe("Fail")
-      if (reason?._tag === "Fail") {
-        expect(reason.error._tag).toBe("OrderValidationError")
+      expect(receipt.orderId).toBe("ORD-0001")
+      expect(receipt.projectCode).toBe("http-order-1")
+      expect(receipt.totalCents).toBe(8500)
+
+      const duplicate = yield* runRpc(OrderRpcs.OrderRpcs, "/rpc/order", (client) =>
+        Effect.exit(
+          client.submitOrder({
+            order: {
+              projectCode: "http-order-1",
+              contactEmail: "buyer@studio.test",
+              promoCode: "",
+              billing: { _tag: "Card", cardholderName: "Ada Lovelace", billingZip: "94107" },
+              items: [{ id: "line-1", sku: "MUG-01", quantity: 1, unitPriceDollars: 20 }],
+              expedited: false,
+              deliveryNote: "",
+              acceptTerms: true
+            }
+          })
+        )
+      )
+      expect(Exit.isFailure(duplicate)).toBe(true)
+      if (Exit.isFailure(duplicate)) {
+        const reason = duplicate.cause.reasons[0]
+        expect(reason?._tag).toBe("Fail")
+        if (reason?._tag === "Fail") {
+          expect(reason.error._tag).toBe("OrderValidationError")
+        }
       }
-    }
-  })
+    })
+  )
 
   it("handles POST /locale cookie switching, open-redirect blocking, and localized SSR + RPC headers", async () => {
     const switchRes = await fetch(`http://127.0.0.1:${port}/locale`, {
@@ -523,28 +542,30 @@ describe("Effect RPC over HTTP (POST /rpc/{search,product,analytics})", () => {
     expect(await deOrderRes.text()).toContain("wurde vor Abschluss vergeben")
   })
 
-  it("serves POST /rpc/warehouse (getWarehouseCarts, preflightDispatchCart, CartInUseError)", async () => {
-    const carts = await runRpc(WarehouseRpcs.WarehouseRpcs, "/rpc/warehouse", (client) => client.getWarehouseCarts())
-    expect(carts).toHaveLength(4)
+  it.live("serves POST /rpc/warehouse (getWarehouseCarts, preflightDispatchCart, CartInUseError)", () =>
+    Effect.gen(function* () {
+      const carts = yield* runRpc(WarehouseRpcs.WarehouseRpcs, "/rpc/warehouse", (client) => client.getWarehouseCarts())
+      expect(carts).toHaveLength(4)
 
-    const preflight = await runRpc(WarehouseRpcs.WarehouseRpcs, "/rpc/warehouse", (client) =>
-      client.preflightDispatchCart({ cartId: "cart-101", simulateConflict: false, simulateExpired: false })
-    )
-    expect(preflight.cartCode).toBe("CART-101")
-    expect(preflight.warningCount).toBe(0)
+      const preflight = yield* runRpc(WarehouseRpcs.WarehouseRpcs, "/rpc/warehouse", (client) =>
+        client.preflightDispatchCart({ cartId: "cart-101", simulateConflict: false, simulateExpired: false })
+      )
+      expect(preflight.cartCode).toBe("CART-101")
+      expect(preflight.warningCount).toBe(0)
 
-    const inUse = await runRpc(WarehouseRpcs.WarehouseRpcs, "/rpc/warehouse", (client) =>
-      Effect.exit(client.preflightReleaseCart({ cartId: "cart-204", simulateExpired: false }))
-    )
-    expect(Exit.isFailure(inUse)).toBe(true)
-    if (Exit.isFailure(inUse)) {
-      const reason = inUse.cause.reasons[0]
-      expect(reason?._tag).toBe("Fail")
-      if (reason?._tag === "Fail") {
-        expect(reason.error._tag).toBe("CartInUseError")
+      const inUse = yield* runRpc(WarehouseRpcs.WarehouseRpcs, "/rpc/warehouse", (client) =>
+        Effect.exit(client.preflightReleaseCart({ cartId: "cart-204", simulateExpired: false }))
+      )
+      expect(Exit.isFailure(inUse)).toBe(true)
+      if (Exit.isFailure(inUse)) {
+        const reason = inUse.cause.reasons[0]
+        expect(reason?._tag).toBe("Fail")
+        if (reason?._tag === "Fail") {
+          expect(reason.error._tag).toBe("CartInUseError")
+        }
       }
-    }
-  })
+    })
+  )
 })
 
 describe("guardHttpResponseWriteErrors", () => {

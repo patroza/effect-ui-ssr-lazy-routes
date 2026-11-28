@@ -3,7 +3,7 @@ import { createServer } from "node:net"
 export const DEFAULT_APP_PORT = 5173
 export const DEFAULT_DEVTOOLS_PORT = 4774
 export const DEVTOOLS_PORT_OFFSET = 2
-export const MAX_DEVTOOLS_PORT_ATTEMPTS = 20
+const MAX_DEVTOOLS_PORT_ATTEMPTS = 20
 export const DEVTOOLS_HOST = "127.0.0.1"
 
 const STRICT_DIGITS_RE = /^[0-9]+$/

@@ -32,10 +32,10 @@ export interface PageAssets {
 }
 
 export const ENTRY_SOURCE = "src/main.ts"
-export const ENTRY_STYLESHEET = "src/index.css"
+const ENTRY_STYLESHEET = "src/index.css"
 
 /** Dev-only route stylesheets in addition to `ENTRY_STYLESHEET`. */
-export const routeDevStylesheets: Readonly<Partial<Record<Routes.AppRouteTag, ReadonlyArray<string>>>> = {
+const routeDevStylesheets: Readonly<Partial<Record<Routes.AppRouteTag, ReadonlyArray<string>>>> = {
   Analytics: ["src/analytics/components/chart.css"]
 }
 

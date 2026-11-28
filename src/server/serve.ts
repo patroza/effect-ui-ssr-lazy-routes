@@ -39,7 +39,7 @@ const ServerLive = Layer.effectDiscard(
     yield* server.serve(httpEffect)
     const actual =
       server.address._tag === "InetAddressV4" || server.address._tag === "InetAddressV6" ? server.address.port : port
-    yield* Effect.sync(() => console.log(`listening on http://localhost:${actual}`))
+    yield* Effect.sync(() => process.stdout.write(`listening on http://localhost:${actual}\n`))
   })
 ).pipe(
   Layer.provide(Handler.serverRuntimeLayer),

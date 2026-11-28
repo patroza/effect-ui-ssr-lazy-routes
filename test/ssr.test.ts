@@ -38,8 +38,9 @@ describe("SSR with Ssr.ssr: render on the server, hydrate in a fresh document, a
     }
   ] as const
 
-  for (const { marker, statePath, title, url } of cases) {
-    it.effect(`renders full HTML and serialized state for ${url}, and the client adopts all of it`, () =>
+  it.effect.each(cases)(
+    "renders full HTML and serialized state for $url, and the client adopts all of it",
+    ({ marker, statePath, title, url }) =>
       Effect.gen(function* () {
         const { result } = yield* Helpers.ssrAt(url)
         // The page itself is in the HTML: not a loading placeholder.
@@ -55,8 +56,7 @@ describe("SSR with Ssr.ssr: render on the server, hydrate in a fresh document, a
         expect(result.root.fetches()).toEqual([])
         expect(result.misses).toEqual([])
       }).pipe(Effect.provide(Helpers.appAt(url)))
-    )
-  }
+  )
 
   it.effect("renders the route's search into the page", () =>
     Effect.gen(function* () {
