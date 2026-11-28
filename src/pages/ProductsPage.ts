@@ -1,8 +1,9 @@
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Button, Input } from "@effect/ui-kit"
 import { Effect, Schema } from "effect"
 import type { AsyncResult } from "effect/reactivity"
+import { Button } from "#ui/button"
+import { Input } from "#ui/input"
 import * as Design from "../design/classes.ts"
 import * as QueryResult from "../design/queryResult.ts"
 import * as Product from "../product/domain/Product.ts"
@@ -38,7 +39,7 @@ const renderProductResults = (
     .class(Design.ui.stack)
     .attr("aria-busy", String(waiting))
     .children(
-      h.ul.class("flex flex-col divide-y divide-neutral-200 dark:divide-neutral-800").children(
+      h.ul.class("flex flex-col divide-y divide-border").children(
         products.map((product) =>
           h.li
             .key(product.id)
@@ -51,8 +52,10 @@ const renderProductResults = (
                   .children(product.name),
                 h.span.class(Design.ui.muted).children(` — ${Product.formatPrice(product.priceCents)}`)
               ),
-              Button(h, { onPress: ProductsPageMessage.ToggledCompare({ id: product.id }) })
-                .class(Design.ui.button)
+              Button(h, {
+                variant: compared.includes(product.id) ? "default" : "outline",
+                onPress: ProductsPageMessage.ToggledCompare({ id: product.id })
+              })
                 .attr("aria-pressed", String(compared.includes(product.id)))
                 .children(compared.includes(product.id) ? "Remove from compare" : "Compare")
             )
@@ -136,14 +139,12 @@ const ProductsPageNoDeps = Html.component({
         Input(h, {
           props: { value: q ?? "" },
           onUpdate: ({ value }) => ProductsPageMessage.UpdatedQuery({ text: value })
-        })
-          .class(Design.ui.input)
-          .attrs({
-            type: "search",
-            placeholder: "Search products…",
-            "aria-label": "Search products",
-            "data-testid": "products-search"
-          }),
+        }).attrs({
+          type: "search",
+          placeholder: "Search products…",
+          "aria-label": "Search products",
+          "data-testid": "products-search"
+        }),
         h.p
           .class(Design.ui.muted)
           .attr("data-testid", "products-compared")

@@ -1,7 +1,19 @@
 import { Command, Component, Head, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Button, Dialog, Input } from "@effect/ui-kit"
+import { Dialog } from "@effect/ui-kit"
 import { Effect, Layer, Option, Schema } from "effect"
+import { Button, buttonVariants } from "#ui/button"
+import {
+  DialogBackdrop,
+  DialogCloseIcon,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+  DialogViewport
+} from "#ui/dialog"
+import { Input } from "#ui/input"
 import * as Design from "../../design/classes.ts"
 import * as QueryResult from "../../design/queryResult.ts"
 import * as Status from "../../lib/status.ts"
@@ -143,21 +155,19 @@ const ProductDetailPageNoDeps = Html.component({
                 `${model.quantity} × ${Product.formatPrice(product.priceCents)} = ${Product.formatPrice(model.quantity * product.priceCents)}`
               ),
             h.div.class(Design.ui.row).children(
-              Button(h, { onPress: ProductDetailPageMessage.ClickedLessQuantity() })
-                .class(Design.ui.button)
+              Button(h, { variant: "outline", onPress: ProductDetailPageMessage.ClickedLessQuantity() })
                 .attr("aria-label", "Less")
                 .attr("data-testid", "detail-less")
                 .children("−"),
-              Button(h, { onPress: ProductDetailPageMessage.ClickedMoreQuantity() })
-                .class(Design.ui.button)
+              Button(h, { variant: "outline", onPress: ProductDetailPageMessage.ClickedMoreQuantity() })
                 .attr("aria-label", "More")
                 .attr("data-testid", "detail-more")
                 .children("+"),
               Button(h, {
+                variant: "outline",
                 props: { disabled: model.bookmark === "Saving" || bookmarked },
                 onPress: ProductDetailPageMessage.ClickedBookmark()
               })
-                .class(Design.ui.button)
                 .attr("data-testid", "detail-bookmark")
                 .children(
                   bookmarked
@@ -178,41 +188,36 @@ const ProductDetailPageNoDeps = Html.component({
                 view: (dialog) =>
                   h.div.class("contents").children(
                     dialog
-                      .trigger(h.button.class(Design.ui.button))
+                      .trigger(h.button.class(buttonVariants({ variant: "outline" })))
                       .attr("data-testid", "inquiry-trigger")
                       .children("Ask a question"),
                     dialog.portal(h.dialog)?.children(
-                      dialog.backdrop(h.div.class(Design.ui.dialogBackdrop)),
-                      dialog.viewport(h.div.class(Design.ui.dialogViewport)).children(
-                        dialog
-                          .popup(h.div.class(Design.ui.dialogPopup))
+                      DialogBackdrop(h, dialog),
+                      DialogViewport(h, dialog).children(
+                        DialogPopup(h, dialog)
                           .attr("data-testid", "inquiry-popup")
                           .children(
-                            h.div.class(Design.ui.stack).children(
-                              dialog.title(h.h2.class("text-lg font-semibold")).children(`About ${product.name}`),
-                              dialog.description(h.p.class(Design.ui.muted)).children("We usually reply within a day."),
-                              Input(h, {
-                                props: { value: model.question },
-                                onUpdate: ({ value }) => ProductDetailPageMessage.UpdatedQuestion({ value })
-                              })
-                                .class(Design.ui.input)
-                                .attrs({
-                                  placeholder: "Your question",
-                                  "aria-label": "Your question",
-                                  "data-testid": "inquiry-input"
-                                }),
-                              h.div
-                                .class(`${Design.ui.row} justify-end`)
-                                .children(
-                                  dialog
-                                    .close(h.button.class(Design.ui.button))
-                                    .attr("data-testid", "inquiry-close")
-                                    .children("Cancel"),
-                                  Button(h, { onPress: ProductDetailPageMessage.ClickedSendQuestion() })
-                                    .class(Design.ui.button)
-                                    .attr("data-testid", "inquiry-send")
-                                    .children("Send")
-                                )
+                            DialogCloseIcon(h, dialog),
+                            DialogHeader(h).children(
+                              DialogTitle(h, dialog).children(`About ${product.name}`),
+                              DialogDescription(h, dialog).children("We usually reply within a day.")
+                            ),
+                            Input(h, {
+                              props: { value: model.question },
+                              onUpdate: ({ value }) => ProductDetailPageMessage.UpdatedQuestion({ value })
+                            }).attrs({
+                              placeholder: "Your question",
+                              "aria-label": "Your question",
+                              "data-testid": "inquiry-input"
+                            }),
+                            DialogFooter(h).children(
+                              dialog
+                                .close(h.button.class(buttonVariants({ variant: "outline" })))
+                                .attr("data-testid", "inquiry-close")
+                                .children("Cancel"),
+                              Button(h, { onPress: ProductDetailPageMessage.ClickedSendQuestion() })
+                                .attr("data-testid", "inquiry-send")
+                                .children("Send")
                             )
                           )
                       )

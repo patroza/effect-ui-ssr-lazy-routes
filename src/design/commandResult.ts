@@ -1,5 +1,7 @@
 import type { Html } from "@effect/ui/html"
-import { Button, Progress } from "@effect/ui-kit"
+import { Progress } from "@effect/ui-kit"
+import { Button, type ButtonVariant } from "#ui/button"
+import { ProgressIndicator, ProgressLabel, ProgressRoot, ProgressTrack, ProgressValue } from "#ui/progress"
 import * as Design from "./classes.ts"
 import * as CommandTrace from "../workflow/CommandTrace.ts"
 
@@ -13,14 +15,14 @@ export interface CommandButtonOptions<M> {
   readonly onPress: M
 }
 
-const variantClass = (variant: "default" | "primary" | "danger" | undefined): string => {
+const mapButtonVariant = (variant: "default" | "primary" | "danger" | undefined): ButtonVariant => {
   switch (variant) {
     case "primary":
-      return Design.ui.buttonPrimary
+      return "default"
     case "danger":
-      return Design.ui.buttonDanger
+      return "destructive"
     default:
-      return Design.ui.button
+      return "outline"
   }
 }
 
@@ -30,10 +32,10 @@ const variantClass = (variant: "default" | "primary" | "danger" | undefined): st
  */
 export const commandButton = <M>(h: Html.H<M>, options: CommandButtonOptions<M>) =>
   Button(h, {
+    variant: mapButtonVariant(options.variant),
     props: { disabled: options.busy === true || options.disabled === true },
     onPress: options.onPress
   })
-    .class(variantClass(options.variant))
     .attr("aria-busy", options.busy === true ? "true" : undefined)
     .attr("data-testid", options.testId)
     .children(options.busy === true ? (options.busyLabel ?? options.label) : options.label)
@@ -64,11 +66,11 @@ export const commandErrorBanner = <M>(h: Html.H<M>, options: CommandErrorBannerO
       h.div
         .class("flex flex-col gap-1")
         .children(
-          h.p.class("text-sm font-medium text-red-800 dark:text-red-300").children(options.title),
+          h.p.class("text-sm font-medium text-destructive").children(options.title),
           shortRef === undefined
             ? undefined
             : h.span
-                .class("font-mono text-xs text-red-700/80 dark:text-red-400")
+                .class("font-mono text-xs text-destructive/80")
                 .attr("data-testid", "command-trace-ref")
                 .children(formatTrace(shortRef))
         ),
@@ -77,14 +79,12 @@ export const commandErrorBanner = <M>(h: Html.H<M>, options: CommandErrorBannerO
         : h.div.class(Design.ui.row).children(
             options.onRetry === undefined
               ? undefined
-              : Button(h, { onPress: options.onRetry })
-                  .class(Design.ui.button)
+              : Button(h, { variant: "outline", onPress: options.onRetry })
                   .attr("data-testid", "command-error-retry")
                   .children(options.retryLabel ?? "Retry"),
             options.onDismiss === undefined
               ? undefined
-              : Button(h, { onPress: options.onDismiss })
-                  .class(Design.ui.button)
+              : Button(h, { variant: "outline", onPress: options.onDismiss })
                   .attr("data-testid", "command-error-dismiss")
                   .children(options.dismissLabel ?? "Dismiss")
           )
@@ -102,8 +102,9 @@ export interface CommandProgressPanelOptions<M> {
 }
 
 /**
- * Inline streaming Command progress bar powered by `@effect/ui-kit` `Progress`,
- * paired with an explicit `Cancel` action (`Command.interrupt`).
+ * Inline streaming Command progress bar powered by `@effect/ui-kit` `Progress`
+ * and `effectcn`'s `Progress` primitives, paired with an explicit `Cancel`
+ * action (`Command.interrupt`).
  */
 export const commandProgressPanel = <M>(h: Html.H<M>, options: CommandProgressPanelOptions<M>) =>
   h.div
@@ -118,27 +119,17 @@ export const commandProgressPanel = <M>(h: Html.H<M>, options: CommandProgressPa
           valueText: options.valueText
         },
         view: (progress) =>
-          progress.root(h.div.class("flex flex-col gap-2")).children(
-            h.div.class("flex flex-wrap items-center justify-between gap-2").children(
-              progress
-                .label(h.span)
-                .class("text-sm font-medium text-sky-950 dark:text-sky-100")
-                .children(options.label),
-              h.div.class(Design.ui.row).children(
-                progress.value(h.span).class("font-mono text-xs text-sky-800 dark:text-sky-300"),
-                options.onCancel === undefined
-                  ? undefined
-                  : Button(h, { onPress: options.onCancel })
-                      .class(Design.ui.button)
-                      .attr("data-testid", "command-progress-cancel")
-                      .children(options.cancelLabel ?? "Cancel")
-              )
+          ProgressRoot(h, progress).children(
+            ProgressLabel(h, progress).children(options.label),
+            h.div.class(Design.ui.row).children(
+              ProgressValue(h, progress, { class: "font-mono text-xs" }),
+              options.onCancel === undefined
+                ? undefined
+                : Button(h, { variant: "outline", size: "sm", onPress: options.onCancel })
+                    .attr("data-testid", "command-progress-cancel")
+                    .children(options.cancelLabel ?? "Cancel")
             ),
-            progress
-              .track(h.div.class("h-2 w-full overflow-hidden rounded-full bg-sky-200 dark:bg-sky-900"))
-              .children(
-                progress.indicator(h.div.class("h-full rounded-full bg-sky-600 transition-all dark:bg-sky-400"))
-              )
+            ProgressTrack(h, progress).children(ProgressIndicator(h, progress))
           )
       })
     )

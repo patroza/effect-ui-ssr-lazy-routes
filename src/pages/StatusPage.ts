@@ -42,7 +42,7 @@ const renderStatusContent = (
         })
       ),
       h.ul
-        .class("flex flex-col divide-y divide-neutral-200 dark:divide-neutral-800")
+        .class("flex flex-col divide-y divide-border")
         .attrs({ "data-testid": "status-services" })
         .children(
           status.data.services.map((service) =>

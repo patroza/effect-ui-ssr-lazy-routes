@@ -1,0 +1,200 @@
+/*
+ * effectcn theme tokens (`effect`, `cornflower`, `sage`, `ember`, light & dark).
+ * A theme is `data-theme` on the root element, and a mode is `data-mode="light"` or `"dark"`.
+ */
+
+:root {
+  --font-sans:
+    "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono", "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --radius: 8px;
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-xs: calc(var(--radius) - 4px);
+  --radius-lg: calc(var(--radius) + 4px);
+
+  --shadow-sm: 0 1px 2px color-mix(in oklab, var(--shadow-color) 6%, transparent);
+  --shadow-float:
+    0 1px 2px color-mix(in oklab, var(--shadow-color) 6%, transparent),
+    0 10px 32px -8px color-mix(in oklab, var(--shadow-color) 22%, transparent);
+}
+
+/* Effect: black on white, nothing else. The default. */
+:root,
+[data-theme="effect"] {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #18181a;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --muted: #f5f5f5;
+  --muted-foreground: #6e6e73;
+  --accent: #f0f0f0;
+  --accent-foreground: #18181a;
+  --border: #e6e6e6;
+  --input: #dcdcdc;
+  --ring: #18181a;
+  --primary: #18181a;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f2f2;
+  --secondary-foreground: #18181a;
+  --brand: #18181a;
+  --brand-foreground: #ffffff;
+  --brand-soft: #dedee2;
+  --brand-soft-foreground: #18181a;
+  --brand-wash: #f3f3f4;
+  --destructive: #c62828;
+  --destructive-foreground: #ffffff;
+  --success: #15803d;
+  --warning: #b45309;
+  --shadow-color: #18181a;
+}
+
+[data-theme="effect"][data-mode="dark"],
+:root[data-mode="dark"]:not([data-theme]),
+[data-mode="dark"] [data-theme="effect"]:not([data-mode]) {
+  color-scheme: dark;
+  --background: #0c0c0d;
+  --foreground: #f4f4f5;
+  --card: #121214;
+  --popover: #161618;
+  --muted: #1b1b1e;
+  --muted-foreground: #9a9aa2;
+  --accent: #222226;
+  --accent-foreground: #f4f4f5;
+  --border: #26262a;
+  --input: #303035;
+  --ring: #f4f4f5;
+  --primary: #f4f4f5;
+  --primary-foreground: #18181a;
+  --secondary: #1f1f23;
+  --secondary-foreground: #f4f4f5;
+  --brand: #f4f4f5;
+  --brand-foreground: #18181a;
+  --brand-soft: #3a3a40;
+  --brand-soft-foreground: #f4f4f5;
+  --brand-wash: #1c1c1f;
+  --destructive: #ef5350;
+  --destructive-foreground: #18181a;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --shadow-color: #000000;
+}
+
+/* Cornflower theme */
+[data-theme="cornflower"] {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #16161a;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --muted: #fafaf9;
+  --muted-foreground: #6e6e76;
+  --accent: #f5f5f4;
+  --accent-foreground: #16161a;
+  --border: #e5e5e5;
+  --input: #e0e0e0;
+  --ring: #4b3f9e;
+  --primary: #111827;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f4;
+  --secondary-foreground: #16161a;
+  --brand: #4b3f9e;
+  --brand-foreground: #ffffff;
+  --brand-soft: #8b9fe8;
+  --brand-soft-foreground: #16161a;
+  --brand-wash: #eef1fc;
+  --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
+  --success: #15803d;
+  --warning: #b45309;
+  --shadow-color: #1c1917;
+}
+
+[data-theme="cornflower"][data-mode="dark"] {
+  color-scheme: dark;
+  --background: #0e0f14;
+  --foreground: #ececf1;
+  --card: #14151c;
+  --popover: #181a22;
+  --muted: #1a1c25;
+  --muted-foreground: #9799a8;
+  --accent: #222430;
+  --accent-foreground: #ececf1;
+  --border: #272935;
+  --input: #31344a;
+  --ring: #a9b8f0;
+  --primary: #ececf1;
+  --primary-foreground: #111827;
+  --secondary: #1f212c;
+  --secondary-foreground: #ececf1;
+  --brand: #8b9fe8;
+  --brand-foreground: #12131a;
+  --brand-soft: #8b9fe8;
+  --brand-soft-foreground: #12131a;
+  --brand-wash: #1d2038;
+  --destructive: #f87171;
+  --destructive-foreground: #16161a;
+  --success: #86c97a;
+  --warning: #f2b34b;
+  --shadow-color: #000000;
+}
+
+/* Sage theme */
+[data-theme="sage"] {
+  color-scheme: light;
+  --background: #fcfcfa;
+  --foreground: #1b1f1c;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --muted: #f3f4f0;
+  --muted-foreground: #68706a;
+  --accent: #ebede7;
+  --accent-foreground: #1b1f1c;
+  --border: #e2e5de;
+  --input: #d7dbd2;
+  --ring: #3f6b52;
+  --primary: #1f2b24;
+  --primary-foreground: #ffffff;
+  --secondary: #eef0ea;
+  --secondary-foreground: #1b1f1c;
+  --brand: #3f6b52;
+  --brand-foreground: #ffffff;
+  --brand-soft: #a9c4b1;
+  --brand-soft-foreground: #1b1f1c;
+  --brand-wash: #eaf1ec;
+  --destructive: #b3261e;
+  --destructive-foreground: #ffffff;
+  --success: #2e7d4f;
+  --warning: #a8620a;
+  --shadow-color: #1b1f1c;
+}
+
+[data-theme="sage"][data-mode="dark"] {
+  color-scheme: dark;
+  --background: #0d100e;
+  --foreground: #e8ece9;
+  --card: #131714;
+  --popover: #171c19;
+  --muted: #191e1b;
+  --muted-foreground: #939c96;
+  --accent: #202722;
+  --accent-foreground: #e8ece9;
+  --border: #252c27;
+  --input: #303932;
+  --ring: #9cc4a9;
+  --primary: #e8ece9;
+  --primary-foreground: #131714;
+  --secondary: #1d231f;
+  --secondary-foreground: #e8ece9;
+  --brand: #8fbf9f;
+  --brand-foreground: #0d100e;
+  --brand-soft: #8fbf9f;
+  --brand-soft-foreground: #0d100e;
+  --brand-wash: #18251d;
+  --destructive: #f2867c;
+  --destructive-foreground: #131714;
+  --success: #8fd19e;
+  --warning: #e8b35a;
+  --shadow-color: #000000;
+}

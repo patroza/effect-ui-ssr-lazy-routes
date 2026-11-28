@@ -1,9 +1,23 @@
 import { UiSchema, type View } from "@effect/ui"
 import type { Html } from "@effect/ui/html"
-import { Button, Field, makeRadioGroup, makeSelect } from "@effect/ui-kit"
+import { Field, makeRadioGroup, makeSelect } from "@effect/ui-kit"
 import { Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import type { RpcClientError } from "effect/rpc"
+import { Button } from "#ui/button"
+import { FieldError, FieldLegend, FieldRoot } from "#ui/field"
+import { RadioGroupIndicator, RadioGroupLabel, RadioGroupRadio, RadioGroupRoot } from "#ui/radio-group"
+import {
+  SelectIcon,
+  SelectItem,
+  SelectItemIndicator,
+  SelectItemText,
+  SelectLabel,
+  SelectPopup,
+  SelectPositioner,
+  SelectTrigger,
+  SelectValue
+} from "#ui/select"
 import * as Design from "../../design/classes.ts"
 import * as FormControls from "../../form/FormControls.ts"
 import * as SchemaForm from "../../form/SchemaForm.ts"
@@ -135,7 +149,7 @@ const renderCodeAdornment = (
   }
   if (fieldState.status === "Valid" && AsyncResult.isSuccess(codeResult) && codeResult.value.available) {
     return h.div
-      .class("text-sm text-emerald-700 dark:text-emerald-400")
+      .class("text-sm text-success")
       .attr("data-testid", "project-code-status")
       .children(t("order.codeAvailable"))
   }
@@ -151,9 +165,9 @@ const renderCodeAdornment = (
       .attr("data-testid", "project-code-status")
       .children(
         Button(h, {
+          variant: "outline",
           onPress: OrderFormPageMessage.AppliedSuggestedCode({ code: suggestion })
         })
-          .class(Design.ui.button)
           .attr("data-testid", "project-code-suggestion")
           .children(t("order.useSuggestion", { suggestion }))
       )
@@ -174,7 +188,7 @@ const renderPromoAdornment = (
   }
   if (fieldState.status === "Valid" && AsyncResult.isSuccess(promoResult) && promoResult.value.valid) {
     return h.div
-      .class("text-sm text-emerald-700 dark:text-emerald-400")
+      .class("text-sm text-success")
       .attr("data-testid", "promo-code-status")
       .children(
         t("order.promoApplied", {
@@ -294,37 +308,30 @@ export const renderBillingSection = (
             Picked: ({ value }) => OrderFormPageMessage.SwitchedBillingMethod({ method: value })
           },
           view: (radioGroup) =>
-            field.root(h.div.class("flex flex-col gap-2")).children(
-              field.legend(h.div.class("text-sm font-medium")).children(controller.labelFor("billing")),
-              radioGroup.root(field.group(h.div.class("flex flex-wrap gap-3"))).children(
+            FieldRoot(h, field, { class: "gap-2" }).children(
+              FieldLegend(h, field).children(controller.labelFor("billing")),
+              RadioGroupRoot(h, radioGroup, {
+                element: field.group(h.div),
+                orientation: "horizontal",
+                class: "gap-3"
+              }).children(
                 billingItems.map(({ value, label }) =>
-                  h.label
+                  RadioGroupLabel(h, {
+                    class: "rounded-md border border-input bg-background px-3 py-2 shadow-sm hover:bg-accent"
+                  })
                     .key(value)
-                    .class(
-                      "inline-flex cursor-pointer items-center gap-2 rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700"
-                    )
                     .children(
-                      radioGroup
-                        .radio({
-                          element: field.member(h.button).attr("data-testid", `billing-radio-${value}`),
-                          value
-                        })
-                        .class(
-                          "inline-flex size-4 items-center justify-center rounded-full border border-neutral-400 data-[checked]:border-neutral-900 dark:data-[checked]:border-neutral-100"
-                        )
-                        .children(
-                          radioGroup
-                            .indicator({ element: h.span, value })
-                            ?.class("size-2 rounded-full bg-neutral-900 dark:bg-neutral-100")
-                        ),
+                      RadioGroupRadio(h, radioGroup, {
+                        element: field.member(h.button),
+                        value
+                      })
+                        .attr("data-testid", `billing-radio-${value}`)
+                        .children(RadioGroupIndicator(h, radioGroup, { value })),
                       label
                     )
                 )
               ),
-              field
-                .error(h.p)
-                ?.class("text-sm font-medium text-red-600 dark:text-red-400")
-                .children(billingTypeState.errors[0] ?? "")
+              FieldError(h, field)?.children(billingTypeState.errors[0] ?? "")
             )
         })
     }),
@@ -425,43 +432,31 @@ export const renderBillingSection = (
                       Settled: () => undefined
                     },
                     view: (select) =>
-                      field.root(h.div.class("relative flex flex-col gap-1.5")).children(
-                        select
-                          .label(h.div.class("text-sm font-medium"))
-                          .children(controller.labelFor("billing.paymentTermsDays")),
-                        field.focusWithin(h.div.class("relative")).children(
-                          select
-                            .trigger(field.member(h.button))
-                            .class(`${Design.ui.input} flex items-center justify-between text-left`)
-                            .attr("data-testid", "billing-terms-trigger")
-                            .children(select.value(h.span), select.icon(h.span).children("▾")),
-                          select
-                            .positioner(
-                              h.div.class(
-                                "z-20 mt-1 w-full rounded-md border border-neutral-200 bg-white p-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
-                              )
-                            )
-                            .children(
-                              select.popup(h.div.class("flex flex-col")).children(
-                                paymentTermsItems.map(({ value, label }) =>
-                                  select
-                                    .item({ element: h.div, value })
-                                    .class(
-                                      "flex cursor-pointer items-center justify-between rounded px-2.5 py-1.5 text-sm data-[highlighted]:bg-neutral-100 data-[selected]:font-medium dark:data-[highlighted]:bg-neutral-800"
-                                    )
-                                    .attr("data-testid", `billing-terms-option-${value}`)
-                                    .children(
-                                      select.itemText(h.div).children(label),
-                                      select.itemIndicator({ element: h.span, value })?.children("✓")
-                                    )
-                                )
-                              )
-                            )
+                      FieldRoot(h, field, { class: "relative" }).children(
+                        SelectLabel(h, select, { class: "mb-0" }).children(
+                          controller.labelFor("billing.paymentTermsDays")
                         ),
-                        field
-                          .error(h.p)
-                          ?.class("text-sm font-medium text-red-600 dark:text-red-400")
-                          .children(termsState.errors[0] ?? "")
+                        field.focusWithin(h.div.class("relative")).children(
+                          SelectTrigger(h, select, {
+                            element: field.member(h.button),
+                            class: "w-full min-w-0"
+                          })
+                            .attr("data-testid", "billing-terms-trigger")
+                            .children(SelectValue(h, select), SelectIcon(h, select)),
+                          SelectPositioner(h, select, { class: "absolute top-full left-0 z-20 mt-1 w-full" }).children(
+                            SelectPopup(h, select, { class: "w-full min-w-0" }).children(
+                              paymentTermsItems.map(({ value, label }) =>
+                                SelectItem(h, select, { value })
+                                  .attr("data-testid", `billing-terms-option-${value}`)
+                                  .children(
+                                    SelectItemText(h, select).children(label),
+                                    SelectItemIndicator(h, select, { value })
+                                  )
+                              )
+                            )
+                          )
+                        ),
+                        FieldError(h, field)?.children(termsState.errors[0] ?? "")
                       )
                   })
               })
@@ -484,10 +479,10 @@ export const renderLineItemsSection = (
     h.div.class(`${Design.ui.row} justify-between`).children(
       h.div.children(h.h2.class("text-lg font-semibold").children(t("order.sectionLineItems"))),
       Button(h, {
+        variant: "outline",
         props: { disabled: isSubmitting || values.items.length >= 5 },
         onPress: OrderFormPageMessage.AddedLineItem()
       })
-        .class(Design.ui.button)
         .attr("data-testid", "add-line-item")
         .children(t("order.addItem"))
     ),
@@ -495,7 +490,7 @@ export const renderLineItemsSection = (
       ? undefined
       : h.p
           .key("items-array-error")
-          .class("text-sm font-medium text-red-600 dark:text-red-400")
+          .class("text-sm font-medium text-destructive")
           .attr("role", "alert")
           .attr("data-testid", "items-array-error")
           .children(itemsState.errors[0]),
@@ -504,9 +499,7 @@ export const renderLineItemsSection = (
         const lineTotals = Order.calculateOrderTotals({ items: [item], expedited: false }, 0)
         return h.div
           .key(item.id)
-          .class(
-            "grid gap-3 rounded-md border border-neutral-200 p-3 sm:grid-cols-[2fr_1fr_1fr_auto] dark:border-neutral-800"
-          )
+          .class("grid gap-3 rounded-md border border-border p-3 sm:grid-cols-[2fr_1fr_1fr_auto]")
           .attr("data-testid", `line-item-${index}`)
           .children(
             FormControls.textField(h, {
@@ -572,10 +565,10 @@ export const renderLineItemsSection = (
                 .attr("data-testid", `item-${index}-subtotal`)
                 .children(formatCurrency(lineTotals.subtotalCents)),
               Button(h, {
+                variant: "outline",
                 props: { disabled: isSubmitting },
                 onPress: OrderFormPageMessage.RemovedLineItem({ id: item.id })
               })
-                .class(Design.ui.button)
                 .attr("data-testid", `item-${index}-remove`)
                 .children(t("order.removeItem"))
             )

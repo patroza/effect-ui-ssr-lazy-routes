@@ -1,7 +1,7 @@
 import { type Cause, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import type { Html } from "@effect/ui/html"
-import { Button } from "@effect/ui-kit"
+import { Button } from "#ui/button"
 import * as ApiError from "../rpc/domain/ApiError.ts"
 import * as Design from "./classes.ts"
 
@@ -132,8 +132,7 @@ export const errorPanel = <M>(h: Html.H<M>, failure: FailureQuery<unknown>, opti
       options.onRetry === undefined
         ? undefined
         : h.div.children(
-            Button(h, { onPress: options.onRetry })
-              .class(Design.ui.button)
+            Button(h, { variant: "outline", onPress: options.onRetry })
               .attr("data-testid", "query-error-retry")
               .children(options.retryLabel ?? "Retry")
           )
@@ -167,10 +166,10 @@ export const refreshErrorBanner = <M>(
         .attr("data-testid", "refresh-error-message")
         .children(`Refresh failed — showing last loaded data: ${describeFailure(cause)}`),
       Button(h, {
+        variant: "outline",
         props: { disabled: waiting },
         onPress: options.onRetry
       })
-        .class(Design.ui.button)
         .attr("data-testid", "refresh-error-retry")
         .children(waiting ? "Retrying…" : "Retry refresh")
     )
@@ -190,10 +189,10 @@ export const refreshButton = <M>(
 ) => {
   const waiting = state.waiting
   return Button(h, {
+    variant: "outline",
     props: { disabled: waiting },
     onPress: options.onRefresh
   })
-    .class(Design.ui.button)
     .attr("data-testid", options.testId ?? "refresh-button")
     .children(waiting ? "Refreshing…" : (options.label ?? "Refresh"))
 }

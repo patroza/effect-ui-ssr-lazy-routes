@@ -2,6 +2,8 @@ import { Command, Component, Head, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Collapsible, Tabs } from "@effect/ui-kit"
 import { Effect, Schema } from "effect"
+import { CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "#ui/collapsible"
+import { TabsIndicator, TabsList, TabsPanel, TabsRoot, TabsTab } from "#ui/tabs"
 import * as Chart from "../analytics/components/Chart.ts"
 import * as Analytics from "../analytics/domain/Analytics.ts"
 import * as GetAnalytics from "../analytics/queries/GetAnalytics.ts"
@@ -22,12 +24,6 @@ const RefreshAnalytics = Command.make("RefreshAnalytics", { args: { metric: Anal
 )
 
 const isMetric = Schema.is(Analytics.Metric)
-
-const tabClass =
-  "relative cursor-pointer px-4 py-2 text-sm font-medium text-neutral-600 hover:text-neutral-900 data-active:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100 dark:data-active:text-neutral-100 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sky-600 dark:focus-visible:outline-sky-400"
-
-const indicatorClass =
-  "absolute bottom-0 left-(--active-tab-left) h-0.5 w-(--active-tab-width) bg-sky-600 transition-all dark:bg-sky-400"
 
 const renderChartContent = <M>(
   h: Html.H<M>,
@@ -113,19 +109,17 @@ const AnalyticsPageNoDeps = Html.component({
               isMetric(value) ? AnalyticsPageMessage.SelectedMetricTab({ metric: value }) : undefined
           },
           view: (tabs) =>
-            tabs.root(h.div.class(Design.ui.stack)).children(
-              tabs.list(h.div.class("relative flex border-b border-neutral-200 dark:border-neutral-800")).children(
+            TabsRoot(h, tabs).children(
+              TabsList(h, tabs, { variant: "underline" }).children(
                 Analytics.metrics.map((metric) =>
-                  tabs
-                    .tab({ element: h.button.key(metric).class(tabClass), value: metric })
+                  TabsTab(h, tabs, { value: metric })
+                    .key(metric)
                     .attr("data-testid", `tab-${metric}`)
                     .children(Analytics.metricTitle(metric))
                 ),
-                tabs.indicator(h.span.class(indicatorClass))
+                TabsIndicator(h, tabs)
               ),
-              Analytics.metrics.map((metric) =>
-                tabs.panel({ element: h.div.key(metric), value: metric })?.children(content)
-              )
+              Analytics.metrics.map((metric) => TabsPanel(h, tabs, { value: metric })?.key(metric).children(content))
             )
         }),
         Collapsible(h, {
@@ -135,15 +129,17 @@ const AnalyticsPageNoDeps = Html.component({
             Settled: () => undefined
           },
           view: (about) =>
-            about.root(h.div.class(Design.ui.card)).children(
-              about
-                .trigger(h.button.class(`cursor-pointer text-sm ${Design.ui.link}`))
+            CollapsibleRoot(h, about, { class: Design.ui.card }).children(
+              CollapsibleTrigger(h, about, { variant: "link", class: "text-sm" })
                 .attr("data-testid", "about-trigger")
                 .children(model.aboutOpen ? "Hide data notes" : "About this data"),
-              about
-                .panel(h.p.class(`mt-2 ${Design.ui.muted}`))
+              CollapsiblePanel(h, about)
                 ?.attr("data-testid", "about-panel")
-                .children("Monthly figures for one year, loaded by the page's own GetAnalytics query.")
+                .children(
+                  h.p
+                    .class(`pt-2 ${Design.ui.muted}`)
+                    .children("Monthly figures for one year, loaded by the page's own GetAnalytics query.")
+                )
             )
         })
       )
