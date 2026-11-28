@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { EventEmitter } from "node:events"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { createServer, request, type Server as HttpServer } from "node:http"
 import { tmpdir } from "node:os"
@@ -15,6 +16,7 @@ import * as ProductRpcs from "../src/product/domain/ProductRpcs.ts"
 import * as ApiError from "../src/rpc/domain/ApiError.ts"
 import * as SearchRpcs from "../src/search/domain/SearchRpcs.ts"
 import * as Handler from "../src/server/handler.ts"
+import * as HttpResponseErrorGuard from "../src/server/httpResponseErrorGuard.ts"
 import * as Rpc from "../src/server/rpc.ts"
 import * as WarehouseRpcs from "../src/warehouse/domain/WarehouseRpcs.ts"
 
@@ -542,5 +544,40 @@ describe("Effect RPC over HTTP (POST /rpc/{search,product,analytics})", () => {
         expect(reason.error._tag).toBe("CartInUseError")
       }
     }
+  })
+})
+
+describe("guardHttpResponseWriteErrors", () => {
+  it("attaches error listeners to request responses and upgrade sockets", () => {
+    const errors: Array<unknown> = []
+    const server = HttpResponseErrorGuard.guardHttpResponseWriteErrors(createServer(), (error) => {
+      errors.push(error)
+    })
+
+    const request = new EventEmitter()
+    const response = new EventEmitter()
+    server.emit("request", request, response)
+    const responseError = new Error("write EPIPE")
+    expect(() => response.emit("error", responseError)).not.toThrow()
+
+    const upgradeRequest = new EventEmitter()
+    const socket = new EventEmitter()
+    server.emit("upgrade", upgradeRequest, socket)
+    const socketError = new Error("read ECONNRESET")
+    expect(() => socket.emit("error", socketError)).not.toThrow()
+
+    expect(errors).toEqual([responseError, socketError])
+  })
+
+  it("swallows stream write errors even when no onError callback is passed", () => {
+    const server = HttpResponseErrorGuard.guardHttpResponseWriteErrors(createServer())
+    const response = new EventEmitter()
+    const socket = new EventEmitter()
+
+    server.emit("request", new EventEmitter(), response)
+    server.emit("upgrade", new EventEmitter(), socket)
+
+    expect(() => response.emit("error", new Error("ERR_STREAM_DESTROYED"))).not.toThrow()
+    expect(() => socket.emit("error", new Error("EPIPE"))).not.toThrow()
   })
 })

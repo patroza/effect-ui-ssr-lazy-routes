@@ -93,7 +93,8 @@ export default defineConfig(({ command, isSsrBuild, mode }) => ({
     options: {
       typeAware: true,
       typeCheck: true,
-      denyWarnings: true
+      denyWarnings: true,
+      reportUnusedDisableDirectives: "error"
     },
     rules: {
       ...EffectDiagnostics.deriveEffectRules(root),
