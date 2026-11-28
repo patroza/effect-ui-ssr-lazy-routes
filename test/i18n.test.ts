@@ -70,7 +70,8 @@ describe("i18n catalogs & template formatter", () => {
       leafHook: deHooks.leafHook,
       checkHook: deHooks.checkHook
     })
-    const exit = Effect.runSyncExit(Schema.decodeUnknownEffect(TermsSchema)("90"))
+    const decodeTerms = Schema.decodeUnknownExit(TermsSchema)
+    const exit = decodeTerms("90")
     expect(Exit.isFailure(exit)).toBe(true)
     if (Exit.isFailure(exit)) {
       const firstReason = exit.cause.reasons[0]

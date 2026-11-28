@@ -5,6 +5,7 @@ import * as JsonString from "../lib/jsonString.ts"
 // `#state` holds the JSON that `HtmlServer.serializeState` wrote: an object keyed by instance path
 // (plus the `~query` cache entries and friends).
 const StateFromJson = JsonString.jsonString(Schema.Record(Schema.String, Schema.Unknown))
+const decodeState = Schema.decodeSync(StateFromJson)
 
 /**
  * Decodes the server's serialized state, or `undefined` when nothing was
@@ -13,4 +14,4 @@ const StateFromJson = JsonString.jsonString(Schema.Record(Schema.String, Schema.
  * mounts fresh).
  */
 export const readState = (text: string | null | undefined): Renderer.State | undefined =>
-  text === null || text === undefined || text === "" ? undefined : Schema.decodeSync(StateFromJson)(text)
+  text === null || text === undefined || text === "" ? undefined : decodeState(text)

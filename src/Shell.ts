@@ -71,7 +71,7 @@ export const createShell =
                   .attr("data-testid", `locale-switch-${item.code}`)
                   .attr("aria-pressed", locale === item.code ? "true" : "false")
                   .class(
-                    `cursor-pointer rounded-md border px-2 py-1 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 dark:focus-visible:outline-sky-400 ${
+                    `cursor-pointer rounded-md border px-2 py-1 text-xs font-semibold transition focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sky-600 dark:focus-visible:outline-sky-400 ${
                       locale === item.code
                         ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
                         : "border-neutral-300 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"

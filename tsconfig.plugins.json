@@ -11,6 +11,14 @@
           "floatingEffect": "error",
           "unstableApiUsage": "off",
           "experimentalApiUsage": "off",
+          "schemaSyncInEffect": "error",
+          "globalDateInEffect": "error",
+          "globalConsoleInEffect": "error",
+          "globalFetchInEffect": "error",
+          "anyUnknownInErrorContext": "error",
+          "instanceOfSchema": "error",
+          "deterministicKeys": "error",
+          "globalJsonInEffect": "error",
           "unsafeEffectTypeAssertion": "error",
           "missingEffectError": "error",
           "missingEffectContext": "error",
@@ -88,7 +96,13 @@
           "unnecessaryPipeChain": "error"
         },
         "namespaceImportPackages": [],
-        "topLevelNamedReexports": "follow"
+        "topLevelNamedReexports": "follow",
+        "overrides": [
+          {
+            "include": ["test/**/*.ts"],
+            "options": { "diagnosticSeverity": { "globalJsonInEffect": "off" } }
+          }
+        ]
       }
     ]
   }

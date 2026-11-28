@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect"
+import { Clock, Effect, Option } from "effect"
 import * as Pages from "../pages.ts"
 import * as Routes from "../routes.ts"
 
@@ -58,21 +58,27 @@ const reloadLoopWindowMs = 10_000
  * Vite rethrows the real chunk error instead of hiding it.
  */
 export const installPreloadErrorReload = (win: ReloadTarget) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const onError = (event: Event) => {
-        try {
-          const last = Number(win.sessionStorage.getItem(reloadedAtKey) ?? 0)
-          if (Date.now() - last < reloadLoopWindowMs) return // avoid a reload loop
-          win.sessionStorage.setItem(reloadedAtKey, String(Date.now()))
-        } catch {
-          // sessionStorage unavailable: reload anyway, once per event
+  Clock.clockWith((clock) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const onError = (event: Event) => {
+          try {
+            const now = clock.currentTimeMillisUnsafe()
+            const raw = win.sessionStorage.getItem(reloadedAtKey)
+            if (raw !== null) {
+              const last = Number(raw)
+              if (Number.isFinite(last) && now - last < reloadLoopWindowMs) return // avoid a reload loop
+            }
+            win.sessionStorage.setItem(reloadedAtKey, String(now))
+          } catch {
+            // sessionStorage unavailable: reload anyway, once per event
+          }
+          event.preventDefault()
+          win.location.reload()
         }
-        event.preventDefault()
-        win.location.reload()
-      }
-      win.addEventListener("vite:preloadError", onError)
-      return onError
-    }),
-    (onError) => Effect.sync(() => win.removeEventListener("vite:preloadError", onError))
-  ).pipe(Effect.asVoid)
+        win.addEventListener("vite:preloadError", onError)
+        return onError
+      }),
+      (onError) => Effect.sync(() => win.removeEventListener("vite:preloadError", onError))
+    ).pipe(Effect.asVoid)
+  )

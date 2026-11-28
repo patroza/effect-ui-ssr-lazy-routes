@@ -80,7 +80,7 @@ export class RpcCalls extends Context.Service<
     readonly counts: Effect.Effect<RpcCounts>
     readonly record: (operation: keyof RpcCounts) => Effect.Effect<void>
   }
->()("test/RpcCalls") {}
+>()("effect-ui-ssr-lazy-routes/test/support/rpc/RpcCalls") {}
 
 const makeRpcCalls = Layer.effect(
   RpcCalls,

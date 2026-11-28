@@ -154,18 +154,16 @@ describe("document head", () => {
     { url: "/nope", expected: ["/assets/NotFoundPage-N1.js"] }
   ]
   it.layer(Helpers.browserEnv, { buildPerTest: true })("rendered on the server", (it) => {
-    for (const { expected, url } of documents) {
-      it.effect(`server HTML for ${url} preloads exactly the active route's chunks`, () =>
-        Effect.gen(function* () {
-          const page = yield* Helpers.renderDocument(url, (route) => Assets.resolveRouteAssets(manifest, route._tag))
-          expect(preloads(page.html)).toEqual(expected)
-          // The entry is a module script in <head>, so it downloads in parallel with the preloads.
-          expect(page.html).toContain('<script type="module" crossorigin src="/assets/main-E1.js"></script>')
-          // Preloads and the entry precede the body: no entry -> page waterfall.
-          expect(page.html.indexOf("modulepreload")).toBeLessThan(page.html.indexOf("<body"))
-        })
-      )
-    }
+    it.effect.each(documents)("server HTML for $url preloads exactly the active route's chunks", ({ expected, url }) =>
+      Effect.gen(function* () {
+        const page = yield* Helpers.renderDocument(url, (route) => Assets.resolveRouteAssets(manifest, route._tag))
+        expect(preloads(page.html)).toEqual(expected)
+        // The entry is a module script in <head>, so it downloads in parallel with the preloads.
+        expect(page.html).toContain('<script type="module" crossorigin src="/assets/main-E1.js"></script>')
+        // Preloads and the entry precede the body: no entry -> page waterfall.
+        expect(page.html.indexOf("modulepreload")).toBeLessThan(page.html.indexOf("<body"))
+      })
+    )
   })
 
   it("renderAssetTags escapes attribute values", () => {
