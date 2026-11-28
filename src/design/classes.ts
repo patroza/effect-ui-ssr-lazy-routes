@@ -29,10 +29,5 @@ export const ui = {
   title: "text-2xl font-semibold tracking-tight",
   muted: "text-sm text-neutral-600 dark:text-neutral-400",
   stack: "flex flex-col gap-4",
-  row: "flex flex-wrap items-center gap-2",
-  dialogBackdrop:
-    "fixed inset-0 bg-black/40 transition-opacity data-starting-style:opacity-0 data-ending-style:opacity-0",
-  dialogViewport: "fixed inset-0 grid place-items-center p-4",
-  dialogPopup:
-    "w-full max-w-md rounded-lg border border-neutral-200 bg-white p-5 shadow-xl transition-all data-starting-style:scale-95 data-starting-style:opacity-0 data-ending-style:scale-95 data-ending-style:opacity-0 dark:border-neutral-800 dark:bg-neutral-900"
+  row: "flex flex-wrap items-center gap-2"
 } as const

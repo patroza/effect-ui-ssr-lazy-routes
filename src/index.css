@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+@theme {
+  --animate-indeterminate: indeterminate 1.4s ease-in-out infinite;
+
+  @keyframes indeterminate {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(350%);
+    }
+  }
+}
+
 @layer base {
   html {
     color-scheme: light dark;
@@ -7,5 +20,16 @@
 
   body {
     @apply mx-auto max-w-3xl bg-white p-4 text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100;
+  }
+
+  [popover],
+  dialog {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    overflow: visible;
+    inset: auto;
   }
 }

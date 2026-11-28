@@ -6,45 +6,12 @@ import * as CommandResult from "../../design/commandResult.ts"
 import * as FormControls from "../../form/FormControls.ts"
 import type * as SchemaForm from "../../form/SchemaForm.ts"
 import type * as I18n from "../../i18n/I18n.ts"
+import * as AlertDialogUi from "../../ui/alert-dialog.ts"
+import * as DialogUi from "../../ui/dialog.ts"
 import * as Warehouse from "../domain/Warehouse.ts"
 import * as WarehouseState from "../WarehouseState.ts"
 
 const blockReasons: ReadonlyArray<Warehouse.BlockReason> = ["maintenance", "damage", "inventory", "other"]
-
-const renderDialogFrame = <M>(
-  h: Html.H<M>,
-  parts: AlertDialogParts,
-  options: {
-    readonly popupTestId: string
-    readonly titleText: string
-    readonly descriptionText: string
-    readonly body?: View.Input<M, never>
-    readonly footer: View.Input<M, never>
-    readonly ready: boolean
-  }
-) =>
-  h.div.class("contents").children(
-    parts.portal(h.dialog)?.children(
-      parts.backdrop(h.div.class(Design.ui.dialogBackdrop)),
-      parts.viewport(h.div.class(Design.ui.dialogViewport)).children(
-        parts
-          .popup(h.div.class(Design.ui.dialogPopup))
-          .attr("data-testid", options.popupTestId)
-          .children(
-            options.ready
-              ? h.div
-                  .class(Design.ui.stack)
-                  .children(
-                    parts.title(h.h2.class("text-lg font-semibold")).children(options.titleText),
-                    parts.description(h.p.class(Design.ui.muted)).children(options.descriptionText),
-                    options.body,
-                    options.footer
-                  )
-              : undefined
-          )
-      )
-    )
-  )
 
 const confirmAlertDialog = <M>(
   h: Html.H<M>,
@@ -73,28 +40,40 @@ const confirmAlertDialog = <M>(
       RequestedClose: options.onClose,
       Settled: () => undefined
     },
-    view: (alert) =>
-      renderDialogFrame(h, alert, {
-        popupTestId: options.popupTestId,
-        titleText: options.titleText,
-        descriptionText: options.descriptionText,
-        ready: options.open,
-        body: undefined,
-        footer: h.div.class(`${Design.ui.row} justify-end`).children(
-          alert
-            .initialFocus(alert.close(h.button.class(Design.ui.button)))
-            .attr("data-testid", options.cancelTestId)
-            .children(options.cancelLabel),
-          CommandResult.commandButton(h, {
-            label: options.confirmLabel,
-            busyLabel: options.confirmBusyLabel,
-            busy: options.confirmBusy,
-            variant: options.confirmVariant,
-            testId: options.confirmTestId,
-            onPress: options.onConfirm
-          })
+    view: (alert: AlertDialogParts) =>
+      h.div.class("contents").children(
+        alert.portal(h.dialog)?.children(
+          AlertDialogUi.AlertDialogBackdrop(h, alert),
+          AlertDialogUi.AlertDialogViewport(h, alert).children(
+            AlertDialogUi.AlertDialogPopup(h, alert)
+              .attr("data-testid", options.popupTestId)
+              .children(
+                options.open
+                  ? AlertDialogUi.AlertDialogHeader(h).children(
+                      AlertDialogUi.AlertDialogTitle(h, alert).children(options.titleText),
+                      AlertDialogUi.AlertDialogDescription(h, alert).children(options.descriptionText)
+                    )
+                  : undefined,
+                options.open
+                  ? AlertDialogUi.AlertDialogFooter(h).children(
+                      alert
+                        .initialFocus(alert.close(h.button.class(Design.ui.button)))
+                        .attr("data-testid", options.cancelTestId)
+                        .children(options.cancelLabel),
+                      CommandResult.commandButton(h, {
+                        label: options.confirmLabel,
+                        busyLabel: options.confirmBusyLabel,
+                        busy: options.confirmBusy,
+                        variant: options.confirmVariant,
+                        testId: options.confirmTestId,
+                        onPress: options.onConfirm
+                      })
+                    )
+                  : undefined
+              )
+          )
         )
-      })
+      )
   })
 
 const modalDialog = <M>(
@@ -126,27 +105,40 @@ const modalDialog = <M>(
       Settled: () => undefined
     },
     view: (dialog) =>
-      renderDialogFrame(h, dialog, {
-        popupTestId: options.popupTestId,
-        titleText: options.titleText,
-        descriptionText: options.descriptionText,
-        ready: options.ready,
-        body: options.body,
-        footer: h.div.class(`${Design.ui.row} justify-end`).children(
-          dialog
-            .close(h.button.class(Design.ui.button))
-            .attr("data-testid", options.cancelTestId)
-            .children(options.cancelLabel),
-          CommandResult.commandButton(h, {
-            label: options.submitLabel,
-            busyLabel: options.submitBusyLabel,
-            busy: options.submitBusy,
-            variant: "primary",
-            testId: options.submitTestId,
-            onPress: options.onSubmit
-          })
+      h.div.class("contents").children(
+        dialog.portal(h.dialog)?.children(
+          DialogUi.DialogBackdrop(h, dialog),
+          DialogUi.DialogViewport(h, dialog).children(
+            DialogUi.DialogPopup(h, dialog)
+              .attr("data-testid", options.popupTestId)
+              .children(
+                options.ready
+                  ? DialogUi.DialogHeader(h).children(
+                      DialogUi.DialogTitle(h, dialog).children(options.titleText),
+                      DialogUi.DialogDescription(h, dialog).children(options.descriptionText)
+                    )
+                  : undefined,
+                options.ready ? options.body : undefined,
+                options.ready
+                  ? DialogUi.DialogFooter(h).children(
+                      dialog
+                        .close(h.button.class(Design.ui.button))
+                        .attr("data-testid", options.cancelTestId)
+                        .children(options.cancelLabel),
+                      CommandResult.commandButton(h, {
+                        label: options.submitLabel,
+                        busyLabel: options.submitBusyLabel,
+                        busy: options.submitBusy,
+                        variant: "primary",
+                        testId: options.submitTestId,
+                        onPress: options.onSubmit
+                      })
+                    )
+                  : undefined
+              )
+          )
         )
-      })
+      )
   })
 
 export const renderWarehouseDialogs = (

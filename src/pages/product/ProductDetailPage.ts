@@ -9,6 +9,7 @@ import * as BookmarkProduct from "../../product/commands/BookmarkProduct.ts"
 import * as Product from "../../product/domain/Product.ts"
 import * as GetProduct from "../../product/queries/GetProduct.ts"
 import * as Routes from "../../routes.ts"
+import * as DialogUi from "../../ui/dialog.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
 export const PRODUCT_DETAIL_PAGE_CHUNK = "SENTINEL:product-detail-page"
@@ -182,37 +183,35 @@ const ProductDetailPageNoDeps = Html.component({
                       .attr("data-testid", "inquiry-trigger")
                       .children("Ask a question"),
                     dialog.portal(h.dialog)?.children(
-                      dialog.backdrop(h.div.class(Design.ui.dialogBackdrop)),
-                      dialog.viewport(h.div.class(Design.ui.dialogViewport)).children(
-                        dialog
-                          .popup(h.div.class(Design.ui.dialogPopup))
+                      DialogUi.DialogBackdrop(h, dialog),
+                      DialogUi.DialogViewport(h, dialog).children(
+                        DialogUi.DialogPopup(h, dialog)
                           .attr("data-testid", "inquiry-popup")
                           .children(
-                            h.div.class(Design.ui.stack).children(
-                              dialog.title(h.h2.class("text-lg font-semibold")).children(`About ${product.name}`),
-                              dialog.description(h.p.class(Design.ui.muted)).children("We usually reply within a day."),
-                              Input(h, {
-                                props: { value: model.question },
-                                onUpdate: ({ value }) => ProductDetailPageMessage.UpdatedQuestion({ value })
-                              })
-                                .class(Design.ui.input)
-                                .attrs({
-                                  placeholder: "Your question",
-                                  "aria-label": "Your question",
-                                  "data-testid": "inquiry-input"
-                                }),
-                              h.div
-                                .class(`${Design.ui.row} justify-end`)
-                                .children(
-                                  dialog
-                                    .close(h.button.class(Design.ui.button))
-                                    .attr("data-testid", "inquiry-close")
-                                    .children("Cancel"),
-                                  Button(h, { onPress: ProductDetailPageMessage.ClickedSendQuestion() })
-                                    .class(Design.ui.button)
-                                    .attr("data-testid", "inquiry-send")
-                                    .children("Send")
-                                )
+                            DialogUi.DialogCloseIcon(h, dialog),
+                            DialogUi.DialogHeader(h).children(
+                              DialogUi.DialogTitle(h, dialog).children(`About ${product.name}`),
+                              DialogUi.DialogDescription(h, dialog).children("We usually reply within a day.")
+                            ),
+                            Input(h, {
+                              props: { value: model.question },
+                              onUpdate: ({ value }) => ProductDetailPageMessage.UpdatedQuestion({ value })
+                            })
+                              .class(Design.ui.input)
+                              .attrs({
+                                placeholder: "Your question",
+                                "aria-label": "Your question",
+                                "data-testid": "inquiry-input"
+                              }),
+                            DialogUi.DialogFooter(h).children(
+                              dialog
+                                .close(h.button.class(Design.ui.button))
+                                .attr("data-testid", "inquiry-close")
+                                .children("Cancel"),
+                              Button(h, { onPress: ProductDetailPageMessage.ClickedSendQuestion() })
+                                .class(Design.ui.button)
+                                .attr("data-testid", "inquiry-send")
+                                .children("Send")
                             )
                           )
                       )
