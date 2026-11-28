@@ -15,7 +15,7 @@ export const I18nConfig = Schema.Struct({
 })
 export type I18nConfig = typeof I18nConfig.Type
 
-export const LOCALE_CONFIGS: Readonly<Record<AppLocale, I18nConfig>> = {
+const LOCALE_CONFIGS: Readonly<Record<AppLocale, I18nConfig>> = {
   en: { locale: "en", bcp47: "en-US", currency: "USD", timeZone: "UTC" },
   de: { locale: "de", bcp47: "de-DE", currency: "EUR", timeZone: "Europe/Berlin" }
 }

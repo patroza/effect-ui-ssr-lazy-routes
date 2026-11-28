@@ -81,6 +81,15 @@ describe("i18n catalogs & template formatter", () => {
     }
   })
 
+  it.effect("provides the I18n service layer with German currency formatting", () =>
+    Effect.gen(function* () {
+      const i18n = yield* I18n.I18n
+      expect(i18n.config.locale).toBe("de")
+      expect(i18n.t("nav.warehouse")).toBe("Lager")
+      expect(i18n.formatCurrency(4800)).toContain("48,00")
+    }).pipe(Effect.provide(I18n.I18n.layer("de")))
+  )
+
   it("localizes Warehouse domain & transport errors in EN and DE", () => {
     const en = I18n.translatorFor("en").t
     const de = I18n.translatorFor("de").t

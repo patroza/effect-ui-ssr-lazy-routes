@@ -11,9 +11,9 @@ import * as GetProduct from "../../product/queries/GetProduct.ts"
 import * as Routes from "../../routes.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
-export const PRODUCT_DETAIL_PAGE_CHUNK = "SENTINEL:product-detail-page"
+const PRODUCT_DETAIL_PAGE_CHUNK = "SENTINEL:product-detail-page"
 
-export const ProductDetailPageMessage = UiSchema.TaggedEnum({
+const ProductDetailPageMessage = UiSchema.TaggedEnum({
   ClickedMoreQuantity: {},
   ClickedLessQuantity: {},
   ClickedBookmark: {},

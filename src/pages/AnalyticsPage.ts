@@ -9,9 +9,9 @@ import * as Design from "../design/classes.ts"
 import * as QueryResult from "../design/queryResult.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
-export const ANALYTICS_PAGE_CHUNK = "SENTINEL:analytics-page"
+const ANALYTICS_PAGE_CHUNK = "SENTINEL:analytics-page"
 
-export const AnalyticsPageMessage = UiSchema.TaggedEnum({
+const AnalyticsPageMessage = UiSchema.TaggedEnum({
   SelectedMetricTab: { metric: Analytics.Metric },
   ToggledAbout: { open: Schema.Boolean },
   ClickedRefresh: {}
