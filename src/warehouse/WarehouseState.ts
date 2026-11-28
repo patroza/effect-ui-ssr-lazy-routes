@@ -820,7 +820,6 @@ export const updateWarehouseModel = WarehouseConsoleSpec.update(($, message) => 
           intent: intentOfAction(prompt.pending),
           error: new Warehouse.WarehouseCommandFailure({
             error: new Warehouse.SessionExpiredError({ action: t("warehouse.sessionDialogDeclined") }),
-            transportMessage: null,
             failureSpan: prompt.originSpan
           }),
           originSpan: prompt.originSpan,

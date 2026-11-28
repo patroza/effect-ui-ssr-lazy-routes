@@ -110,6 +110,7 @@ const serverOnlyNeedles: ReadonlyArray<readonly [needle: string, label: string]>
   ["effect-ui-ssr-lazy-routes/server/services/StatusStore", "server StatusStore"],
   ["effect-ui-ssr-lazy-routes/server/services/OrderStore", "server OrderStore"],
   ["effect-ui-ssr-lazy-routes/server/services/WarehouseStore", "server WarehouseStore"],
+  ["effect-ui-ssr-lazy-routes/server/rpcInstrumentation/RpcInstrumentation", "server RpcInstrumentation"],
   ["Ceramic pour-over", "server seed catalog dataset"],
   ["effect/rpc/RpcServer", "RpcServer runtime"]
 ]

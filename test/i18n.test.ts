@@ -8,7 +8,6 @@ import * as DeCatalog from "../src/i18n/catalogs/de.ts"
 import * as EnCatalog from "../src/i18n/catalogs/en.ts"
 import * as Messages from "../src/i18n/messages.ts"
 import * as Order from "../src/order/domain/Order.ts"
-import * as ApiError from "../src/rpc/domain/ApiError.ts"
 import * as Warehouse from "../src/warehouse/domain/Warehouse.ts"
 import * as Helpers from "./helpers.ts"
 import * as TestRpc from "./support/rpc.ts"
@@ -92,7 +91,6 @@ describe("i18n catalogs & template formatter", () => {
         resourceType: "packing-station",
         resourceName: "Bay-A2"
       }),
-      transportMessage: null,
       failureSpan: null
     })
     expect(Warehouse.describeWarehouseFailure(en, conflictFailure)).toContain("Packing station: Bay-A2")
@@ -100,18 +98,21 @@ describe("i18n catalogs & template formatter", () => {
 
     const expiredFailure = new Warehouse.WarehouseCommandFailure({
       error: new Warehouse.SessionExpiredError({ action: "blockCart" }),
-      transportMessage: null,
       failureSpan: null
     })
     expect(Warehouse.describeWarehouseFailure(en, expiredFailure)).toContain("Session expired")
     expect(Warehouse.describeWarehouseFailure(de, expiredFailure)).toContain("Sitzung abgelaufen")
 
     const transportFailure = new Warehouse.WarehouseCommandFailure({
-      error: new ApiError.ApiError({ message: "ECONNRESET" }),
-      transportMessage: "ECONNRESET",
+      error: new Warehouse.WarehouseTransportError({ reason: "unavailable" }),
       failureSpan: null
     })
-    expect(Warehouse.describeWarehouseFailure(de, transportFailure)).toContain("RPC-Verbindungsfehler")
+    const renderedEn = Warehouse.describeWarehouseFailure(en, transportFailure)
+    const renderedDe = Warehouse.describeWarehouseFailure(de, transportFailure)
+    expect(renderedEn).toContain("Warehouse RPC transport error")
+    expect(renderedDe).toContain("RPC-Verbindungsfehler")
+    expect(renderedEn).not.toContain("ECONNRESET")
+    expect(renderedDe).not.toContain("ECONNRESET")
   })
 })
 

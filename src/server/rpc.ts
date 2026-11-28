@@ -21,6 +21,7 @@ import * as ProductHandlers from "./handlers/ProductHandlers.ts"
 import * as SearchHandlers from "./handlers/SearchHandlers.ts"
 import * as StatusHandlers from "./handlers/StatusHandlers.ts"
 import * as WarehouseHandlers from "./handlers/WarehouseHandlers.ts"
+import * as RpcInstrumentation from "./rpcInstrumentation.ts"
 import * as AnalyticsStore from "./services/AnalyticsStore.ts"
 import * as BookmarkStore from "./services/BookmarkStore.ts"
 import * as CatalogStore from "./services/CatalogStore.ts"
@@ -59,13 +60,37 @@ export const RPC_PATHS = [
 
 /** Composed HTTP POST `/rpc/{search,product,analytics,status,order,warehouse}` route layer using JSON serialization. */
 export const RpcHttpLayer = Layer.mergeAll(
-  RpcServer.layerHttp({ group: SearchRpcs.SearchRpcs, path: RPC_PATHS[0], protocol: "http" }),
-  RpcServer.layerHttp({ group: ProductRpcs.ProductRpcs, path: RPC_PATHS[1], protocol: "http" }),
-  RpcServer.layerHttp({ group: AnalyticsRpcs.AnalyticsRpcs, path: RPC_PATHS[2], protocol: "http" }),
-  RpcServer.layerHttp({ group: StatusRpcs.StatusRpcs, path: RPC_PATHS[3], protocol: "http" }),
-  RpcServer.layerHttp({ group: OrderRpcs.OrderRpcs, path: RPC_PATHS[4], protocol: "http" }),
-  RpcServer.layerHttp({ group: WarehouseRpcs.WarehouseRpcs, path: RPC_PATHS[5], protocol: "http" })
-).pipe(Layer.provide(RpcSerialization.layerJson))
+  RpcServer.layerHttp({
+    group: SearchRpcs.SearchRpcs.middleware(RpcInstrumentation.RpcInstrumentation),
+    path: RPC_PATHS[0],
+    protocol: "http"
+  }),
+  RpcServer.layerHttp({
+    group: ProductRpcs.ProductRpcs.middleware(RpcInstrumentation.RpcInstrumentation),
+    path: RPC_PATHS[1],
+    protocol: "http"
+  }),
+  RpcServer.layerHttp({
+    group: AnalyticsRpcs.AnalyticsRpcs.middleware(RpcInstrumentation.RpcInstrumentation),
+    path: RPC_PATHS[2],
+    protocol: "http"
+  }),
+  RpcServer.layerHttp({
+    group: StatusRpcs.StatusRpcs.middleware(RpcInstrumentation.RpcInstrumentation),
+    path: RPC_PATHS[3],
+    protocol: "http"
+  }),
+  RpcServer.layerHttp({
+    group: OrderRpcs.OrderRpcs.middleware(RpcInstrumentation.RpcInstrumentation),
+    path: RPC_PATHS[4],
+    protocol: "http"
+  }),
+  RpcServer.layerHttp({
+    group: WarehouseRpcs.WarehouseRpcs.middleware(RpcInstrumentation.RpcInstrumentation),
+    path: RPC_PATHS[5],
+    protocol: "http"
+  })
+).pipe(Layer.provide(RpcInstrumentation.RpcInstrumentation.layer), Layer.provide(RpcSerialization.layerJson))
 
 /**
  * Builds an in-process `HttpClient` that dispatches requests directly to the
