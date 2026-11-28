@@ -1,7 +1,7 @@
 import { Head, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Button } from "@effect/ui-kit"
 import { Schema } from "effect"
+import { Button } from "#ui/button"
 import * as Design from "../design/classes.ts"
 import * as Routes from "../routes.ts"
 
@@ -47,8 +47,7 @@ export const HomePage = Html.component({
             .children("Place custom order")
         ),
         h.div.children(
-          Button(h, { onPress: HomePageMessage.ClickedCounter() })
-            .class(Design.ui.button)
+          Button(h, { variant: "outline", onPress: HomePageMessage.ClickedCounter() })
             .attr("data-testid", "home-counter")
             .children(`Clicked ${model.clicks} times`)
         )

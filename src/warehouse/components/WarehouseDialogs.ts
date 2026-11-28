@@ -1,7 +1,26 @@
 import type { View } from "@effect/ui"
 import type { Html } from "@effect/ui/html"
-import { AlertDialog, type AlertDialogParts, Button, Dialog, Input } from "@effect/ui-kit"
-import * as Design from "../../design/classes.ts"
+import { AlertDialog, type AlertDialogParts, Dialog } from "@effect/ui-kit"
+import {
+  AlertDialogBackdrop,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+  AlertDialogViewport
+} from "#ui/alert-dialog"
+import { Button, buttonVariants } from "#ui/button"
+import {
+  DialogBackdrop,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+  DialogViewport
+} from "#ui/dialog"
+import { Input } from "#ui/input"
 import * as CommandResult from "../../design/commandResult.ts"
 import * as FormControls from "../../form/FormControls.ts"
 import type * as SchemaForm from "../../form/SchemaForm.ts"
@@ -10,41 +29,6 @@ import * as Warehouse from "../domain/Warehouse.ts"
 import * as WarehouseState from "../WarehouseState.ts"
 
 const blockReasons: ReadonlyArray<Warehouse.BlockReason> = ["maintenance", "damage", "inventory", "other"]
-
-const renderDialogFrame = <M>(
-  h: Html.H<M>,
-  parts: AlertDialogParts,
-  options: {
-    readonly popupTestId: string
-    readonly titleText: string
-    readonly descriptionText: string
-    readonly body?: View.Input<M, never>
-    readonly footer: View.Input<M, never>
-    readonly ready: boolean
-  }
-) =>
-  h.div.class("contents").children(
-    parts.portal(h.dialog)?.children(
-      parts.backdrop(h.div.class(Design.ui.dialogBackdrop)),
-      parts.viewport(h.div.class(Design.ui.dialogViewport)).children(
-        parts
-          .popup(h.div.class(Design.ui.dialogPopup))
-          .attr("data-testid", options.popupTestId)
-          .children(
-            options.ready
-              ? h.div
-                  .class(Design.ui.stack)
-                  .children(
-                    parts.title(h.h2.class("text-lg font-semibold")).children(options.titleText),
-                    parts.description(h.p.class(Design.ui.muted)).children(options.descriptionText),
-                    options.body,
-                    options.footer
-                  )
-              : undefined
-          )
-      )
-    )
-  )
 
 const confirmAlertDialog = <M>(
   h: Html.H<M>,
@@ -73,28 +57,40 @@ const confirmAlertDialog = <M>(
       RequestedClose: options.onClose,
       Settled: () => undefined
     },
-    view: (alert) =>
-      renderDialogFrame(h, alert, {
-        popupTestId: options.popupTestId,
-        titleText: options.titleText,
-        descriptionText: options.descriptionText,
-        ready: options.open,
-        body: undefined,
-        footer: h.div.class(`${Design.ui.row} justify-end`).children(
-          alert
-            .initialFocus(alert.close(h.button.class(Design.ui.button)))
-            .attr("data-testid", options.cancelTestId)
-            .children(options.cancelLabel),
-          CommandResult.commandButton(h, {
-            label: options.confirmLabel,
-            busyLabel: options.confirmBusyLabel,
-            busy: options.confirmBusy,
-            variant: options.confirmVariant,
-            testId: options.confirmTestId,
-            onPress: options.onConfirm
-          })
+    view: (alert: AlertDialogParts) =>
+      h.div.class("contents").children(
+        alert.portal(h.dialog)?.children(
+          AlertDialogBackdrop(h, alert),
+          AlertDialogViewport(h, alert).children(
+            AlertDialogPopup(h, alert)
+              .attr("data-testid", options.popupTestId)
+              .children(
+                options.open
+                  ? AlertDialogHeader(h).children(
+                      AlertDialogTitle(h, alert).children(options.titleText),
+                      AlertDialogDescription(h, alert).children(options.descriptionText)
+                    )
+                  : undefined,
+                options.open
+                  ? AlertDialogFooter(h).children(
+                      alert
+                        .initialFocus(alert.close(h.button.class(buttonVariants({ variant: "outline" }))))
+                        .attr("data-testid", options.cancelTestId)
+                        .children(options.cancelLabel),
+                      CommandResult.commandButton(h, {
+                        label: options.confirmLabel,
+                        busyLabel: options.confirmBusyLabel,
+                        busy: options.confirmBusy,
+                        variant: options.confirmVariant,
+                        testId: options.confirmTestId,
+                        onPress: options.onConfirm
+                      })
+                    )
+                  : undefined
+              )
+          )
         )
-      })
+      )
   })
 
 const modalDialog = <M>(
@@ -126,27 +122,40 @@ const modalDialog = <M>(
       Settled: () => undefined
     },
     view: (dialog) =>
-      renderDialogFrame(h, dialog, {
-        popupTestId: options.popupTestId,
-        titleText: options.titleText,
-        descriptionText: options.descriptionText,
-        ready: options.ready,
-        body: options.body,
-        footer: h.div.class(`${Design.ui.row} justify-end`).children(
-          dialog
-            .close(h.button.class(Design.ui.button))
-            .attr("data-testid", options.cancelTestId)
-            .children(options.cancelLabel),
-          CommandResult.commandButton(h, {
-            label: options.submitLabel,
-            busyLabel: options.submitBusyLabel,
-            busy: options.submitBusy,
-            variant: "primary",
-            testId: options.submitTestId,
-            onPress: options.onSubmit
-          })
+      h.div.class("contents").children(
+        dialog.portal(h.dialog)?.children(
+          DialogBackdrop(h, dialog),
+          DialogViewport(h, dialog).children(
+            DialogPopup(h, dialog)
+              .attr("data-testid", options.popupTestId)
+              .children(
+                options.ready
+                  ? DialogHeader(h).children(
+                      DialogTitle(h, dialog).children(options.titleText),
+                      DialogDescription(h, dialog).children(options.descriptionText)
+                    )
+                  : undefined,
+                options.ready ? options.body : undefined,
+                options.ready
+                  ? DialogFooter(h).children(
+                      dialog
+                        .close(h.button.class(buttonVariants({ variant: "outline" })))
+                        .attr("data-testid", options.cancelTestId)
+                        .children(options.cancelLabel),
+                      CommandResult.commandButton(h, {
+                        label: options.submitLabel,
+                        busyLabel: options.submitBusyLabel,
+                        busy: options.submitBusy,
+                        variant: "primary",
+                        testId: options.submitTestId,
+                        onPress: options.onSubmit
+                      })
+                    )
+                  : undefined
+              )
+          )
         )
-      })
+      )
   })
 
 export const renderWarehouseDialogs = (
@@ -185,14 +194,14 @@ export const renderWarehouseDialogs = (
                     span: blockDialogModel.failure.failureSpan
                   }),
               h.div.class("flex flex-col gap-1.5").children(
-                h.span.class("text-sm font-medium").children(blockForm.labelFor("reason")),
+                h.span.class("text-[13px] font-medium").children(blockForm.labelFor("reason")),
                 h.div.class("flex flex-wrap gap-2").children(
                   blockReasons.map((reason) =>
                     Button(h, {
+                      variant: blockDialogModel.form.values.reason === reason ? "default" : "outline",
                       onPress: WarehouseState.WarehouseMessage.ChangedBlockReason({ reason })
                     })
                       .key(reason)
-                      .class(Design.ui.button)
                       .attr("aria-pressed", blockDialogModel.form.values.reason === reason ? "true" : "false")
                       .attr("data-testid", `block-reason-${reason}`)
                       .children(Warehouse.blockReasonLabel(t, reason))
@@ -291,21 +300,19 @@ export const renderWarehouseDialogs = (
           : h.div.class("flex flex-col gap-1.5").children(
               h.label
                 .attr("for", "dispatch-audit-note")
-                .class("text-sm font-medium")
+                .class("text-[13px] font-medium")
                 .children(t("warehouse.dispatchNoteLabel")),
               Input(h, {
                 props: { value: dispatchModalModel.auditNote },
                 onUpdate: ({ value }) => WarehouseState.WarehouseMessage.ChangedDispatchAuditNote({ note: value })
-              })
-                .class(Design.ui.input)
-                .attrs({
-                  id: "dispatch-audit-note",
-                  placeholder: t("warehouse.dispatchNotePlaceholder"),
-                  "data-testid": "dispatch-audit-input"
-                }),
+              }).attrs({
+                id: "dispatch-audit-note",
+                placeholder: t("warehouse.dispatchNotePlaceholder"),
+                "data-testid": "dispatch-audit-input"
+              }),
               dispatchModalModel.noteError
                 ? h.p
-                    .class("text-sm font-medium text-red-600 dark:text-red-400")
+                    .class("text-xs text-destructive")
                     .attr("data-testid", "dispatch-audit-error")
                     .children(t("warehouse.dispatchNoteError"))
                 : undefined

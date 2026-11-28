@@ -1,7 +1,18 @@
 import { Component, Head } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Button, ToastProvider } from "@effect/ui-kit"
+import { ToastProvider } from "@effect/ui-kit"
 import { Layer, Schema } from "effect"
+import { Button } from "#ui/button"
+import {
+  Toast,
+  ToastClose,
+  ToastContent,
+  ToastDescription,
+  ToastIcon,
+  ToastText,
+  ToastTitle,
+  ToastViewport
+} from "#ui/toast"
 import * as Design from "../design/classes.ts"
 import * as CommandResult from "../design/commandResult.ts"
 import * as QueryResult from "../design/queryResult.ts"
@@ -20,13 +31,13 @@ export const WarehouseMessage = WarehouseState.WarehouseMessage
 const statusBadgeClass = (status: Warehouse.CartStatus): string => {
   switch (status) {
     case "Free":
-      return "rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+      return "rounded-full border border-success/30 bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success"
     case "InUse":
-      return "rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+      return "rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-xs font-medium text-warning"
     case "Blocked":
-      return "rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-950/60 dark:text-red-300"
+      return "rounded-full border border-destructive/30 bg-destructive/10 px-2.5 py-0.5 text-xs font-medium text-destructive"
     case "Dispatched":
-      return "rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
+      return "rounded-full bg-brand-wash px-2.5 py-0.5 text-xs font-medium text-brand"
   }
 }
 
@@ -43,13 +54,6 @@ const cartStatusLabel = (t: I18n.TranslateFn, status: Warehouse.CartStatus): str
   }
 }
 
-const toggleButtonClass = (active: boolean): string =>
-  `inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium transition ${
-    active
-      ? "border-sky-600 bg-sky-50 text-sky-900 dark:border-sky-400 dark:bg-sky-950/40 dark:text-sky-200"
-      : "border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
-  }`
-
 const renderTracePanel = (
   h: Html.H<WarehouseState.WarehouseMsg>,
   model: WarehouseState.WarehouseModel,
@@ -62,7 +66,7 @@ const renderTracePanel = (
       h.h2.class("text-sm font-semibold").children(t("warehouse.tracePanelTitle")),
       model.lastOriginSpan === null && model.lastExecutionSpan === null
         ? h.p.class(Design.ui.muted).children(t("warehouse.traceEmpty"))
-        : h.div.class("flex flex-col gap-1 font-mono text-xs text-neutral-600 dark:text-neutral-400").children(
+        : h.div.class("flex flex-col gap-1 font-mono text-xs text-muted-foreground").children(
             model.lastOriginSpan === null
               ? undefined
               : h.div.attr("data-testid", "trace-origin-span").children(
@@ -101,27 +105,31 @@ const WarehouseConsoleNoDeps = WarehouseState.WarehouseConsoleSpec.make({
         h.div.children(
           h.h1.class(Design.ui.title).children(t("warehouse.heading")),
           h.p.class(Design.ui.muted).children(t("warehouse.subtitle")),
-          h.p
-            .class("mt-1 font-mono text-xs text-neutral-500 dark:text-neutral-400")
-            .children(t("warehouse.patternSummary"))
+          h.p.class("mt-1 font-mono text-xs text-muted-foreground").children(t("warehouse.patternSummary"))
         ),
 
         h.div
           .class(`${Design.ui.card} flex flex-wrap items-center gap-2`)
           .attr("data-testid", "warehouse-controls")
           .children(
-            Button(h, { onPress: WarehouseMessage.ToggledSimSessionExpired() })
-              .class(toggleButtonClass(model.simSessionExpired))
+            Button(h, {
+              variant: model.simSessionExpired ? "brand" : "outline",
+              onPress: WarehouseMessage.ToggledSimSessionExpired()
+            })
               .attr("aria-pressed", model.simSessionExpired ? "true" : "false")
               .attr("data-testid", "sim-session-expired")
               .children(t("warehouse.simSessionExpired")),
-            Button(h, { onPress: WarehouseMessage.ToggledSimCheckoutConflict() })
-              .class(toggleButtonClass(model.simCheckoutConflict))
+            Button(h, {
+              variant: model.simCheckoutConflict ? "brand" : "outline",
+              onPress: WarehouseMessage.ToggledSimCheckoutConflict()
+            })
               .attr("aria-pressed", model.simCheckoutConflict ? "true" : "false")
               .attr("data-testid", "sim-checkout-conflict")
               .children(t("warehouse.simCheckoutConflict")),
-            Button(h, { onPress: WarehouseMessage.ToggledOptInToasts() })
-              .class(toggleButtonClass(model.toastsEnabled))
+            Button(h, {
+              variant: model.toastsEnabled ? "brand" : "outline",
+              onPress: WarehouseMessage.ToggledOptInToasts()
+            })
               .attr("aria-pressed", model.toastsEnabled ? "true" : "false")
               .attr("data-testid", "toggle-opt-in-toasts")
               .children(t("warehouse.optInToasts"))
@@ -150,12 +158,10 @@ const WarehouseConsoleNoDeps = WarehouseState.WarehouseConsoleSpec.make({
               .class(`${Design.ui.cardSuccess} flex items-center justify-between gap-3`)
               .attrs({ role: "status", "data-testid": "warehouse-success-banner" })
               .children(
-                h.span
-                  .class("text-sm font-medium text-emerald-800 dark:text-emerald-300")
-                  .children(model.flow.result.message),
-                Button(h, { onPress: WarehouseMessage.ClickedDismissBanner() })
-                  .class(Design.ui.button)
-                  .children(t("common.dismiss"))
+                h.span.class("text-sm font-medium text-success").children(model.flow.result.message),
+                Button(h, { variant: "outline", onPress: WarehouseMessage.ClickedDismissBanner() }).children(
+                  t("common.dismiss")
+                )
               )
           : undefined,
 
@@ -307,42 +313,22 @@ const WarehousePageNoDeps = Html.component({
           view: (toastProvider) =>
             h.div(
               WarehouseConsoleNoDeps(h, {}),
-              toastProvider
-                .viewport(h.div.class("fixed right-4 bottom-16 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2"))
+              ToastViewport(h, toastProvider, { position: "bottom-right", class: "bottom-16 z-50" })
                 .attr("aria-label", t("common.notifications"))
                 .attr("data-testid", "warehouse-toast-viewport")
                 .children(
                   toastProvider.toasts.map((toast) =>
-                    toastProvider
-                      .root({
-                        element: h.div.class(
-                          "rounded-lg border border-neutral-200 bg-white p-3 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
-                        ),
-                        toast
-                      })
+                    Toast(h, toastProvider, toast)
                       .attr("data-testid", `warehouse-toast-${toast.id}`)
                       .children(
-                        h.div
-                          .class("flex items-start justify-between gap-2")
-                          .children(
-                            h.div
-                              .class("flex flex-col gap-0.5")
-                              .children(
-                                toast.title === undefined
-                                  ? undefined
-                                  : toastProvider
-                                      .title({ element: h.strong.class("text-sm font-semibold"), toast })
-                                      .children(toast.title),
-                                toast.description === undefined
-                                  ? undefined
-                                  : toastProvider
-                                      .description({ element: h.p.class(Design.ui.muted), toast })
-                                      .children(toast.description)
-                              ),
-                            toastProvider
-                              .close({ element: h.button.class(Design.ui.button), toast })
-                              .children(t("common.dismiss"))
-                          )
+                        ToastContent(h, toastProvider, toast).children(
+                          ToastIcon(h, toast),
+                          ToastText(h).children(
+                            toast.title === undefined ? undefined : ToastTitle(h, toastProvider, toast),
+                            toast.description === undefined ? undefined : ToastDescription(h, toastProvider, toast)
+                          ),
+                          ToastClose(h, toastProvider, toast).attr("aria-label", t("common.dismiss"))
+                        )
                       )
                   )
                 )

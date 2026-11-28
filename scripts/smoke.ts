@@ -140,7 +140,7 @@ try {
         problems.push(`${href} content-type ${sheetRes.headers.get("content-type")}`)
       else if (!(sheetRes.headers.get("cache-control") ?? "").includes("immutable"))
         problems.push(`${href} not immutable`)
-      else if (/\/main-.*\.css$/.test(href) && !cssBody.includes("bg-neutral-900"))
+      else if (/\/main-.*\.css$/.test(href) && !cssBody.includes("bg-primary"))
         problems.push(`${href} missing Tailwind utilities`)
       else if (/AnalyticsPage-.*\.css$/.test(href) && !cssBody.includes("analytics-chart"))
         problems.push(`${href} missing .analytics-chart`)

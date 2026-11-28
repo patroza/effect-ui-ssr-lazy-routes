@@ -1,7 +1,10 @@
 import { Command, Component, Head, Router } from "@effect/ui"
 import { Html, HtmlCommand } from "@effect/ui/html"
-import { Button, Fieldset, Form } from "@effect/ui-kit"
+import { Fieldset, Form } from "@effect/ui-kit"
 import { Array as Arr, Layer, Option, Schema } from "effect"
+import { Button } from "#ui/button"
+import { FieldsetLegend, FieldsetRoot } from "#ui/fieldset"
+import { FormRoot } from "#ui/form"
 import * as Design from "../design/classes.ts"
 import * as FormControls from "../form/FormControls.ts"
 import type * as SchemaForm from "../form/SchemaForm.ts"
@@ -265,16 +268,16 @@ const OrderFormContentNoDeps = Html.component({
               .key("dirty-badge")
               .class(
                 derived.isDirty
-                  ? "rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-                  : "rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
+                  ? "rounded-full border border-warning/40 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning"
+                  : "rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground"
               )
               .attr("data-testid", "form-dirty-badge")
               .children(derived.isDirty ? t("order.dirtyUnsaved") : t("order.dirtyClean")),
             Button(h, {
+              variant: "outline",
               props: { disabled: isSubmitting },
               onPress: OrderFormPageMessage.ClickedReset()
             })
-              .class(Design.ui.button)
               .attr("data-testid", "order-reset")
               .children(t("order.reset"))
           )
@@ -289,14 +292,13 @@ const OrderFormContentNoDeps = Html.component({
                   .class(`${Design.ui.row} justify-between`)
                   .children(
                     h.h2
-                      .class("text-lg font-semibold text-emerald-800 dark:text-emerald-300")
+                      .class("text-lg font-semibold text-success")
                       .children(t("order.receiptTitle", { orderId: model.submit.receipt.orderId })),
-                    Button(h, { onPress: OrderFormPageMessage.ClickedReset() })
-                      .class(Design.ui.button)
+                    Button(h, { variant: "outline", onPress: OrderFormPageMessage.ClickedReset() })
                       .attr("data-testid", "order-start-another")
                       .children(t("order.reset"))
                   ),
-                h.p.class("text-sm text-emerald-800 dark:text-emerald-300").children(
+                h.p.class("text-sm text-success").children(
                   t("order.receiptBody", {
                     projectCode: model.submit.receipt.projectCode,
                     total: formatCurrency(model.submit.receipt.totalCents),
@@ -313,7 +315,7 @@ const OrderFormContentNoDeps = Html.component({
               .attrs({ role: "alert", tabindex: "-1", "data-testid": "submit-error" })
               .children(
                 h.h2
-                  .class("text-sm font-semibold text-red-700 dark:text-red-300")
+                  .class("text-sm font-semibold text-destructive")
                   .children(t("order.submitFailed", { message: model.submit.message }))
               )
           : undefined,
@@ -322,57 +324,61 @@ const OrderFormContentNoDeps = Html.component({
             Submitted: () => OrderFormPageMessage.SubmittedForm()
           },
           view: (form) =>
-            form.root(h.form.key("order-form").class(Design.ui.stack)).children(
-              Fieldset(h, {
-                props: { disabled: isSubmitting },
-                view: (fieldset) =>
-                  fieldset.root(h.fieldset.class(Design.ui.stack)).children(
-                    OrderSections.renderDetailsSection(
-                      h,
-                      fieldset.legend(h.div.class("text-lg font-semibold")).children(t("order.sectionDetails")),
-                      controller,
-                      values,
-                      derived,
-                      h.queries.codeCheck,
-                      h.queries.promoCheck,
-                      isSubmitting,
-                      t
-                    ),
-                    OrderSections.renderBillingSection(
-                      h,
-                      controller,
-                      values,
-                      derived,
-                      model.termsSelectOpen,
-                      isSubmitting,
-                      t
-                    ),
-                    OrderSections.renderLineItemsSection(h, controller, values, derived, isSubmitting, i18n),
-                    OrderSections.renderFulfillmentSection(h, controller, values, derived, isSubmitting, t),
-                    OrderSections.renderSummaryCard(h, totals, i18n),
-                    FormControls.errorSummary(h, {
-                      title: t("validation.fixErrorsTitle"),
-                      errors: derived.visibleErrors,
-                      labelFor: controller.labelFor,
-                      summaryRef: model.submit._tag === "Failed" ? undefined : ErrorSummaryRef
-                    }),
-                    h.div.class(`${Design.ui.row} justify-end`).children(
-                      Button(h, {
-                        props: { type: "submit", disabled: isSubmitting }
-                      })
-                        .class(Design.ui.button)
-                        .attr("data-testid", "order-submit")
-                        .children(
-                          isSubmitting
-                            ? t("order.submitting")
-                            : derived.isValidating
-                              ? t("common.loading")
-                              : t("order.submit")
-                        )
+            FormRoot(h, form, { class: `${Design.ui.stack} max-w-none` })
+              .key("order-form")
+              .children(
+                Fieldset(h, {
+                  props: { disabled: isSubmitting },
+                  view: (fieldset) =>
+                    FieldsetRoot(h, fieldset, { class: Design.ui.stack }).children(
+                      OrderSections.renderDetailsSection(
+                        h,
+                        FieldsetLegend(h, fieldset, { class: "text-lg font-semibold" }).children(
+                          t("order.sectionDetails")
+                        ),
+                        controller,
+                        values,
+                        derived,
+                        h.queries.codeCheck,
+                        h.queries.promoCheck,
+                        isSubmitting,
+                        t
+                      ),
+                      OrderSections.renderBillingSection(
+                        h,
+                        controller,
+                        values,
+                        derived,
+                        model.termsSelectOpen,
+                        isSubmitting,
+                        t
+                      ),
+                      OrderSections.renderLineItemsSection(h, controller, values, derived, isSubmitting, i18n),
+                      OrderSections.renderFulfillmentSection(h, controller, values, derived, isSubmitting, t),
+                      OrderSections.renderSummaryCard(h, totals, i18n),
+                      FormControls.errorSummary(h, {
+                        title: t("validation.fixErrorsTitle"),
+                        errors: derived.visibleErrors,
+                        labelFor: controller.labelFor,
+                        summaryRef: model.submit._tag === "Failed" ? undefined : ErrorSummaryRef
+                      }),
+                      h.div.class(`${Design.ui.row} justify-end`).children(
+                        Button(h, {
+                          variant: "default",
+                          props: { type: "submit", disabled: isSubmitting }
+                        })
+                          .attr("data-testid", "order-submit")
+                          .children(
+                            isSubmitting
+                              ? t("order.submitting")
+                              : derived.isValidating
+                                ? t("common.loading")
+                                : t("order.submit")
+                          )
+                      )
                     )
-                  )
-              })
-            )
+                })
+              )
         })
       )
   }

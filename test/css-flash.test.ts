@@ -629,8 +629,8 @@ describe("CSS zero-flash contract (dev SSR, HMR CSS cache isolation, and real Ch
       const directMainCss = await directMainRes.text()
       expect(directMainRes.status).toBe(200)
       expect(directMainRes.headers.get("content-type") ?? "").toMatch(/^text\/css/)
-      expect(directMainCss).toContain("bg-neutral-900")
-      expect(directMainCss).toContain("border-neutral-300")
+      expect(directMainCss).toContain("bg-primary")
+      expect(directMainCss).toContain("border-input")
       expect(directMainCss).not.toContain("__vite__updateStyle")
 
       const directChartRes = await fetch(`${dev.url}/src/analytics/components/chart.css?direct`, {

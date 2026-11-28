@@ -38,49 +38,45 @@ export const createShell =
       { code: "de", label: t("nav.localeDe") }
     ]
     return h.div(
-      h.header
-        .class(
-          "flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 pb-3 dark:border-neutral-800"
-        )
-        .children(
-          h.nav
-            .class("flex flex-wrap gap-1")
-            .attr("aria-label", t("nav.primaryAria"))
-            .children(
-              links.map((link) =>
-                h.a
-                  .key(link.tag)
-                  .class(Design.ui.navLink)
-                  .attr("href", link.href)
-                  .attr("aria-current", isCurrent(link.tag, route) ? "page" : undefined)
-                  .children(link.label)
-              )
-            ),
-          h.div
-            .class("flex items-center gap-1")
-            .attr("role", "group")
-            .attr("aria-label", t("nav.languageLabel"))
-            .attr("data-testid", "locale-switcher")
-            .attr("data-i18n-chunk", I18n.getChunkMarker(locale))
-            .children(
-              locales.map((item) =>
-                h.button
-                  .key(`locale-${item.code}`)
-                  .attr("type", "submit")
-                  .attr("form", `locale-form-${item.code}`)
-                  .attr("data-testid", `locale-switch-${item.code}`)
-                  .attr("aria-pressed", locale === item.code ? "true" : "false")
-                  .class(
-                    `cursor-pointer rounded-md border px-2 py-1 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 dark:focus-visible:outline-sky-400 ${
-                      locale === item.code
-                        ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
-                        : "border-neutral-300 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                    }`
-                  )
-                  .children(item.label)
-              )
+      h.header.class("flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3").children(
+        h.nav
+          .class("flex flex-wrap gap-1")
+          .attr("aria-label", t("nav.primaryAria"))
+          .children(
+            links.map((link) =>
+              h.a
+                .key(link.tag)
+                .class(Design.ui.navLink)
+                .attr("href", link.href)
+                .attr("aria-current", isCurrent(link.tag, route) ? "page" : undefined)
+                .children(link.label)
             )
-        ),
+          ),
+        h.div
+          .class("flex items-center gap-1")
+          .attr("role", "group")
+          .attr("aria-label", t("nav.languageLabel"))
+          .attr("data-testid", "locale-switcher")
+          .attr("data-i18n-chunk", I18n.getChunkMarker(locale))
+          .children(
+            locales.map((item) =>
+              h.button
+                .key(`locale-${item.code}`)
+                .attr("type", "submit")
+                .attr("form", `locale-form-${item.code}`)
+                .attr("data-testid", `locale-switch-${item.code}`)
+                .attr("aria-pressed", locale === item.code ? "true" : "false")
+                .class(
+                  `cursor-pointer rounded-sm border px-2 py-1 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+                    locale === item.code
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  }`
+                )
+                .children(item.label)
+            )
+          )
+      ),
       h.main.class("pt-6").children(
         // Key by `printPath` (no search): a new path mounts a fresh page, while
         // a search change updates the live page in place with new props.
