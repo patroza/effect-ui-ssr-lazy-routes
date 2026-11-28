@@ -6,7 +6,7 @@ import * as Pages from "./pages.ts"
 import * as Routes from "./routes.ts"
 import * as Shell from "./Shell.ts"
 
-export const AppMessage = UiSchema.TaggedEnum({
+const AppMessage = UiSchema.TaggedEnum({
   ChangedRoute: { route: Routes.AppRoute }
 })
 
@@ -15,7 +15,7 @@ export const AppMessage = UiSchema.TaggedEnum({
  * subscription, and keeps lazy pages as direct children so SSR `#state` paths
  * stay `/App/<Page>[<path>]`.
  */
-export const createApp = (pages: Pages.Pages) => {
+const createApp = (pages: Pages.Pages) => {
   const shell = Shell.createShell(pages)
   return Html.component({
     name: "App",

@@ -13,9 +13,9 @@ import * as GetWarehouseCarts from "../warehouse/queries/GetWarehouseCarts.ts"
 import * as WarehouseState from "../warehouse/WarehouseState.ts"
 
 /** Marker proving the Warehouse route lands in its own lazy chunk (see scripts/verify-bundles.ts). */
-export const WAREHOUSE_PAGE_CHUNK = "SENTINEL:warehouse-page"
+const WAREHOUSE_PAGE_CHUNK = "SENTINEL:warehouse-page"
 
-export const WarehouseMessage = WarehouseState.WarehouseMessage
+const WarehouseMessage = WarehouseState.WarehouseMessage
 
 const statusBadgeClass = (status: Warehouse.CartStatus): string => {
   switch (status) {

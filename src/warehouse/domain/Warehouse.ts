@@ -108,10 +108,22 @@ export class SessionExpiredError extends Schema.TaggedError<SessionExpiredError,
   }
 ) {}
 
+/**
+ * Closed-reason transport error produced when a warehouse RPC fails before reaching
+ * a typed domain outcome, preventing raw transport error details from leaking to UI.
+ */
+export class WarehouseTransportError extends Schema.TaggedError<
+  WarehouseTransportError,
+  { readonly brand: unique symbol }
+>()("WarehouseTransportError", {
+  reason: Schema.Literals(["unavailable"])
+}) {}
+
 export const WarehouseDomainError = Schema.Union([
   ResourceCheckoutConflictError,
   CartInUseError,
   SessionExpiredError,
+  WarehouseTransportError,
   ApiError.ApiError
 ])
 export type WarehouseDomainError = typeof WarehouseDomainError.Type
@@ -125,7 +137,6 @@ export class WarehouseCommandFailure extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("WarehouseCommandFailure", {
   error: WarehouseDomainError,
-  transportMessage: Schema.NullOr(Schema.String),
   failureSpan: Schema.NullOr(CommandTrace.SpanPointer)
 }) {}
 
@@ -229,9 +240,6 @@ export const dispatchStepLabel = (t: I18n.TranslateFn, step: DispatchStepKey): s
  * warehouse domain failures (and transport failures) into localized user messages.
  */
 export const describeWarehouseFailure = (t: I18n.TranslateFn, failure: WarehouseCommandFailure): string => {
-  if (failure.transportMessage !== null) {
-    return t("warehouse.errorRpcUnavailable")
-  }
   const err = failure.error
   switch (err._tag) {
     case "ResourceCheckoutConflictError": {
@@ -244,6 +252,8 @@ export const describeWarehouseFailure = (t: I18n.TranslateFn, failure: Warehouse
       return t("warehouse.errorCartInUse", { cartCode: err.cartCode, station: err.station })
     case "SessionExpiredError":
       return t("warehouse.errorSessionExpired", { action: err.action })
+    case "WarehouseTransportError":
+      return t("warehouse.errorRpcUnavailable")
     case "ApiError":
       return t("warehouse.errorUnknown", { message: err.message })
   }

@@ -15,7 +15,7 @@ import * as Render from "../src/server/render.ts"
 import * as Frames from "./support/frames.ts"
 import * as TestRpc from "./support/rpc.ts"
 
-export const noAssets: Assets.PageAssets = { scripts: [], modulePreloads: [], stylesheets: [] }
+const noAssets: Assets.PageAssets = { scripts: [], modulePreloads: [], stylesheets: [] }
 
 /**
  * What every test of the app runs on: the Router at `url` (`Router.memory`, no `window`), the `TestHost` (test
@@ -54,7 +54,7 @@ export const runOutTheClock = Effect.andThen(TestClock.adjust("10 seconds"), Tes
  * virtual time forward, until `effect` is done. No real time is waited for, and a render that never finishes fails
  * after a bounded number of steps.
  */
-export const onTestClock = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+const onTestClock = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const fiber = yield* Effect.forkChild(effect)
     for (let step = 0; fiber.pollUnsafe() === undefined; step++) {
@@ -73,7 +73,7 @@ export const makeSide = () => {
 export type Side = ReturnType<typeof makeSide>
 
 /** Starts (and awaits) the chunk of the route `url` resolves to, as `boot` does before hydrating. */
-export const preloadFor = (side: Side, url: string) =>
+const preloadFor = (side: Side, url: string) =>
   Option.match(Routes.routeOf(url), {
     onNone: () => Effect.void,
     onSome: (route) => Effect.promise(() => Pages.preloadRoute(route, side.pages))
