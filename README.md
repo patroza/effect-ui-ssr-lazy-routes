@@ -17,18 +17,18 @@ A small, strict-TypeScript reference for **[`@effect/ui`](https://github.com/Eff
 - **Tailwind v4** (`@tailwindcss/vite`) with a neutral light/dark palette (`prefers-color-scheme`, no JS), focus rings and `data-*` / `aria-*` variants on the kit's attributes.
 - **Forms, workflows & i18n guides**: [docs/complex-forms.md](docs/complex-forms.md) (`SchemaForm`, typed field paths, cross-field rules, array reindexing, debounced async checks, `Router.blocked`), [docs/command-workflow-architecture.md](docs/command-workflow-architecture.md) (MVU `CommandFlow`, `CommandTrace` OTel SpanLinks, `CommandResult` inline progress/errors, opt-in `ToastProvider`, and phased rollout), and [docs/i18n-proposal.md](docs/i18n-proposal.md) (`I18n` service + `shares`/`reads` provider, lazy catalogs, localized Schema/OmegaForm hooks).
 
-|                                             |                                                                                                                                        |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `@effect/ui`                                | `https://pkg.pr.new/Effect-TS/ui/@effect/ui@7bff56b`                                                                                   |
-| `@effect/ui-kit`                            | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@7bff56b` (same commit)                                                                 |
-| `@effect/ui-devtools`                       | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@7bff56b` (dev-only)                                                               |
-| `effect` / `@effect/platform-node`          | `4.1.6`                                                                                                                                |
-| Tailwind CSS / `@tailwindcss/vite`          | `4.3.5`                                                                                                                                |
-| Vite+ (`vite-plus`)                         | `1.8.0` (Vite `8.3.8`, Vitest `5.1.1`; `pnpm-workspace.yaml` overrides pin Oxlint `1.95.0`, Oxfmt `0.80.0`, `tsrs` `7.1.0-beta.tsrs5`) |
-| TypeScript / happy-dom                      | `6.0.3` / `21.0.4`                                                                                                                     |
-| `@effect/vitest`                            | `4.1.6` (pinned with `effect`)                                                                                                         |
-| Package manager                             | pnpm 12, Node ≥ 22.18                                                                                                                  |
-| `@effect/tsgo` / `@effect/language-service` | `0.73.7` / `0.87.5`                                                                                                                    |
+|                                    |                                                                                                                                        |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `@effect/ui`                       | `https://pkg.pr.new/Effect-TS/ui/@effect/ui@f4cddd0`                                                                                   |
+| `@effect/ui-kit`                   | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@f4cddd0` (same commit)                                                                 |
+| `@effect/ui-devtools`              | `https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@f4cddd0` (dev-only)                                                               |
+| `effect` / `@effect/platform-node` | `4.1.7`                                                                                                                                |
+| Tailwind CSS / `@tailwindcss/vite` | `4.3.5`                                                                                                                                |
+| Vite+ (`vite-plus`)                | `1.8.0` (Vite `8.3.8`, Vitest `5.1.2`; `pnpm-workspace.yaml` overrides pin Oxlint `1.95.0`, Oxfmt `0.80.0`, `tsrs` `7.1.0-beta.tsrs5`) |
+| `happy-dom`                        | `21.0.4`                                                                                                                               |
+| `@effect/vitest`                   | `4.1.7` (pinned with `effect`)                                                                                                         |
+| Package manager                    | pnpm 12, Node ≥ 22.18                                                                                                                  |
+| `@effect/tsgo`                     | `0.74.1` (bundles native `tsrs` + `@effect/tsgo/schema.json`)                                                                          |
 
 ## Quick start
 
@@ -52,7 +52,7 @@ Vite+ (`vite-plus`) unifies Vite, Vitest, Oxlint, Oxfmt, and `tsrs` into a singl
 
 | Command          | Runs                                                                                                                     |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `pnpm typecheck` | `effect-tsgo tsrs --noEmit` (Effect-patched `tsrs` with `@effect/language-service`)                                      |
+| `pnpm typecheck` | `effect-tsgo tsrs --noEmit` (native Effect-patched `tsrs`)                                                               |
 | `pnpm lint`      | `effect-tsgo vp lint` (type-aware Oxlint + type-checking + all 99 `effecttsgo/*` error rules, warnings denied)           |
 | `pnpm lint:fix`  | `effect-tsgo vp check --fix` (formats and applies lint autofixes in one pass)                                            |
 | `pnpm format`    | `vp fmt` (`pnpm format:check` runs `vp fmt --check` for CI)                                                              |
@@ -60,12 +60,12 @@ Vite+ (`vite-plus`) unifies Vite, Vitest, Oxlint, Oxfmt, and `tsrs` into a singl
 
 - **Unified `vite.config.ts`.** Build (`build`, `ssr`), tests (`test`), formatting (`fmt`), linting (`lint`), and task caching (`run`) all live in `vite.config.ts` via `defineConfig` from `vite-plus` (with `lazyPlugins` so `vp check` / `vp lint` / `vp fmt` skip Vite plugin startup, and `mode === "test"` skipping Tailwind and DevTools during Vitest).
 - **Automatic task caching & CI.** `vite.config.ts` enables `run.cache: { scripts: true, tasks: true }`, so Vite Task (`vp run`) automatically tracks file reads, directory listings, and written outputs for every cacheable `package.json` script (including `pnpm check` and `pnpm build`) and restores `dist/` on cache hits. Interactive and in-place mutating commands (`dev`, `start`, `format`, `lint:fix`) delegate to non-overlapping `cache: false` tasks so they are never cached. `.github/workflows/ci.yml` restores and saves `node_modules/.vite/task-cache` around `pnpm check` with `actions/cache`.
-- **Effect diagnostics fail the build.** `tsconfig.plugins.json` holds the `@effect/language-service` severity table (every rule `"error"`;
+- **Effect diagnostics fail the build.** `tsconfig.plugins.json` holds the Effect diagnostic severity table read natively by `effect-tsgo tsrs` (every rule `"error"`;
   `unstableApiUsage` and `experimentalApiUsage` are `"off"` because `@effect/ui` is `@stability experimental`). `scripts/lib/effect-diagnostics.mjs`
   derives every enabled rule as an `effecttsgo/*` oxlint rule directly for `vite.config.ts` (extending `@effect/tsgo/oxlint-presets` to register the
   native `effecttsgo` plugin) and fails closed if none are enabled. Of the 154 rules, **99 are enabled as errors** and the other **55 are off** (rules
   the schema ships disabled, plus the two experimental-API rules above). So the same diagnostics run in `effect-tsgo vp check`, `pnpm lint`, and `pnpm typecheck`.
-- **Strict oxlint.** `vite.config.ts` extends `@effect-app/eslint-shared-config` plus `config/oxlint.strict.json`
+- **Strict oxlint (zero ESLint / zero legacy TypeScript).** `vite.config.ts` extends `config/oxlint.base.json` plus `config/oxlint.strict.json`
   (no `any`, no non-null assertions, no unsafe assertions, no `any` flowing anywhere, `@ts-ignore`/`@ts-nocheck` banned) with
   `typeAware`, `typeCheck`, and `denyWarnings`.
 - **Imports.** Barrel imports for the libraries: `import { Effect, Schema } from "effect"`, `import { Component, Router } from "@effect/ui"`,
