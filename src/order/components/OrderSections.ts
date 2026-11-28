@@ -9,6 +9,7 @@ import * as FormControls from "../../form/FormControls.ts"
 import * as SchemaForm from "../../form/SchemaForm.ts"
 import type * as I18n from "../../i18n/I18n.ts"
 import type * as ApiError from "../../rpc/domain/ApiError.ts"
+import * as SelectUi from "../../ui/select.ts"
 import * as Order from "../domain/Order.ts"
 
 const BillingRadioGroup = makeRadioGroup({ value: Order.BillingMethodTag })
@@ -426,37 +427,30 @@ export const renderBillingSection = (
                     },
                     view: (select) =>
                       field.root(h.div.class("relative flex flex-col gap-1.5")).children(
-                        select
-                          .label(h.div.class("text-sm font-medium"))
-                          .children(controller.labelFor("billing.paymentTermsDays")),
+                        SelectUi.SelectLabel(h, select, { class: "mb-0" }).children(
+                          controller.labelFor("billing.paymentTermsDays")
+                        ),
                         field.focusWithin(h.div.class("relative")).children(
-                          select
-                            .trigger(field.member(h.button))
-                            .class(`${Design.ui.input} flex items-center justify-between text-left`)
+                          SelectUi.SelectTrigger(h, select, {
+                            element: field.member(h.button),
+                            class: "w-full min-w-0"
+                          })
                             .attr("data-testid", "billing-terms-trigger")
-                            .children(select.value(h.span), select.icon(h.span).children("▾")),
-                          select
-                            .positioner(
-                              h.div.class(
-                                "z-20 mt-1 w-full rounded-md border border-neutral-200 bg-white p-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+                            .children(SelectUi.SelectValue(h, select), SelectUi.SelectIcon(h, select)),
+                          SelectUi.SelectPositioner(h, select, {
+                            class: "absolute top-full left-0 z-20 mt-1 w-full"
+                          }).children(
+                            SelectUi.SelectPopup(h, select, { class: "w-full min-w-0" }).children(
+                              paymentTermsItems.map(({ value, label }) =>
+                                SelectUi.SelectItem(h, select, { value })
+                                  .attr("data-testid", `billing-terms-option-${value}`)
+                                  .children(
+                                    SelectUi.SelectItemText(h, select).children(label),
+                                    SelectUi.SelectItemIndicator(h, select, { value })
+                                  )
                               )
                             )
-                            .children(
-                              select.popup(h.div.class("flex flex-col")).children(
-                                paymentTermsItems.map(({ value, label }) =>
-                                  select
-                                    .item({ element: h.div, value })
-                                    .class(
-                                      "flex cursor-pointer items-center justify-between rounded px-2.5 py-1.5 text-sm data-[highlighted]:bg-neutral-100 data-[selected]:font-medium dark:data-[highlighted]:bg-neutral-800"
-                                    )
-                                    .attr("data-testid", `billing-terms-option-${value}`)
-                                    .children(
-                                      select.itemText(h.div).children(label),
-                                      select.itemIndicator({ element: h.span, value })?.children("✓")
-                                    )
-                                )
-                              )
-                            )
+                          )
                         ),
                         field
                           .error(h.p)

@@ -1,6 +1,7 @@
 import type { Html } from "@effect/ui/html"
 import { Button, Progress } from "@effect/ui-kit"
 import * as Design from "./classes.ts"
+import * as ProgressUi from "../ui/progress.ts"
 import * as CommandTrace from "../workflow/CommandTrace.ts"
 
 export interface CommandButtonOptions<M> {
@@ -118,27 +119,18 @@ export const commandProgressPanel = <M>(h: Html.H<M>, options: CommandProgressPa
           valueText: options.valueText
         },
         view: (progress) =>
-          progress.root(h.div.class("flex flex-col gap-2")).children(
-            h.div.class("flex flex-wrap items-center justify-between gap-2").children(
-              progress
-                .label(h.span)
-                .class("text-sm font-medium text-sky-950 dark:text-sky-100")
-                .children(options.label),
-              h.div.class(Design.ui.row).children(
-                progress.value(h.span).class("font-mono text-xs text-sky-800 dark:text-sky-300"),
-                options.onCancel === undefined
-                  ? undefined
-                  : Button(h, { onPress: options.onCancel })
-                      .class(Design.ui.button)
-                      .attr("data-testid", "command-progress-cancel")
-                      .children(options.cancelLabel ?? "Cancel")
-              )
+          ProgressUi.ProgressRoot(h, progress).children(
+            ProgressUi.ProgressLabel(h, progress).children(options.label),
+            h.div.class(Design.ui.row).children(
+              ProgressUi.ProgressValue(h, progress, { class: "font-mono" }),
+              options.onCancel === undefined
+                ? undefined
+                : Button(h, { onPress: options.onCancel })
+                    .class(Design.ui.button)
+                    .attr("data-testid", "command-progress-cancel")
+                    .children(options.cancelLabel ?? "Cancel")
             ),
-            progress
-              .track(h.div.class("h-2 w-full overflow-hidden rounded-full bg-sky-200 dark:bg-sky-900"))
-              .children(
-                progress.indicator(h.div.class("h-full rounded-full bg-sky-600 transition-all dark:bg-sky-400"))
-              )
+            ProgressUi.ProgressTrack(h, progress).children(ProgressUi.ProgressIndicator(h, progress))
           )
       })
     )

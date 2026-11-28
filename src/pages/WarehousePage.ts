@@ -6,6 +6,7 @@ import * as Design from "../design/classes.ts"
 import * as CommandResult from "../design/commandResult.ts"
 import * as QueryResult from "../design/queryResult.ts"
 import * as I18n from "../i18n/I18n.ts"
+import * as ToastUi from "../ui/toast.ts"
 import * as WarehouseCommands from "../warehouse/commands/WarehouseCommands.ts"
 import * as WarehouseDialogs from "../warehouse/components/WarehouseDialogs.ts"
 import * as Warehouse from "../warehouse/domain/Warehouse.ts"
@@ -307,42 +308,24 @@ const WarehousePageNoDeps = Html.component({
           view: (toastProvider) =>
             h.div(
               WarehouseConsoleNoDeps(h, {}),
-              toastProvider
-                .viewport(h.div.class("fixed right-4 bottom-16 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2"))
+              ToastUi.ToastViewport(h, toastProvider, { position: "bottom-right", class: "bottom-16 z-50" })
                 .attr("aria-label", t("common.notifications"))
                 .attr("data-testid", "warehouse-toast-viewport")
                 .children(
                   toastProvider.toasts.map((toast) =>
-                    toastProvider
-                      .root({
-                        element: h.div.class(
-                          "rounded-lg border border-neutral-200 bg-white p-3 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
-                        ),
-                        toast
-                      })
+                    ToastUi.Toast(h, toastProvider, toast)
                       .attr("data-testid", `warehouse-toast-${toast.id}`)
                       .children(
-                        h.div
-                          .class("flex items-start justify-between gap-2")
-                          .children(
-                            h.div
-                              .class("flex flex-col gap-0.5")
-                              .children(
-                                toast.title === undefined
-                                  ? undefined
-                                  : toastProvider
-                                      .title({ element: h.strong.class("text-sm font-semibold"), toast })
-                                      .children(toast.title),
-                                toast.description === undefined
-                                  ? undefined
-                                  : toastProvider
-                                      .description({ element: h.p.class(Design.ui.muted), toast })
-                                      .children(toast.description)
-                              ),
-                            toastProvider
-                              .close({ element: h.button.class(Design.ui.button), toast })
-                              .children(t("common.dismiss"))
-                          )
+                        ToastUi.ToastContent(h, toastProvider, toast).children(
+                          ToastUi.ToastIcon(h, toast),
+                          ToastUi.ToastText(h).children(
+                            toast.title === undefined ? undefined : ToastUi.ToastTitle(h, toastProvider, toast),
+                            toast.description === undefined
+                              ? undefined
+                              : ToastUi.ToastDescription(h, toastProvider, toast)
+                          ),
+                          ToastUi.ToastClose(h, toastProvider, toast).attr("aria-label", t("common.dismiss"))
+                        )
                       )
                   )
                 )
