@@ -6,9 +6,9 @@ import * as Design from "../design/classes.ts"
 import * as Routes from "../routes.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
-export const HOME_PAGE_CHUNK = "SENTINEL:home-page"
+const HOME_PAGE_CHUNK = "SENTINEL:home-page"
 
-export const HomePageMessage = UiSchema.TaggedEnum({
+const HomePageMessage = UiSchema.TaggedEnum({
   ClickedCounter: {}
 })
 

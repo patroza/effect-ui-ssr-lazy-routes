@@ -10,13 +10,13 @@ import * as Routes from "../routes.ts"
 import * as SearchProducts from "../search/queries/SearchProducts.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
-export const PRODUCTS_PAGE_CHUNK = "SENTINEL:products-page"
+const PRODUCTS_PAGE_CHUNK = "SENTINEL:products-page"
 
 // A one-case subset of the union, so the page can take its whole route as props
 // and pass it to `Router.patchSearch`.
 const ProductsRoute = Routes.AppRoute.subset(["Products"])
 
-export const ProductsPageMessage = UiSchema.TaggedEnum({
+const ProductsPageMessage = UiSchema.TaggedEnum({
   UpdatedQuery: { text: Schema.String },
   ToggledCompare: { id: Schema.String },
   ClickedRefresh: {}

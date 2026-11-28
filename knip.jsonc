@@ -1,0 +1,9 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["src/server/serve.ts"],
+  "project": ["src/**/*.{ts,tsx,css}", "scripts/**/*.{ts,mjs}", "test/**/*.ts", "config/**/*.mjs"],
+  "rules": {
+    "types": "off",
+    "nsTypes": "off"
+  }
+}

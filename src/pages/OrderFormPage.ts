@@ -13,9 +13,9 @@ import * as CheckOrderCode from "../order/queries/CheckOrderCode.ts"
 import * as ValidatePromoCode from "../order/queries/ValidatePromoCode.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
-export const ORDER_FORM_PAGE_CHUNK = "SENTINEL:order-form-page"
+const ORDER_FORM_PAGE_CHUNK = "SENTINEL:order-form-page"
 
-export const OrderFormPageMessage = OrderSections.OrderFormPageMessage
+const OrderFormPageMessage = OrderSections.OrderFormPageMessage
 
 const ErrorSummaryRef = Html.ref("OrderErrorSummary", "div")
 

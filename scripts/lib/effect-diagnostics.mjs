@@ -5,7 +5,7 @@
 import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 
-export const EFFECT_TSCONFIG = "tsconfig.plugins.json"
+const EFFECT_TSCONFIG = "tsconfig.plugins.json"
 
 /** @typedef {import("vite-plus/lint").AllowWarnDeny} AllowWarnDeny */
 /** @typedef {import("vite-plus/lint").DummyRule} DummyRule */
