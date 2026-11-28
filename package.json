@@ -35,9 +35,6 @@
     "tailwind-merge": "3.7.1"
   },
   "devDependencies": {
-    "@effect-app/eslint-codegen-model": "2.0.1",
-    "@effect-app/eslint-shared-config": "0.7.0",
-    "@effect/language-service": "0.87.5",
     "@effect/platform-node": "4.1.7",
     "@effect/tsgo": "0.74.1",
     "@effect/ui-devtools": "https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@f4cddd0",
@@ -46,7 +43,6 @@
     "@types/node": "26.6.11",
     "happy-dom": "21.0.4",
     "tailwindcss": "4.3.5",
-    "typescript": "6.0.3",
     "vite-plus": "1.8.0"
   },
   "packageManager": "pnpm@12.17.0"

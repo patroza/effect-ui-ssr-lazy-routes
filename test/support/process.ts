@@ -1,6 +1,6 @@
 import type { ChildProcess } from "node:child_process"
 
-// eslint-disable-next-line no-control-regex
+// oxlint-disable-next-line no-control-regex
 export const ANSI_ESCAPE_RE = /\u001b\[[0-9;]*m/g
 
 export const waitFor = async <A>(

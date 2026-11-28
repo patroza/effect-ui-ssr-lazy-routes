@@ -8,9 +8,7 @@ import { parseDevToolsPort } from "./scripts/lib/dev-ports.ts"
 import * as EffectDiagnostics from "./scripts/lib/effect-diagnostics.mjs"
 
 const root = fileURLToPath(new URL(".", import.meta.url))
-const sharedOxlintConfig = EffectDiagnostics.loadOxlintJsonConfig(
-  join(root, "node_modules/@effect-app/eslint-shared-config/src/oxlintrc.json")
-)
+const baseOxlintConfig = EffectDiagnostics.loadOxlintJsonConfig(join(root, "config/oxlint.base.json"))
 const strictOxlintConfig = EffectDiagnostics.loadOxlintJsonConfig(join(root, "config/oxlint.strict.json"))
 
 export default defineConfig(({ command, isSsrBuild, mode }) => ({
@@ -91,7 +89,7 @@ export default defineConfig(({ command, isSsrBuild, mode }) => ({
   lint: {
     // `EffectOxlintPresets.strict` registers the native `effecttsgo` plugin; `deriveEffectRules`
     // maps every rule in `tsconfig.plugins.json` + `@effect/tsgo/schema.json` (99 errors, 55 off).
-    extends: [sharedOxlintConfig, strictOxlintConfig, EffectOxlintPresets.strict],
+    extends: [baseOxlintConfig, strictOxlintConfig, EffectOxlintPresets.strict],
     options: {
       typeAware: true,
       typeCheck: true,
