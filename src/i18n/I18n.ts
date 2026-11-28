@@ -15,7 +15,7 @@ export const I18nConfig = Schema.Struct({
 })
 export type I18nConfig = typeof I18nConfig.Type
 
-export const LOCALE_CONFIGS: Readonly<Record<AppLocale, I18nConfig>> = {
+const LOCALE_CONFIGS: Readonly<Record<AppLocale, I18nConfig>> = {
   en: { locale: "en", bcp47: "en-US", currency: "USD", timeZone: "UTC" },
   de: { locale: "de", bcp47: "de-DE", currency: "EUR", timeZone: "Europe/Berlin" }
 }
@@ -135,7 +135,7 @@ export const translator = (config: I18nConfig = LOCALE_CONFIGS.en): I18nTranslat
 export const translatorFor = (locale: AppLocale): I18nTranslator => translator(configForLocale(locale))
 
 /** Effect service for server handlers, SSR rendering helpers, Commands, and Queries. */
-export class I18n extends Context.Service<I18n, I18nTranslator>()("app/I18n") {
+export class I18n extends Context.Service<I18n, I18nTranslator>()("effect-ui-ssr-lazy-routes/i18n/I18n") {
   static readonly layer = (locale: AppLocale): Layer.Layer<I18n> =>
     Layer.effect(I18n, Effect.promise(() => preloadLocale(locale)).pipe(Effect.map(() => translatorFor(locale))))
 }

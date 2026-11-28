@@ -1,5 +1,7 @@
+import { TestHost } from "@effect/ui/testing"
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
+import { HttpClientError } from "effect/http"
 import { TestClock } from "effect/testing"
 import * as Design from "../src/design/classes.ts"
 import * as Helpers from "./helpers.ts"
@@ -304,6 +306,41 @@ describe("/warehouse Scanner Command Console", () => {
       })
     )
   })
+
+  it.effect(
+    "maps Warehouse RPC transport failures to closed-reason WarehouseTransportError without leaking raw messages",
+    () =>
+      Effect.gen(function* () {
+        const { container } = yield* Helpers.hydrateFromServer("/warehouse")
+
+        Helpers.click(Helpers.byTestId(container, "unblock-cart-309"))
+        yield* settleMutation
+
+        expect(Helpers.byTestId(container, "cart-status-cart-309").textContent).toBe("Blocked")
+        const banner = Helpers.byTestId(container, "warehouse-error-banner")
+        expect(banner.textContent).toContain("Warehouse RPC transport error: please check connectivity and retry.")
+        expect(banner.textContent).not.toContain("10.0.42.9")
+        expect(banner.textContent).not.toContain("ECONNREFUSED")
+      }).pipe(
+        Effect.provide(
+          TestHost.layer().pipe(
+            Layer.provideMerge(
+              TestRpc.makeCountingRpcProtocol({
+                failRequest: (request) =>
+                  request.url.includes("/rpc/warehouse")
+                    ? new HttpClientError.HttpClientError({
+                        reason: new HttpClientError.TransportError({
+                          request,
+                          cause: new Error("secret internal host 10.0.42.9:8080 ECONNREFUSED")
+                        })
+                      })
+                    : undefined
+              })
+            )
+          )
+        )
+      )
+  )
 
   it("keeps Design.ui button and card recipes free of conflicting Tailwind color utilities", () => {
     const tokens = (classes: string) => new Set(classes.split(/\s+/).filter(Boolean))

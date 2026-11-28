@@ -90,10 +90,12 @@ export default defineConfig(({ command, isSsrBuild, mode }) => ({
     // `EffectOxlintPresets.strict` registers the native `effecttsgo` plugin; `deriveEffectRules`
     // maps every rule in `tsconfig.plugins.json` + `@effect/tsgo/schema.json` (99 errors, 55 off).
     extends: [baseOxlintConfig, strictOxlintConfig, EffectOxlintPresets.strict],
+    jsPlugins: ["./config/oxlint-local-plugin.mjs"],
     options: {
       typeAware: true,
       typeCheck: true,
-      denyWarnings: true
+      denyWarnings: true,
+      reportUnusedDisableDirectives: "error"
     },
     rules: {
       ...EffectDiagnostics.deriveEffectRules(root),
@@ -121,6 +123,12 @@ export default defineConfig(({ command, isSsrBuild, mode }) => ({
       "typescript/restrict-template-expressions": "error",
       "typescript/no-misused-promises": "error",
       "typescript/no-base-to-string": "error",
+      "local/require-suppression-reason": "error",
+      "local/no-inline-schema-compile": "error",
+      "local/no-manual-effect-runtime-in-tests": "error",
+      "local/no-test-in-loop": "error",
+      "local/no-outset-state-indicators": "error",
+      "local/no-unscoped-has": "error",
       "eslint/no-restricted-imports": [
         "error",
         {
@@ -144,6 +152,20 @@ export default defineConfig(({ command, isSsrBuild, mode }) => ({
         }
       ]
     },
+    overrides: [
+      {
+        files: ["test/**/*.ts"],
+        rules: {
+          "effecttsgo/global-json-in-effect": "off"
+        }
+      },
+      {
+        files: ["test/devtools.test.ts"],
+        rules: {
+          "local/no-manual-effect-runtime-in-tests": ["error", { maxOccurrences: 3 }]
+        }
+      }
+    ],
     ignorePatterns: [
       "**/dist/**",
       "**/node_modules/**",

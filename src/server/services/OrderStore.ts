@@ -31,7 +31,7 @@ const nextAvailableSuggestion = (code: string, takenCodes: ReadonlySet<string>):
  * submission claiming, typed field-level `OrderValidationError`, localized
  * server messages via `Accept-Language`, and simulated `ApiError` failure for `"server-error"`.
  */
-export class OrderStore extends Context.Service<OrderStore>()("server/OrderStore", {
+export class OrderStore extends Context.Service<OrderStore>()("effect-ui-ssr-lazy-routes/server/services/OrderStore", {
   make: Effect.gen(function* () {
     const stateRef = yield* Ref.make<OrderStoreState>({
       nextOrderNumber: 1,

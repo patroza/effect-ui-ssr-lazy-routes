@@ -4,7 +4,7 @@
  * the neutral palette follows the OS light/dark setting (no JavaScript).
  */
 const focus =
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 dark:focus-visible:outline-sky-400"
+  "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sky-600 dark:focus-visible:outline-sky-400"
 
 const control =
   "rounded-md border border-neutral-300 bg-white text-sm text-neutral-900 shadow-xs dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"

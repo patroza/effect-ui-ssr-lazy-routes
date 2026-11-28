@@ -104,12 +104,13 @@ const sharedNeedles: ReadonlyArray<readonly [needle: string, label: string]> = [
 ]
 // Server-only stores, datasets and RPC server runtime that must never appear in dist/client/.
 const serverOnlyNeedles: ReadonlyArray<readonly [needle: string, label: string]> = [
-  ["server/CatalogStore", "server CatalogStore"],
-  ["server/BookmarkStore", "server BookmarkStore"],
-  ["server/AnalyticsStore", "server AnalyticsStore"],
-  ["server/StatusStore", "server StatusStore"],
-  ["server/OrderStore", "server OrderStore"],
-  ["server/WarehouseStore", "server WarehouseStore"],
+  ["effect-ui-ssr-lazy-routes/server/services/CatalogStore", "server CatalogStore"],
+  ["effect-ui-ssr-lazy-routes/server/services/BookmarkStore", "server BookmarkStore"],
+  ["effect-ui-ssr-lazy-routes/server/services/AnalyticsStore", "server AnalyticsStore"],
+  ["effect-ui-ssr-lazy-routes/server/services/StatusStore", "server StatusStore"],
+  ["effect-ui-ssr-lazy-routes/server/services/OrderStore", "server OrderStore"],
+  ["effect-ui-ssr-lazy-routes/server/services/WarehouseStore", "server WarehouseStore"],
+  ["effect-ui-ssr-lazy-routes/server/rpcInstrumentation/RpcInstrumentation", "server RpcInstrumentation"],
   ["Ceramic pour-over", "server seed catalog dataset"],
   ["effect/rpc/RpcServer", "RpcServer runtime"]
 ]

@@ -6,6 +6,7 @@ import { Effect, Layer } from "effect"
 import { HttpServer } from "effect/http"
 import * as Assets from "./assets.ts"
 import * as Handler from "./handler.ts"
+import * as HttpResponseErrorGuard from "./httpResponseErrorGuard.ts"
 
 const parsePort = (raw: string | undefined): number => {
   if (raw === undefined || raw === "") return 3000
@@ -38,8 +39,13 @@ const ServerLive = Layer.effectDiscard(
     yield* server.serve(httpEffect)
     const actual =
       server.address._tag === "InetAddressV4" || server.address._tag === "InetAddressV6" ? server.address.port : port
-    yield* Effect.sync(() => console.log(`listening on http://localhost:${actual}`))
+    yield* Effect.sync(() => process.stdout.write(`listening on http://localhost:${actual}\n`))
   })
-).pipe(Layer.provide(Handler.serverRuntimeLayer), Layer.provide(NodeHttpServer.layer(createServer, { port })))
+).pipe(
+  Layer.provide(Handler.serverRuntimeLayer),
+  Layer.provide(
+    NodeHttpServer.layer(() => HttpResponseErrorGuard.guardHttpResponseWriteErrors(createServer()), { port })
+  )
+)
 
 NodeRuntime.runMain(Layer.launch(ServerLive))

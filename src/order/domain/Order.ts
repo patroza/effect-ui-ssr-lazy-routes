@@ -25,7 +25,7 @@ export const InvoiceBillingForm = Schema.TaggedStruct("Invoice", {
 })
 export type InvoiceBillingForm = typeof InvoiceBillingForm.Type
 
-export const BillingMethodForm = Schema.Union([CardBillingForm, InvoiceBillingForm])
+const BillingMethodForm = Schema.Union([CardBillingForm, InvoiceBillingForm])
 export type BillingMethodForm = typeof BillingMethodForm.Type
 
 export const LineItemForm = Schema.Struct({
@@ -88,8 +88,8 @@ const makeMessageLookup = (locale: I18n.AppLocale): MessageLookup => {
 
 const englishFallback = makeMessageLookup("en")
 
-export const INVOICE_MIN_SUBTOTAL_CENTS = 10_000
-export const EXPEDITED_FEE_CENTS = 2_500
+const INVOICE_MIN_SUBTOTAL_CENTS = 10_000
+const EXPEDITED_FEE_CENTS = 2_500
 
 export interface OrderTotals {
   readonly subtotalCents: number
@@ -135,7 +135,7 @@ export interface CrossFieldInput {
  * (surfacing issues even while unrelated fields remain incomplete) and
  * `OrderSubmission`.
  */
-export const makeValidateOrderCrossFields =
+const makeValidateOrderCrossFields =
   (messages: MessageLookup = englishFallback) =>
   (input: CrossFieldInput): ReadonlyArray<SchemaForm.FormIssueItem> => {
     const issues: Array<SchemaForm.FormIssueItem> = []

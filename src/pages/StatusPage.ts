@@ -8,9 +8,9 @@ import * as Status from "../status/domain/Status.ts"
 import * as GetStatus from "../status/queries/GetStatus.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
-export const STATUS_PAGE_CHUNK = "SENTINEL:status-page"
+const STATUS_PAGE_CHUNK = "SENTINEL:status-page"
 
-export const StatusPageMessage = UiSchema.TaggedEnum({
+const StatusPageMessage = UiSchema.TaggedEnum({
   ClickedRefresh: {}
 })
 

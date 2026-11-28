@@ -9,15 +9,18 @@ const orders = [310, 342, 377, 361, 420, 468, 452, 509, 561, 538, 622, 704]
  * Server-only analytics store. Holds the monthly datasets strictly on the
  * server so no analytics dataset ever ships to `dist/client/`.
  */
-export class AnalyticsStore extends Context.Service<AnalyticsStore>()("server/AnalyticsStore", {
-  make: Effect.gen(function* () {
-    const series = Effect.fn("AnalyticsStore.series")(function* (metric: Analytics.Metric) {
-      const values = metric === "revenue" ? revenue : orders
-      return months.map((label, index): Analytics.SeriesPoint => ({ label, value: values[index] ?? 0 }))
-    })
+export class AnalyticsStore extends Context.Service<AnalyticsStore>()(
+  "effect-ui-ssr-lazy-routes/server/services/AnalyticsStore",
+  {
+    make: Effect.gen(function* () {
+      const series = Effect.fn("AnalyticsStore.series")(function* (metric: Analytics.Metric) {
+        const values = metric === "revenue" ? revenue : orders
+        return months.map((label, index): Analytics.SeriesPoint => ({ label, value: values[index] ?? 0 }))
+      })
 
-    return { series } as const
-  })
-}) {
+      return { series } as const
+    })
+  }
+) {
   static readonly layer = Layer.effect(this, this.make)
 }

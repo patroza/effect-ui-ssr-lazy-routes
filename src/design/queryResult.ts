@@ -92,7 +92,7 @@ const isApiError = Schema.is(ApiError.ApiError)
  * Formats a failure cause safely for display: surfaces explicit domain `ApiError`
  * messages, while hiding internal transport/defect details (such as socket errors).
  */
-export const describeFailure = (cause: Cause.Cause<unknown>): string => {
+const describeFailure = (cause: Cause.Cause<unknown>): string => {
   // Lazy cause inspect: unwrap the primary error only to reveal typed ApiError text.
   for (const reason of cause.reasons) {
     if (reason._tag === "Fail" && isApiError(reason.error)) {

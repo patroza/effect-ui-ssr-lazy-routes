@@ -94,7 +94,7 @@ const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
  * Structural equality for Model-serializable form values, including Effect
  * `Equal` types (`Schema.Redacted`, `Option`, `Data`, `Schema.Class`).
  */
-export const deepEqual = (left: unknown, right: unknown): boolean => {
+const deepEqual = (left: unknown, right: unknown): boolean => {
   if (Object.is(left, right)) return true
   if (Equal.isEqual(left) && Equal.isEqual(right)) return Equal.equals(left, right)
   if (Array.isArray(left) && Array.isArray(right)) {
@@ -178,7 +178,7 @@ const parseIndexedSuffix = (
 }
 
 /** Remap a dotted path after removing element `removedIndex` under `arrayPath`. */
-export const reindexPathAfterRemove = (path: string, arrayPath: string, removedIndex: number): string | undefined => {
+const reindexPathAfterRemove = (path: string, arrayPath: string, removedIndex: number): string | undefined => {
   const parsed = parseIndexedSuffix(path, arrayPath)
   if (parsed === undefined) return path
   if (parsed.index === removedIndex) return undefined
@@ -187,7 +187,7 @@ export const reindexPathAfterRemove = (path: string, arrayPath: string, removedI
 }
 
 /** Remap a dotted path after moving element `fromIndex` -> `toIndex` under `arrayPath`. */
-export const reindexPathAfterMove = (path: string, arrayPath: string, fromIndex: number, toIndex: number): string => {
+const reindexPathAfterMove = (path: string, arrayPath: string, fromIndex: number, toIndex: number): string => {
   if (fromIndex === toIndex) return path
   const parsed = parseIndexedSuffix(path, arrayPath)
   if (parsed === undefined) return path

@@ -44,15 +44,13 @@ describe("pages", () => {
     expect(Object.keys(Pages.createPages()).sort()).toEqual([...tags].sort())
   })
 
-  for (const tag of tags) {
-    it.effect(`${tag}: the lazy name is the loaded component's name`, () =>
-      Effect.gen(function* () {
-        const component = yield* Effect.promise(loaded[tag])
-        expect(lazyName(Pages.pages[tag])).toBe(component.definition.name)
-        expect(lazyName(Pages.createPages()[tag])).toBe(component.definition.name)
-      })
-    )
-  }
+  it.effect.each(tags)("%s: the lazy name is the loaded component's name", (tag) =>
+    Effect.gen(function* () {
+      const component = yield* Effect.promise(loaded[tag])
+      expect(lazyName(Pages.pages[tag])).toBe(component.definition.name)
+      expect(lazyName(Pages.createPages()[tag])).toBe(component.definition.name)
+    })
+  )
 
   it.effect("createPages gives every call its own load cache, so no module needs resetting", () =>
     Effect.gen(function* () {

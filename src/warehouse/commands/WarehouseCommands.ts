@@ -1,7 +1,6 @@
 import { Command } from "@effect/ui"
 import { Effect, Layer, Schema, Stream } from "effect"
 import { RpcClient, type RpcClientError } from "effect/rpc"
-import * as ApiError from "../../rpc/domain/ApiError.ts"
 import * as CommandTrace from "../../workflow/CommandTrace.ts"
 import * as Warehouse from "../domain/Warehouse.ts"
 import * as WarehouseRpcs from "../domain/WarehouseRpcs.ts"
@@ -13,13 +12,11 @@ const mapFailure = (
 ): Warehouse.WarehouseCommandFailure =>
   err._tag === "RpcClientError"
     ? new Warehouse.WarehouseCommandFailure({
-        error: new ApiError.ApiError({ message: err.message }),
-        transportMessage: err.message,
+        error: new Warehouse.WarehouseTransportError({ reason: "unavailable" }),
         failureSpan
       })
     : new Warehouse.WarehouseCommandFailure({
         error: err,
-        transportMessage: null,
         failureSpan
       })
 

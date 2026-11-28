@@ -5,7 +5,7 @@ import * as Design from "../design/classes.ts"
 import * as Routes from "../routes.ts"
 
 /** Marker proving which chunk this page lands in (see scripts/verify-bundles.ts). */
-export const NOT_FOUND_PAGE_CHUNK = "SENTINEL:not-found-page"
+const NOT_FOUND_PAGE_CHUNK = "SENTINEL:not-found-page"
 
 // `NotFoundPage` has no interaction of its own, so it takes the empty message.
 export const NotFoundPage = Html.component({
